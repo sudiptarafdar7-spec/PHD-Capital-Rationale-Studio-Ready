@@ -16,11 +16,17 @@ def create_app():
     with app.app_context():
         init_database()
     
+    # CORS configuration with environment-based security
+    allowed_origins = os.environ.get('ALLOWED_ORIGINS', '*')
+    if allowed_origins != '*':
+        allowed_origins = allowed_origins.split(',')
+    
     CORS(app, resources={
         r"/api/*": {
-            "origins": "*",
+            "origins": allowed_origins,
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True
         }
     })
     
