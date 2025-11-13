@@ -17,7 +17,7 @@ ssh root@72.60.111.9
 
 # Download and run deployment
 cd /root
-curl -o deploy.sh https://raw.githubusercontent.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-v1/main/deployment/deploy.sh
+curl -o deploy.sh https://raw.githubusercontent.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready/main/deployment/deploy.sh
 chmod +x deploy.sh
 bash deploy.sh
 ```

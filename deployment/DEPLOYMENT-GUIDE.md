@@ -4,7 +4,7 @@
 - **VPS IP:** 72.60.111.9
 - **Domain:** researchrationale.in
 - **OS:** Ubuntu 24.04 LTS
-- **GitHub:** https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-v1.git
+- **GitHub:** https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready.git
 
 ---
 
@@ -48,7 +48,7 @@ Run these commands one by one:
 ```bash
 # Download deployment script
 cd /root
-curl -o deploy.sh https://raw.githubusercontent.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-v1/main/deployment/deploy.sh
+curl -o deploy.sh https://raw.githubusercontent.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready/main/deployment/deploy.sh
 
 # Make it executable
 chmod +x deploy.sh

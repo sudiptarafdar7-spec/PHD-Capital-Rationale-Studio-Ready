@@ -3,7 +3,7 @@
 # PHD Capital Rationale Studio - Production Deployment Script
 # Server: 72.60.111.9 (Ubuntu 24.04 LTS)
 # Domain: researchrationale.in
-# GitHub: https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-v1.git
+# GitHub: https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready.git
 #
 # Usage: bash deploy.sh
 #
@@ -31,7 +31,7 @@ fi
 # Configuration
 PROJECT_DIR="/var/www/rationale-studio"
 DOMAIN="researchrationale.in"
-GITHUB_REPO="https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-v1.git"
+GITHUB_REPO="https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready.git"
 DB_NAME="phd_rationale_db"
 DB_USER="phd_user"
 DB_PASSWORD="ChangeMeToSecurePassword123!"
