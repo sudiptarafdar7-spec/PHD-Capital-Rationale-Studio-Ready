@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+backend/venv/
+*.egg-info/
+.pytest_cache/
+*.pyc
+
+# Environment variables (only DATABASE_URL and secrets needed)
+.env
+.env.local
+.env.*.local
+.env.production
+/etc/phd-capital.env
+
+# API Keys and uploaded files (managed via database and admin panel)
+backend/api_keys/
+backend/uploaded_files/
+backend/channel_logos/
+backend/job_files/
+backend/youtube_cookies.txt
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.vite/
+
+# Temporary files
+*.tmp
+*.temp
+attached_assets/
+
+# Replit (keep these in git for reference)
+# replit.md
+# replit.nix
+# .replit
+
+# VPS deployment
+*.pid
+*.sock
