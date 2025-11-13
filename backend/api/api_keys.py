@@ -96,7 +96,7 @@ def upload_google_cloud_json():
         
         file = request.files['file']
         
-        if file.filename == '':
+        if not file.filename or file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
         if not file.filename.endswith('.json'):
