@@ -50,7 +50,7 @@ Enter your root password when prompted.
 ```bash
 # Download deployment script
 cd /root
-curl -o deploy.sh https://raw.githubusercontent.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-v1/main/deployment/deploy.sh
+curl -o deploy.sh https://raw.githubusercontent.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready/main/deployment/deploy.sh
 
 # Make executable
 chmod +x deploy.sh
