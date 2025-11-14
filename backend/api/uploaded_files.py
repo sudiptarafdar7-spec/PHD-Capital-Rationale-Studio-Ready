@@ -96,19 +96,53 @@ def upload_file():
         # Secure the filename
         original_filename = secure_filename(file.filename)
         
-        # Special handling for YouTube cookies - save directly to backend folder
+        # Special handling for YouTube cookies - save to both backend folder and uploaded_files
         if file_type == 'youtubeCookies':
+            # Save to backend folder (for pipeline use)
             cookies_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'youtube_cookies.txt')
             file.save(cookies_path)
             
+            # Also save to uploaded_files folder for UI display
+            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+            uploaded_files_path = os.path.join(UPLOAD_FOLDER, 'youtube_cookies.txt')
+            
+            # Copy the file to uploaded_files folder
+            with open(cookies_path, 'rb') as src:
+                with open(uploaded_files_path, 'wb') as dst:
+                    dst.write(src.read())
+            
             file_size_bytes = os.path.getsize(cookies_path)
             file_size = get_file_size_string(file_size_bytes)
+            
+            # Check if youtube cookies entry already exists in database
+            with get_db_cursor(commit=True) as cursor:
+                cursor.execute("SELECT * FROM uploaded_files WHERE file_type = %s", ('youtubeCookies',))
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Update existing record
+                    cursor.execute("""
+                        UPDATE uploaded_files 
+                        SET file_name = %s, file_path = %s, file_size = %s, updated_at = %s
+                        WHERE file_type = %s
+                        RETURNING *
+                    """, (original_filename, uploaded_files_path, file_size, datetime.now(), 'youtubeCookies'))
+                else:
+                    # Insert new record
+                    cursor.execute("""
+                        INSERT INTO uploaded_files (file_type, file_name, file_path, file_size, uploaded_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        RETURNING *
+                    """, ('youtubeCookies', original_filename, uploaded_files_path, file_size, datetime.now(), datetime.now()))
+                
+                uploaded_file = cursor.fetchone()
             
             return jsonify({
                 'message': 'YouTube cookies file uploaded successfully',
                 'file_name': 'youtube_cookies.txt',
                 'file_size': file_size,
-                'info': 'This file will be used for YouTube video downloads to bypass bot detection'
+                'info': 'This file will be used for YouTube video downloads to bypass bot detection',
+                'file': format_uploaded_file(uploaded_file)
             }), 201
         
         # For masterFile and companyLogo, replace existing file
