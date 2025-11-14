@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import StepProgressTracker from '../components/StepProgressTracker';
+import AIStyleJobRunner from '../components/AIStyleJobRunner';
 import SignedFileUpload from '../components/SignedFileUpload';
 import { pipelineSteps } from '../lib/mock-data';
 import { extractVideoId } from '../lib/youtube-utils';
@@ -13,6 +14,9 @@ import { playCompletionBell, playSuccessBell } from '../lib/sound-utils';
 import { toast } from 'sonner';
 import { API_ENDPOINTS, getAuthHeaders } from '../lib/api-config';
 import { useAuth } from '../lib/auth-context';
+
+// Feature flag: Set to true to use AI-style loader, false for classic step tracker
+const USE_AI_STYLE_RUNNER = true;
 
 interface MediaRationalePageProps {
   onNavigate: (page: string, jobId?: string) => void;
@@ -1333,17 +1337,29 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
             {/* Left Column: 14-Step Pipeline */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg text-foreground">14-Step Pipeline</h3>
-                  <p className="text-sm text-muted-foreground">Job ID: {currentJobId}</p>
+              {!USE_AI_STYLE_RUNNER && (
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg text-foreground">14-Step Pipeline</h3>
+                    <p className="text-sm text-muted-foreground">Job ID: {currentJobId}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <StepProgressTracker 
-                steps={jobSteps} 
-                onRestartFromStep={handleRestartFromStep}
-              />
+              {USE_AI_STYLE_RUNNER ? (
+                <AIStyleJobRunner
+                  jobSteps={jobSteps}
+                  currentStepNumber={currentStepNumber}
+                  progressPercent={progress}
+                  jobStatus={workflowStage === 'processing' ? 'processing' : 'pending'}
+                  onRestart={handleRestart}
+                />
+              ) : (
+                <StepProgressTracker 
+                  steps={jobSteps} 
+                  onRestartFromStep={handleRestartFromStep}
+                />
+              )}
             </div>
 
             {/* Right Column: Dynamic Content Based on Workflow Stage */}
