@@ -53,37 +53,44 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     using_cookies = os.path.exists(cookies_file_path)
 
     # -----------------------------
-    # OPTIMIZED YT-DLP OPTIONS (FAST)
+    # ROBUST YT-DLP OPTIONS (WORKS FOR LIVE + ARCHIVED + NORMAL VIDEOS)
     # -----------------------------
     ydl_opts = {
-        "format":
-        "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",  # Multiple fallbacks for VPS compatibility
+        "format": (
+            "bestaudio[acodec~='(opus|aac)']/"
+            "bestaudio/"
+            "best"
+        ),
         "outtmpl": raw_audio_path,
         "quiet": False,
 
-        # Fast retries (not too heavy)
+        # Required for YouTube LIVE/HLS/DASH formats
+        "allow_unplayable_formats": True,
+
+        # Fast retries
         "retries": 3,
         "fragment_retries": 3,
         "extractor_retries": 2,
 
-        # Use Android client (fast + no PO Token required)
+        # Multi-client fallback with DASH preference
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "web"],  # Try web as fallback
+                "player_client": ["android", "web"],
+                "skip": ["hls"],  # Prefer DASH first, fallback later
             }
         },
 
-        # Desktop UA is faster (less throttling)
+        # Desktop UA (less throttling)
         "http_headers": {
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                           "AppleWebKit/537.36 (KHTML, like Gecko) "
-                           "Chrome/122.0.0 Safari/537.36")
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0 Safari/537.36"
+            )
         },
 
-        # Disable chunking → **MUCH faster**
+        # Disable chunking for faster downloads
         "http_chunk_size": None,
-        
-        # Ignore errors for unavailable formats and try next format
         "ignoreerrors": False,
     }
 
