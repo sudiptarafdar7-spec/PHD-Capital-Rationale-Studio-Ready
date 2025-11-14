@@ -235,7 +235,7 @@ Transcript:
                 timeout=30
             )
 
-            csv_content = response.choices[0].message.content.strip()
+            csv_content = (response.choices[0].message.content or "").strip()
             
             if csv_content.startswith("```"):
                 csv_content = "\n".join(line for line in csv_content.splitlines()
