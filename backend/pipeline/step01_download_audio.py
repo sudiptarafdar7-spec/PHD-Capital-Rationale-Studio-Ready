@@ -37,7 +37,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
             'error': str or None
         }
     """
-    
+
     # -----------------------------
     # PATHS
     # -----------------------------
@@ -48,14 +48,16 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     prepared_audio_path = os.path.join(audio_folder, "audio_16k_mono.wav")
 
     # Use youtube_cookies.txt from uploaded_files folder
-    cookies_file_path = os.path.join("backend", "uploaded_files", "youtube_cookies.txt")
+    cookies_file_path = os.path.join("backend", "uploaded_files",
+                                     "youtube_cookies.txt")
     using_cookies = os.path.exists(cookies_file_path)
 
     # -----------------------------
     # OPTIMIZED YT-DLP OPTIONS (FAST)
     # -----------------------------
     ydl_opts = {
-        "format": "bestaudio/best",  # Universal fallback - works with all videos
+        "format":
+        "bestaudio/best",  # Universal fallback - works with all videos
         "outtmpl": raw_audio_path,
         "quiet": False,
 
@@ -64,20 +66,18 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         "fragment_retries": 3,
         "extractor_retries": 2,
 
-        # Skip slow clients - use iOS only (FASTEST)
+        # Use Android client (fast + no PO Token required)
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios"],
+                "player_client": ["android"],
             }
         },
 
         # Desktop UA is faster (less throttling)
         "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0 Safari/537.36"
-            )
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                           "AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/122.0.0 Safari/537.36")
         },
 
         # Disable chunking → **MUCH faster**
@@ -102,7 +102,10 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         return {"success": False, "error": f"yt-dlp failed: {e}"}
 
     if not os.path.exists(raw_audio_path):
-        return {"success": False, "error": "Audio not downloaded (403 or blocked)."}
+        return {
+            "success": False,
+            "error": "Audio not downloaded (403 or blocked)."
+        }
 
     print(f"✓ Raw audio downloaded: {raw_audio_path}")
 
@@ -112,24 +115,24 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     print("🔊 Converting to 16kHz mono WAV...")
 
     ffmpeg_cmd = [
-        "ffmpeg",
-        "-i", raw_audio_path,
-        "-ar", "16000",
-        "-ac", "1",
-        "-y",
+        "ffmpeg", "-i", raw_audio_path, "-ar", "16000", "-ac", "1", "-y",
         prepared_audio_path
     ]
 
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
-        return {"success": False, "error": f"FFmpeg conversion error: {result.stderr}"}
+        return {
+            "success": False,
+            "error": f"FFmpeg conversion error: {result.stderr}"
+        }
 
     print(f"✓ Converted WAV created: {prepared_audio_path}")
 
     # File sizes
     raw_size_mb = round(os.path.getsize(raw_audio_path) / (1024 * 1024), 2)
-    prepared_size_mb = round(os.path.getsize(prepared_audio_path) / (1024 * 1024), 2)
+    prepared_size_mb = round(
+        os.path.getsize(prepared_audio_path) / (1024 * 1024), 2)
 
     return {
         "success": True,
