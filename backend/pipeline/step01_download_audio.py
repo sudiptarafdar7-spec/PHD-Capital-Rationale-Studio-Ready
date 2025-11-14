@@ -53,34 +53,39 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     using_cookies = os.path.exists(cookies_file_path)
 
     # -----------------------------
-    # ROBUST YT-DLP OPTIONS (WORKS FOR LIVE + ARCHIVED + NORMAL VIDEOS)
+    # UNIVERSAL YT-DLP OPTIONS (HANDLES LIVE, HLS, DASH, MUXED, FRAGMENTED)
     # -----------------------------
     ydl_opts = {
-        "format": (
-            "bestaudio[acodec~='(opus|aac)']/"
-            "bestaudio/"
-            "best"
-        ),
+        # UNIVERSAL WORKING FORMAT (handles live, hls, dash, muxed, fragmented)
+        "format": "bestaudio* / best* / worst",
+
+        # Allow all segmented/fragmented audio
+        "allow_unplayable_formats": True,
+        "force_overwrites": True,
+        "prefer_free_formats": False,
+        "merge_output_format": "m4a",
+        "allow_multiple_audio_streams": True,
+        "allow_multiple_video_streams": True,
+
         "outtmpl": raw_audio_path,
         "quiet": False,
 
-        # Required for YouTube LIVE/HLS/DASH formats
-        "allow_unplayable_formats": True,
-
-        # Fast retries
+        # retries
         "retries": 3,
         "fragment_retries": 3,
         "extractor_retries": 2,
 
-        # Multi-client fallback with DASH preference
+        # force YouTube to fetch all metadata and formats
+        "extract_flat": False,
+        "force_youtube_unavailable_videos": True,
+
+        # multi-client fallback
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "web"],
-                "skip": ["hls"],  # Prefer DASH first, fallback later
+                "player_client": ["android", "ios", "web"],
             }
         },
 
-        # Desktop UA (less throttling)
         "http_headers": {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -89,9 +94,11 @@ def download_audio(job_id, youtube_url, cookies_file=None):
             )
         },
 
-        # Disable chunking for faster downloads
         "http_chunk_size": None,
         "ignoreerrors": False,
+
+        # Disable all postprocessors (raw file only)
+        "postprocessors": [],
     }
 
     # Add cookies if available
