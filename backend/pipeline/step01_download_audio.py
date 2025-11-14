@@ -57,7 +57,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     # -----------------------------
     ydl_opts = {
         "format":
-        "bestaudio/best",  # Universal fallback - works with all videos
+        "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",  # Multiple fallbacks for VPS compatibility
         "outtmpl": raw_audio_path,
         "quiet": False,
 
@@ -69,7 +69,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         # Use Android client (fast + no PO Token required)
         "extractor_args": {
             "youtube": {
-                "player_client": ["android"],
+                "player_client": ["android", "web"],  # Try web as fallback
             }
         },
 
@@ -82,6 +82,9 @@ def download_audio(job_id, youtube_url, cookies_file=None):
 
         # Disable chunking → **MUCH faster**
         "http_chunk_size": None,
+        
+        # Ignore errors for unavailable formats and try next format
+        "ignoreerrors": False,
     }
 
     # Add cookies if available
