@@ -143,13 +143,13 @@ export default function AIStyleJobRunner({
             </div>
             
             {/* Main loader */}
-            <div className="relative bg-gradient-to-br from-blue-500 to-purple-600 rounded-full p-6 shadow-2xl">
+            <div className="relative bg-gradient-to-br from-blue-500 to-purple-600 rounded-full p-6 shadow-2xl flex items-center justify-center">
               {isCompleted ? (
                 <CheckCircle2 className="w-16 h-16 text-white" />
               ) : (
-                <div className="relative">
-                  <Loader2 className="w-16 h-16 text-white animate-spin" />
-                  <StepIcon className="w-8 h-8 text-white/90 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+                <div className="relative w-16 h-16 flex items-center justify-center">
+                  <Loader2 className="w-16 h-16 text-white animate-spin absolute" />
+                  <StepIcon className="w-8 h-8 text-white/90 relative z-10" />
                 </div>
               )}
             </div>
