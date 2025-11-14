@@ -41,6 +41,10 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastNotifiedPdfPathRef = useRef<string | null>(null);
   
+  // Use refs to avoid stale closures in polling interval
+  const currentJobIdRef = useRef<string | null>(null);
+  const tokenRef = useRef<string | null>(null);
+  
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
@@ -50,6 +54,15 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   const [workflowStage, setWorkflowStage] = useState<WorkflowStage>('input');
   const [currentStepNumber, setCurrentStepNumber] = useState(0);
   const [actualJobStatus, setActualJobStatus] = useState<string>('pending');
+  
+  // Update refs whenever values change
+  useEffect(() => {
+    currentJobIdRef.current = currentJobId;
+  }, [currentJobId]);
+  
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
   const [saveType, setSaveType] = useState<SaveType>(null);
   const [uploadedSignedFile, setUploadedSignedFile] = useState<{
     fileName: string;
@@ -183,10 +196,16 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   };
 
   // Poll job status
-  const fetchJobStatus = async (jobId: string) => {
+  const fetchJobStatus = async (jobId?: string) => {
+    // Use ref value if jobId not provided (for polling)
+    const targetJobId = jobId || currentJobIdRef.current;
+    const currentToken = tokenRef.current;
+    
+    if (!targetJobId || !currentToken) return;
+    
     try {
-      const response = await fetch(API_ENDPOINTS.mediaRationale.getJob(jobId), {
-        headers: getAuthHeaders(token),
+      const response = await fetch(API_ENDPOINTS.mediaRationale.getJob(targetJobId), {
+        headers: getAuthHeaders(currentToken),
       });
       
       if (!response.ok) {
@@ -222,7 +241,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
             console.log('[DEBUG CSV] Transitioning to csv-review stage...');
             stopPolling();
             setWorkflowStage('csv-review');
-            await fetchCsvData(jobId);
+            await fetchCsvData(targetJobId);
             playCompletionBell();
             toast.success('Step 12 Complete - Review CSV', {
               description: 'Please review the stocks analysis before continuing to charts',
@@ -305,11 +324,23 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
     }
   };
   
-  const startPolling = (jobId: string) => {
+  const startPolling = (jobId?: string) => {
     stopPolling();
+    
+    // Update ref if jobId provided
+    if (jobId) {
+      currentJobIdRef.current = jobId;
+    }
+    
+    // Use ref in polling to avoid stale closures
     pollingIntervalRef.current = setInterval(() => {
-      fetchJobStatus(jobId);
+      fetchJobStatus(); // Will use currentJobIdRef
     }, 2000);
+    
+    // Do initial fetch
+    if (currentJobIdRef.current) {
+      fetchJobStatus(currentJobIdRef.current);
+    }
   };
   
   const stopPolling = () => {
@@ -1354,6 +1385,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
                   currentStepNumber={currentStepNumber}
                   progressPercent={progress}
                   jobStatus={actualJobStatus}
+                  jobId={currentJobId || undefined}
                   onRestart={handleRestart}
                 />
               ) : (

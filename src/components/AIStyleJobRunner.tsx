@@ -17,6 +17,7 @@ interface AIStyleJobRunnerProps {
   currentStepNumber: number;
   progressPercent: number;
   jobStatus: string;
+  jobId?: string;
   onRestart?: () => void;
 }
 
@@ -25,6 +26,7 @@ export default function AIStyleJobRunner({
   currentStepNumber,
   progressPercent,
   jobStatus,
+  jobId,
   onRestart
 }: AIStyleJobRunnerProps) {
   const totalSteps = getTotalSteps();
@@ -111,11 +113,24 @@ export default function AIStyleJobRunner({
   }
 
   return (
-    <Card className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-blue-950/20 dark:via-purple-950/20 dark:to-pink-950/20 border-blue-200 dark:border-blue-800">
-      {/* Animated background shimmer */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent dark:via-white/10 animate-shimmer"></div>
+    <Card className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-blue-950 dark:to-purple-950 border-2 border-transparent">
+      {/* Breathing neon border effect */}
+      <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-20 animate-pulse"></div>
+      <div className="absolute inset-[2px] bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-blue-950 dark:to-purple-950 rounded-lg"></div>
       
-      <div className="relative z-10 p-12 space-y-8">
+      {/* Animated grid background */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute inset-0" style={{
+          backgroundImage: 'linear-gradient(rgba(99, 102, 241, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(99, 102, 241, 0.3) 1px, transparent 1px)',
+          backgroundSize: '50px 50px',
+          animation: 'grid-flow 20s linear infinite'
+        }}></div>
+      </div>
+      
+      {/* Animated background shimmer */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-blue-400/10 animate-shimmer"></div>
+      
+      <div className="relative z-10 p-8 space-y-6">
         {/* AI Loader Icon */}
         <div className="flex justify-center">
           <div className="relative">
@@ -141,18 +156,30 @@ export default function AIStyleJobRunner({
           </div>
         </div>
 
+        {/* Job ID Header */}
+        {jobId && (
+          <div className="text-center space-y-1">
+            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 dark:from-blue-400/20 dark:to-purple-400/20 px-4 py-2 rounded-full border border-blue-300/30 dark:border-blue-500/30 backdrop-blur-sm">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
+                JOB ID: {jobId}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Progress Information */}
-        <div className="space-y-4 text-center">
+        <div className="space-y-5 text-center">
           {/* Step Counter */}
-          <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-gray-800/80 px-4 py-2 rounded-full shadow-sm backdrop-blur-sm">
-            <Sparkles className="w-4 h-4 text-purple-500" />
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Step {displayStepNumber}/{totalSteps}
+          <div className="inline-flex items-center gap-2 bg-white/90 dark:bg-gray-800/90 px-5 py-2.5 rounded-full shadow-lg backdrop-blur-sm border border-purple-200 dark:border-purple-500/30">
+            <Sparkles className="w-5 h-5 text-purple-500 animate-pulse" />
+            <span className="text-sm font-bold text-gray-700 dark:text-gray-200 tracking-wide">
+              STEP {displayStepNumber}/{totalSteps}
             </span>
           </div>
 
           {/* Current Step Message */}
-          <h3 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">
+          <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100 px-4">
             {currentStepConfig?.publicMessage || 'Processing...'}
           </h3>
 
@@ -168,16 +195,18 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Progress Bar */}
-        <div className="space-y-3">
-          <Progress 
-            value={progressPercent} 
-            className="h-3 bg-white/50 dark:bg-gray-700/50 backdrop-blur-sm"
-          />
-          <div className="flex justify-between items-center text-sm">
-            <span className="text-gray-600 dark:text-gray-400">Progress</span>
-            <span className="font-semibold text-gray-700 dark:text-gray-300 bg-white/80 dark:bg-gray-800/80 px-3 py-1 rounded-full backdrop-blur-sm">
-              {Math.round(progressPercent)}%
-            </span>
+        <div className="space-y-4 mt-8">
+          <div className="space-y-3">
+            <Progress 
+              value={progressPercent} 
+              className="h-4 bg-white/60 dark:bg-gray-700/60 backdrop-blur-sm shadow-inner border border-purple-200/30 dark:border-purple-500/20"
+            />
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-600 dark:text-gray-400 font-medium">PROGRESS</span>
+              <span className="font-bold text-gray-700 dark:text-gray-200 bg-gradient-to-r from-blue-500/10 to-purple-500/10 dark:from-blue-400/20 dark:to-purple-400/20 px-4 py-1.5 rounded-full backdrop-blur-sm border border-purple-200/40 dark:border-purple-500/30">
+                {Math.round(progressPercent)}%
+              </span>
+            </div>
           </div>
         </div>
 
@@ -203,6 +232,14 @@ export default function AIStyleJobRunner({
         }
         .animate-shimmer {
           animation: shimmer 3s infinite;
+        }
+        @keyframes grid-flow {
+          0% {
+            transform: translateY(0);
+          }
+          100% {
+            transform: translateY(50px);
+          }
         }
       `}</style>
     </Card>
