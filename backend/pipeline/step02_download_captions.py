@@ -84,12 +84,11 @@ def download_captions(job_id, youtube_url, cookies_file=None):
         # Use cookies from uploaded_files folder
         cookies_file_path = os.path.join("backend", "uploaded_files", "youtube_cookies.txt")
 
-        # ROBUST yt-dlp command with wildcard language matching
+        # ROBUST yt-dlp command - downloads first available auto-generated subtitle
         cmd = [
             "python3.11", "-m", "yt_dlp",
             "--skip-download",
             "--write-auto-subs",
-            "--sub-lang", "*",                   # Match ALL auto-generated subtitles
             "--sub-format", "json3/vtt/srt",
             "-o", os.path.join(captions_folder, "youtube.%(ext)s"),
             youtube_url
