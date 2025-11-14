@@ -52,6 +52,11 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         "quiet": True,
         "skip_download": True,
         "dump_single_json": True,
+        
+        # CRITICAL: Enable EJS (External JavaScript) for November 2025 YouTube support
+        "remote_components": ["ejs:github"],  # Download JS challenge solvers
+        "js_runtimes": ["deno"],  # Use Deno runtime (installed system-wide)
+        
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "ios", "web"],
@@ -64,6 +69,11 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         "quiet": True,
         "skip_download": True,
         "dump_single_json": True,
+        
+        # CRITICAL: Enable EJS for both attempts
+        "remote_components": ["ejs:github"],
+        "js_runtimes": ["deno"],
+        
         "extractor_args": {
             "youtube": {
                 "player_client": ["web"],  # Only web client supports cookies
@@ -135,6 +145,10 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         "ignoreerrors": False,
         "retries": 3,
         "fragment_retries": 3,
+        
+        # CRITICAL: Must use same EJS settings as format detection
+        "remote_components": ["ejs:github"],
+        "js_runtimes": ["deno"],
     }
 
     if using_cookies:

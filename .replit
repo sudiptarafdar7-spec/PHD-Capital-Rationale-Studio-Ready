@@ -5,7 +5,7 @@ integrations = ["python_database:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["c-ares", "cacert", "cairo", "cargo", "chromedriver", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "grpc", "gtk3", "lcms2", "libcxx", "libffi", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "qhull", "rapidfuzz-cpp", "rustc", "taskflow", "tcl", "tk", "yt-dlp", "zlib"]
+packages = ["c-ares", "cacert", "cairo", "cargo", "chromedriver", "ffmpeg-full", "freetype", "ghostscript", "glibcLocales", "gobject-introspection", "grpc", "gtk3", "lcms2", "libcxx", "libffi", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "qhull", "rapidfuzz-cpp", "rustc", "taskflow", "tcl", "tk", "yt-dlp", "zlib", "unzip"]
 
 [workflows]
 runButton = "Project"
