@@ -182,15 +182,6 @@ def start_analysis():
                             WHERE id = %s
                         """, (datetime.now(), job_id))
                     print(f"Job {job_id}: Paused after Step 12 for CSV review")
-                else:
-                    # Step failed - update job status to failed
-                    with get_db_cursor(commit=True) as cursor:
-                        cursor.execute("""
-                            UPDATE jobs 
-                            SET status = 'failed', updated_at = %s
-                            WHERE id = %s
-                        """, (datetime.now(), job_id))
-                    print(f"Job {job_id}: Pipeline failed during steps 1-12")
                 
             except Exception as e:
                 print(f"Pipeline error for job {job_id}: {str(e)}")
@@ -424,15 +415,6 @@ def restart_step(job_id, step_number):
                                 WHERE id = %s
                             """, (datetime.now(), job_id))
                         print(f"✅ Pipeline completed! Job {job_id} status set to 'pdf_ready' (awaiting user action)")
-                else:
-                    # Step failed - update job status to failed
-                    with get_db_cursor(commit=True) as cursor:
-                        cursor.execute("""
-                            UPDATE jobs 
-                            SET status = 'failed', updated_at = %s
-                            WHERE id = %s
-                        """, (datetime.now(), job_id))
-                    print(f"Job {job_id}: Pipeline failed during restart from step {step_number}")
                         
             except Exception as e:
                 print(f"Pipeline restart error for job {job_id}: {str(e)}")

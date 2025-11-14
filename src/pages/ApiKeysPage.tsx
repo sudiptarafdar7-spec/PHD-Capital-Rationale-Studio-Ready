@@ -17,6 +17,7 @@ export default function ApiKeysPage() {
     assemblyai: '',
     dhan: '',
     youtubedata: '',
+    rapidapi: '',
   });
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [configuredProviders, setConfiguredProviders] = useState<Record<string, boolean>>({
@@ -25,6 +26,7 @@ export default function ApiKeysPage() {
     google_cloud: false,
     dhan: false,
     youtubedata: false,
+    rapidapi: false,
   });
 
   useEffect(() => {
@@ -49,6 +51,7 @@ export default function ApiKeysPage() {
           google_cloud: false,
           dhan: false,
           youtubedata: false,
+          rapidapi: false,
         };
         
         data.forEach((item: any) => {
@@ -193,6 +196,13 @@ export default function ApiKeysPage() {
   };
 
   const apiProviders = [
+    {
+      id: 'rapidapi',
+      name: 'RapidAPI Key',
+      description: 'Required for downloading YouTube audio (Media Rationale Step 1)',
+      type: 'key',
+      placeholder: '5fcbc64016msh6d450f3c020af51p10a9fdjsne613f6de65ae',
+    },
     {
       id: 'youtubedata',
       name: 'YouTube Data API v3',
