@@ -5,11 +5,11 @@ from openai import OpenAI
 
 def run(job_folder):
     """
-    Step 8: Extract Stock Mentions (using GPT-5 for accuracy)
+    Step 8: Extract Stock Mentions (using GPT-4o for accuracy and speed)
     """
 
     print("\n" + "=" * 60)
-    print("STEP 8: Extract Stock Mentions (GPT-5)")
+    print("STEP 8: Extract Stock Mentions (GPT-4o)")
     print(f"{'='*60}\n")
 
     try:
@@ -78,8 +78,8 @@ def run(job_folder):
 
         client = OpenAI(api_key=openai_api_key)
 
-        # Step 4: Build GPT-5 prompt
-        print("🤖 Preparing GPT-5 prompt...")
+        # Step 4: Build GPT-4o prompt
+        print("🤖 Preparing GPT-4o prompt...")
 
         prompt = f"""
 You are a financial transcript analyzer using updated (2025) NSE and BSE stock listings.
@@ -106,11 +106,11 @@ Transcript:
 {transcript_content}
 """
 
-        # Step 5: Call GPT-5
-        print("🚀 Calling GPT-5 for stock extraction...\n")
+        # Step 5: Call GPT-4o (FASTEST available model)
+        print("🚀 Calling GPT-4o for stock extraction...\n")
 
         response = client.chat.completions.create(
-            model="gpt-5",  # ✅ Updated model
+            model="gpt-4o",  # ✅ Fastest current model
             messages=[{
                 "role":
                 "system",
@@ -123,7 +123,9 @@ Transcript:
             }, {
                 "role": "user",
                 "content": prompt
-            }])
+            }],
+            timeout=30  # 30 second timeout for speed
+        )
 
         csv_content = response.choices[0].message.content.strip()
 
@@ -142,7 +144,7 @@ Transcript:
 
         return {
             "status": "success",
-            "message": f"Extracted {stock_count} stocks using GPT-5",
+            "message": f"Extracted {stock_count} stocks using GPT-4o",
             "output_files": ["analysis/extracted_stocks.csv"]
         }
 
