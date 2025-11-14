@@ -4,23 +4,6 @@ import psycopg2
 from openai import OpenAI
 
 
-VERIFIED_NSE_SYMBOLS = {
-    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
-    "HINDUNILVR.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS", "KOTAKBANK.NS",
-    "LT.NS", "AXISBANK.NS", "ASIANPAINT.NS", "MARUTI.NS", "TITAN.NS",
-    "SUNPHARMA.NS", "WIPRO.NS", "ULTRACEMCO.NS", "TATASTEEL.NS", "TATAMOTORS.NS",
-    "M&M.NS", "NESTLEIND.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "HCLTECH.NS",
-    "ONGC.NS", "NTPC.NS", "POWERGRID.NS", "TECHM.NS", "DIVISLAB.NS",
-    "DRREDDY.NS", "CIPLA.NS", "ADANIENT.NS", "ADANIPORTS.NS", "ADANIPOWER.NS",
-    "BANKBARODA.NS", "PNB.NS", "CANBK.NS", "UNIONBANK.NS", "INDUSINDBK.NS",
-    "FEDERALBNK.NS", "RBLBANK.NS", "CSBBANK.NS", "SUZLON.NS", "APOLLOTYRE.NS",
-    "MRF.NS", "CEAT.NS", "JKTYRE.NS", "ASHOKLEY.NS", "INOXWIND.NS",
-    "JINDALSAW.NS", "RECLTD.NS", "SWSOLAR.NS", "BEL.NS", "HAL.NS",
-    "APOLLOHOSP.NS", "ANANTRAJ.NS", "IDEA.NS", "PARAGMILK.NS",
-    "TATACOFFEE.NS", "TATAPOWER.NS", "JSW STEEL.NS", "JINDALSTEL.NS"
-}
-
-
 def parse_transcript_turns(transcript_content):
     """Parse transcript into structured turns with speaker, time, and text."""
     turns = []
@@ -134,7 +117,7 @@ Extract now (stock names and NSE symbols only, one per line):"""
                     stock_name = parts[0].strip()
                     symbol = parts[1].strip().upper()
                     
-                    if symbol in VERIFIED_NSE_SYMBOLS:
+                    if symbol.endswith('.NS') or symbol.endswith('.BO'):
                         stocks.append({
                             "stock_name": stock_name,
                             "stock_symbol": symbol,
@@ -149,16 +132,17 @@ Extract now (stock names and NSE symbols only, one per line):"""
 
 
 def validate_and_format_csv(stocks):
-    """Validate extracted stocks and format as CSV."""
+    """Validate extracted stocks and format as CSV - deduplicate by symbol."""
     if not stocks:
         return "STOCK NAME,STOCK SYMBOL,START TIME\n"
     
-    seen = set()
+    seen_symbols = set()
     unique_stocks = []
     
     for stock in stocks:
-        if stock["stock_name"] not in seen:
-            seen.add(stock["stock_name"])
+        symbol = stock["stock_symbol"]
+        if symbol not in seen_symbols:
+            seen_symbols.add(symbol)
             unique_stocks.append(stock)
     
     csv_rows = ["STOCK NAME,STOCK SYMBOL,START TIME"]
