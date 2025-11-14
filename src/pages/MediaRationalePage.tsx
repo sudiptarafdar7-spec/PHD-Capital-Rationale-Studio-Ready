@@ -194,13 +194,6 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
         setCurrentStepNumber(data.job.currentStep);
         setJobSteps(data.job.steps);
         
-        // Auto-start polling if job is processing/pending and no polling is active
-        const isProcessingState = data.job.status === 'processing' || data.job.status === 'pending';
-        if (isProcessingState && !pollingIntervalRef.current) {
-          console.log('[DEBUG] Auto-starting polling for processing job');
-          startPolling(jobId);
-        }
-        
         // Update video metadata if not already set
         if (!videoMetadata && data.job.videoTitle) {
           setVideoMetadata({
@@ -331,9 +324,6 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
       setCurrentJobId(selectedJobId);
       setWorkflowStage('processing'); // Will be updated by fetchJobStatus
       fetchJobStatus(selectedJobId);
-      
-      // Start polling for jobs in processing state
-      startPolling(selectedJobId);
       
       toast.info('Loading job...', {
         description: `Job ID: ${selectedJobId}`,
