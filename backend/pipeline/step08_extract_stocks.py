@@ -5,11 +5,11 @@ from openai import OpenAI
 
 def run(job_folder):
     """
-    Step 8: Extract Stock Mentions (using GPT-5 for accuracy)
+    Step 8: Extract Stock Mentions (OPTIMIZED - using gpt-4o-mini for speed)
     """
 
     print("\n" + "=" * 60)
-    print("STEP 8: Extract Stock Mentions (GPT-5)")
+    print("STEP 8: Extract Stock Mentions (OPTIMIZED)")
     print(f"{'='*60}\n")
 
     try:
@@ -78,52 +78,47 @@ def run(job_folder):
 
         client = OpenAI(api_key=openai_api_key)
 
-        # Step 4: Build GPT-5 prompt
-        print("🤖 Preparing GPT-5 prompt...")
+        # Step 4: Filter transcript to Pradip's lines only (HUGE speed boost)
+        print(f"🔍 Filtering transcript to {pradip_speaker}'s lines only...")
+        pradip_lines = []
+        for line in transcript_content.splitlines():
+            if line.strip().startswith(f"[{pradip_speaker}]"):
+                pradip_lines.append(line.strip())
+        
+        filtered_content = "\n".join(pradip_lines)
+        print(f"✅ Filtered from {len(transcript_content.splitlines())} to {len(pradip_lines)} lines\n")
 
-        prompt = f"""
-You are a financial transcript analyzer using updated (2025) NSE and BSE stock listings.
+        # Step 5: Build OPTIMIZED prompt (simplified, compact)
+        print("🤖 Preparing optimized prompt...")
 
-Task:
-1. Identify all *STOCK NAMES or COMPANY NAMES* mentioned by {pradip_speaker} (not {anchor_speaker}).
-2. For each stock:
-   - Find its **exact NSE or BSE trading symbol** (example: Reliance Industries → RELIANCE.NS).
-   - Verify that the symbol is **actually listed on NSE or BSE** (no assumptions).
-   - If a stock name appears multiple times, take only the first mention by {pradip_speaker}.
-   - Capture the START TIME from the line where {pradip_speaker} first mentions it.
-3. Exclude:
-   - Any company not publicly listed in India (NSE/BSE).
-   - Mutual funds, sectors, or indices (e.g., Nifty 50, Bank Nifty).
-4. Output strictly as a CSV (no markdown, no commentary) with the header:
+        prompt = f"""Extract stock names mentioned by {pradip_speaker} from this transcript.
 
+For each stock:
+- Find exact NSE/BSE symbol (e.g., Reliance Industries → RELIANCE)
+- First mention timestamp only
+- Exclude mutual funds, indices, unlisted companies
+
+Output CSV format:
 STOCK NAME,STOCK SYMBOL,START TIME
 
-Examples:
-Tata Steel,TATASTEEL,00:03:12  
-HDFC Bank,HDFCBANK,00:07:45
-
 Transcript:
-{transcript_content}
+{filtered_content}
 """
 
-        # Step 5: Call GPT-5
-        print("🚀 Calling GPT-5 for stock extraction...\n")
+        # Step 6: Call gpt-4o-mini (FAST + CHEAP)
+        print("🚀 Calling gpt-4o-mini for stock extraction...\n")
 
-        response = client.chat.completions.create(
-            model="gpt-5",  # ✅ Updated model
+        response = client.with_options(timeout=30.0).chat.completions.create(
+            model="gpt-4o-mini",  # Fast & cost-effective
             messages=[{
-                "role":
-                "system",
-                "content":
-                ("You are a precise financial transcript analyst. "
-                 "Your job is to extract *accurate NSE/BSE stock symbols* and timestamps "
-                 "from a conversation, outputting only valid, listed Indian equities. "
-                 "Respond strictly as plain CSV without markdown or extra text."
-                 )
+                "role": "system",
+                "content": "You are a financial analyst. Extract stock symbols and timestamps from transcripts. Output plain CSV only, no markdown."
             }, {
                 "role": "user",
                 "content": prompt
-            }])
+            }],
+            temperature=0.1  # Low temperature for consistent output
+        )
 
         csv_content = response.choices[0].message.content.strip()
 
@@ -142,7 +137,7 @@ Transcript:
 
         return {
             "status": "success",
-            "message": f"Extracted {stock_count} stocks using GPT-5",
+            "message": f"Extracted {stock_count} stocks using gpt-4o-mini",
             "output_files": ["analysis/extracted_stocks.csv"]
         }
 
