@@ -93,3 +93,4 @@ requests
 websockets
 yfinance
 yt-dlp
+youtube-transcript-api

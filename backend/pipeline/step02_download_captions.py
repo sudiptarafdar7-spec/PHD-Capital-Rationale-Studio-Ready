@@ -1,29 +1,33 @@
 """
 Step 2: Download Auto-Generated Captions from YouTube Video
-Uses yt-dlp to download Hindi/English captions in JSON format
+Production-ready implementation with YouTube Transcript API (primary) and yt-dlp fallback
 """
 import os
-import subprocess
 import json
+import subprocess
 import glob
 import re
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 
-def time_to_ms(timestr):
-    """Convert VTT timestamp to milliseconds"""
-    parts = timestr.split(":")
+def time_to_ms(seconds):
+    """Convert seconds (float) to milliseconds (int)."""
     try:
-        parts = [float(p) for p in parts]
+        return int(float(seconds) * 1000)
     except:
         return 0
-    if len(parts) == 3:
-        h, m, s = parts
-    elif len(parts) == 2:
-        h = 0
-        m, s = parts
-    else:
-        return int(parts[0] * 1000)
-    return int((h * 3600 + m * 60 + s) * 1000)
+
+
+def transcript_to_json_format(transcript):
+    """Convert transcript list to your JSON3-like structure."""
+    events = []
+    for t in transcript:
+        events.append({
+            "tStartMs": time_to_ms(t.get("start", 0)),
+            "dDurationMs": time_to_ms(t.get("duration", 0)),
+            "segs": [{"utf8": t.get("text", "").strip()}]
+        })
+    return {"events": events}
 
 
 def parse_vtt(vtt_text):
@@ -38,8 +42,8 @@ def parse_vtt(vtt_text):
             if cur_start and cur_text_lines:
                 text = " ".join(cur_text_lines).strip()
                 events.append({
-                    'tStartMs': time_to_ms(cur_start),
-                    'dDurationMs': time_to_ms(cur_end) - time_to_ms(cur_start),
+                    'tStartMs': time_to_ms_str(cur_start),
+                    'dDurationMs': time_to_ms_str(cur_end) - time_to_ms_str(cur_start),
                     'segs': [{'utf8': text}]
                 })
             cur_start, cur_end, cur_text_lines = None, None, []
@@ -54,165 +58,157 @@ def parse_vtt(vtt_text):
     return {'events': events}
 
 
+def time_to_ms_str(timestr):
+    """Convert VTT timestamp to milliseconds"""
+    parts = timestr.split(":")
+    try:
+        parts = [float(p.replace(",", ".")) for p in parts]
+    except:
+        return 0
+    if len(parts) == 3:
+        h, m, s = parts
+    elif len(parts) == 2:
+        h, m, s = 0, parts[0], parts[1]
+    else:
+        return int(parts[0] * 1000)
+    return int((h * 3600 + m * 60 + s) * 1000)
+
+
 def download_captions(job_id, youtube_url, cookies_file=None):
     """
-    Download auto-generated captions from YouTube video
+    Download auto-generated captions using YouTube Transcript API (preferred)
+    and fall back to yt-dlp if needed.
     
     Args:
         job_id: Job identifier
         youtube_url: YouTube video URL
-        cookies_file: Optional path to cookies.txt file for authentication
+        cookies_file: Optional path to cookies.txt file (legacy param, uses uploaded_files folder)
     
     Returns:
         dict: {
             'success': bool,
             'captions_path': str,  # Path to captions.json file
-            'format': str,  # Source format (json3, vtt, or srt)
-            'language': str,  # Language code (hi or en)
+            'format': str,  # Source format (transcript-api, json3, vtt, or srt)
+            'language': str,  # Language code
+            'file_size_kb': float,
             'error': str or None
         }
     """
+    captions_folder = os.path.join('backend', 'job_files', job_id, 'captions')
+    os.makedirs(captions_folder, exist_ok=True)
+    captions_json_path = os.path.join(captions_folder, 'captions.json')
+
+    # Extract video ID from URL
+    video_id_match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", youtube_url)
+    if not video_id_match:
+        return {'success': False, 'error': 'Invalid YouTube URL'}
+
+    video_id = video_id_match.group(1)
+
+    print(f"🎬 Processing YouTube video: {video_id}")
+
+    # Try YouTube Transcript API first (most reliable for auto-generated captions)
     try:
-        # Setup paths
-        captions_folder = os.path.join('backend', 'job_files', job_id, 'captions')
-        os.makedirs(captions_folder, exist_ok=True)
+        print("🔍 Attempting to fetch captions via YouTube Transcript API...")
+        transcript = YouTubeTranscriptApi.get_transcript(
+            video_id, 
+            languages=['hi', 'hi-IN', 'en', 'en-US']
+        )
+        print(f"✅ Captions fetched via YouTube Transcript API ({len(transcript)} segments)")
+
+        data = transcript_to_json_format(transcript)
+        with open(captions_json_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        # Detect language from first segment if available
+        detected_lang = 'unknown'
+        if transcript:
+            first_text = transcript[0].get('text', '').strip()
+            # Simple heuristic: check for Devanagari characters for Hindi
+            if any('\u0900' <= char <= '\u097F' for char in first_text):
+                detected_lang = 'hi'
+            else:
+                detected_lang = 'en'
+
+        return {
+            'success': True,
+            'captions_path': captions_json_path,
+            'format': 'transcript-api',
+            'language': detected_lang,
+            'file_size_kb': round(os.path.getsize(captions_json_path) / 1024, 2),
+            'error': None
+        }
+
+    except (TranscriptsDisabled, NoTranscriptFound) as e:
+        print(f"⚠️ Transcript API failed: {e}. Falling back to yt-dlp...")
+
+    except Exception as e:
+        print(f"⚠️ Transcript API unexpected error: {e}. Falling back to yt-dlp...")
+
+    # Fallback: use yt-dlp for auto-generated captions
+    try:
+        print("⏳ Downloading auto-generated captions with yt-dlp...")
+
+        # Use cookies from uploaded_files folder
+        cookies_file_path = os.path.join("backend", "uploaded_files", "youtube_cookies.txt")
         
-        captions_json_path = os.path.join(captions_folder, 'captions.json')
-        
-        print(f"⏳ Downloading auto-generated captions (Hindi/English)...")
-        
-        # Build yt-dlp command (use Python module to avoid version conflicts)
         cmd = [
             "python3.11", "-m", "yt_dlp",
             "--skip-download",
             "--write-auto-subs",
-            "--sub-lang", "hi,en",  # Try Hindi first, then English
+            "--sub-langs", "hi,hi-IN,en,en-US",
             "--sub-format", "json3/vtt/srt",
             "-o", os.path.join(captions_folder, "youtube.%(ext)s"),
             youtube_url
         ]
-        
-        # Add cookies if available
-        if cookies_file and os.path.exists(cookies_file):
-            cmd.extend(["--cookies", cookies_file])
+
+        if os.path.exists(cookies_file_path):
+            cmd.extend(["--cookies", cookies_file_path])
             print(f"✓ Using cookies file for authentication")
-        
-        # Run yt-dlp command
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-        
+
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if result.returncode != 0:
             print(f"yt-dlp stderr: {result.stderr}")
-        
+
         # Find downloaded subtitle files
-        subs_found = glob.glob(os.path.join(captions_folder, "youtube.*"))
-        subs_found = [p for p in subs_found if p.lower().endswith(('.json3', '.vtt', '.srt'))]
-        
+        subs_found = glob.glob(os.path.join(captions_folder, "**"), recursive=True)
+        subs_found = [p for p in subs_found if re.search(r'\.(json3|vtt|srt)$', p, re.IGNORECASE)]
+
         if not subs_found:
-            return {
-                'success': False,
-                'error': 'No auto-generated captions found. Captions may be disabled for this video.'
-            }
-        
-        # Process subtitles based on format
-        source_format = None
-        language = None
-        
-        # Prefer JSON3 format
-        json3_files = [f for f in subs_found if f.endswith(".json3")]
-        if json3_files:
-            src = json3_files[0]
-            source_format = 'json3'
-            
-            # Extract language from filename (e.g., youtube.hi.json3)
-            if '.hi.' in src:
-                language = 'hi'
-            elif '.en.' in src:
-                language = 'en'
-            
+            return {'success': False, 'error': 'No auto-generated captions found via yt-dlp.'}
+
+        src = subs_found[0]
+        ext = os.path.splitext(src)[1].lower()
+        language = 'hi' if 'hi' in src.lower() else 'en' if 'en' in src.lower() else 'unknown'
+
+        if ext == '.json3':
             with open(src, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            
-            with open(captions_json_path, "w", encoding="utf-8") as outj:
-                json.dump(data, outj, ensure_ascii=False, indent=2)
-            
-            print(f"✅ Captions saved from JSON3 format ({language})")
-        
-        # Fall back to VTT format
-        elif any(f.endswith(".vtt") for f in subs_found):
-            src = [f for f in subs_found if f.endswith(".vtt")][0]
-            source_format = 'vtt'
-            
-            # Extract language from filename
-            if '.hi.' in src:
-                language = 'hi'
-            elif '.en.' in src:
-                language = 'en'
-            
-            with open(src, "r", encoding="utf-8", errors="ignore") as f:
-                vtt_text = f.read()
-            
-            data = parse_vtt(vtt_text)
-            
-            with open(captions_json_path, "w", encoding="utf-8") as outj:
-                json.dump(data, outj, ensure_ascii=False, indent=2)
-            
-            print(f"✅ Captions saved from VTT format ({language})")
-        
         else:
-            # Only SRT found - parse it similarly to VTT
-            src = [f for f in subs_found if f.endswith(".srt")][0]
-            source_format = 'srt'
-            
-            if '.hi.' in src:
-                language = 'hi'
-            elif '.en.' in src:
-                language = 'en'
-            
-            # SRT parsing (simplified - similar to VTT)
             with open(src, "r", encoding="utf-8", errors="ignore") as f:
-                srt_text = f.read()
-            
-            # Parse SRT (basic implementation)
-            data = parse_vtt(srt_text)  # VTT parser works for SRT too
-            
-            with open(captions_json_path, "w", encoding="utf-8") as outj:
-                json.dump(data, outj, ensure_ascii=False, indent=2)
-            
-            print(f"✅ Captions saved from SRT format ({language})")
-        
-        # Clean up intermediate files (keep only captions.json)
-        for sub_file in subs_found:
+                text = f.read()
+            data = parse_vtt(text)
+
+        with open(captions_json_path, "w", encoding="utf-8") as outj:
+            json.dump(data, outj, ensure_ascii=False, indent=2)
+
+        # Cleanup intermediate files
+        for f in subs_found:
             try:
-                os.remove(sub_file)
+                os.remove(f)
             except:
                 pass
-        
-        # Verify captions file exists
-        if not os.path.exists(captions_json_path):
-            return {
-                'success': False,
-                'error': 'Failed to create captions.json file'
-            }
-        
-        # Get file size
-        file_size = os.path.getsize(captions_json_path) / 1024  # KB
-        
+
+        print(f"✅ Captions saved via yt-dlp fallback ({language})")
+
         return {
             'success': True,
             'captions_path': captions_json_path,
-            'format': source_format,
-            'language': language or 'unknown',
-            'file_size_kb': round(file_size, 2),
+            'format': ext.replace('.', ''),
+            'language': language,
+            'file_size_kb': round(os.path.getsize(captions_json_path) / 1024, 2),
             'error': None
         }
-        
+
     except Exception as e:
-        return {
-            'success': False,
-            'error': f'Caption download error: {str(e)}'
-        }
+        return {'success': False, 'error': f'yt-dlp fallback error: {e}'}
