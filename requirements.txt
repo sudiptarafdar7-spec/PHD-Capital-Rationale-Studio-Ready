@@ -92,3 +92,4 @@ reportlab
 requests
 websockets
 yfinance
+yt-dlp
