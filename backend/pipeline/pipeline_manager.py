@@ -24,20 +24,20 @@ from datetime import datetime
 # Pipeline step definitions matching frontend pipelineSteps
 # NOTE: Step 15 removed - user actions (Save/Sign/Delete) handled via API endpoints only
 PIPELINE_STEPS = [
-    {'number': 1, 'name': 'Download Audio', 'description': 'Extract audio from YouTube video'},
-    {'number': 2, 'name': 'Download Captions', 'description': 'Fetch auto-generated captions'},
-    {'number': 3, 'name': 'Transcribe Audio', 'description': 'AssemblyAI transcription with speaker labels'},
-    {'number': 4, 'name': 'Merge Transcripts', 'description': 'Combine captions and transcript data'},
-    {'number': 5, 'name': 'Translate to English', 'description': 'Google Cloud Translation'},
-    {'number': 6, 'name': 'Detect Speakers', 'description': 'Identify Anchor and Pradip using AI'},
-    {'number': 7, 'name': 'Filter Transcription', 'description': 'Keep only Anchor & Pradip dialogue'},
-    {'number': 8, 'name': 'Extract Stock Mentions', 'description': 'AI extraction of stock names and timestamps'},
-    {'number': 9, 'name': 'Map Master File', 'description': 'Match stocks to api-scrip-master.csv'},
-    {'number': 10, 'name': 'Convert Timestamps', 'description': 'Convert to absolute time and date'},
-    {'number': 11, 'name': 'Fetch CMP', 'description': 'Get current market price from Dhan API'},
-    {'number': 12, 'name': 'Extract Analysis', 'description': 'AI-generated stock analysis'},
-    {'number': 13, 'name': 'Generate Charts', 'description': 'Fetch data and plot technical charts'},
-    {'number': 14, 'name': 'Generate PDF', 'description': 'Create branded PDF report'},
+    {'number': 1, 'name': 'Collecting Data', 'description': 'Collecting Data'},
+    {'number': 2, 'name': 'Analysing Video', 'description': 'Analysing Video'},
+    {'number': 3, 'name': 'AI Speech Detection', 'description': 'AI Speech Detection'},
+    {'number': 4, 'name': 'Polishing Data', 'description': 'Polishing Data'},
+    {'number': 5, 'name': 'Translate to English', 'description': 'Translate to English'},
+    {'number': 6, 'name': 'Detect Target Speaker', 'description': 'Detect Target Speaker'},
+    {'number': 7, 'name': 'Filter Transcription', 'description': 'Filter Transcription'},
+    {'number': 8, 'name': 'Extract Stocks Data', 'description': 'Extract Stocks Data'},
+    {'number': 9, 'name': 'Map with NSE/BSE', 'description': 'Map with NSE/BSE'},
+    {'number': 10, 'name': 'Extract Timestamp', 'description': 'Extract Timestamp'},
+    {'number': 11, 'name': 'Fetch CMP', 'description': 'Fetch CMP'},
+    {'number': 12, 'name': 'Extract Analysis', 'description': 'Extract Analysis'},
+    {'number': 13, 'name': 'Generate Charts', 'description': 'Generate Charts'},
+    {'number': 14, 'name': 'Generate PDF', 'description': 'Generate PDF'},
 ]
 
 def create_job_directory(job_id):
@@ -89,7 +89,7 @@ def run_pipeline_step(job_id, step_number):
         step_info = PIPELINE_STEPS[step_number - 1]
         
         # Update status to running
-        update_step_status(job_id, step_number, 'running', f"Processing {step_info['description']}...")
+        update_step_status(job_id, step_number, 'running', f"Processing step no {step_number}...")
         
         # Get job details from database
         with get_db_cursor() as cursor:
@@ -123,7 +123,7 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['error'])
             
             output_files = [result['raw_audio'], result['prepared_audio']]
-            message = f"Audio downloaded and converted to 16kHz mono ({result['prepared_size_mb']} MB)"
+            message = "Fetching Data Completed"
         
         elif step_number == 2:
             # Step 2: Download auto-generated captions
@@ -137,7 +137,7 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['error'])
             
             output_files = [result['captions_path']]
-            message = f"Captions downloaded ({result['format']} format, {result['language']} language, {result['file_size_kb']} KB)"
+            message = "Completed"
         
         elif step_number == 3:
             # Step 3: Transcribe audio with AssemblyAI
@@ -156,7 +156,7 @@ def run_pipeline_step(job_id, step_number):
             audio_path = os.path.join(job_folder, 'audio', 'audio_16k_mono.wav')
             
             output_files = transcribe_audio(job_id, audio_path, assemblyai_api_key)
-            message = f"Transcription completed with speaker detection"
+            message = "Speech Detection Successful"
         
         elif step_number == 4:
             # Step 4: Merge AssemblyAI transcript with YouTube captions
@@ -166,7 +166,7 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            message = "Success"
         
         elif step_number == 5:
             # Step 5: Translate to English using Google Cloud Translate
@@ -193,7 +193,7 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            message = "Success"
         
         elif step_number == 6:
             # Step 6: Detect Speakers (Anchor & Pradip) using OpenAI
@@ -203,7 +203,9 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            # Extract speaker mapping from result if available
+            speaker_info = result.get('message', 'Successfully detected speakers: Anchor: Speaker A, Pradip: Speaker B')
+            message = speaker_info
         
         elif step_number == 7:
             # Step 7: Filter Transcription (Keep only Anchor & Pradip)
@@ -213,7 +215,7 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            message = "Success"
         
         elif step_number == 8:
             # Step 8: Extract Stock Mentions (Pradip's analysis)
@@ -223,7 +225,9 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            # Extract count from result message if available
+            stock_count = int(result.get('stock_count', 0))
+            message = f"Extracted {stock_count} stocks" if stock_count > 0 else "Extracted stocks"
         
         elif step_number == 9:
             # Step 9: Map Master File (Match stocks to master reference)
@@ -233,7 +237,7 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            message = "Success"
         
         elif step_number == 10:
             # Step 10: Convert Timestamps (Video time to actual clock time)
@@ -243,7 +247,7 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            message = "Success"
         
         elif step_number == 11:
             # Step 11: Fetch CMP (Current Market Price from Dhan API)
@@ -253,7 +257,10 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            # Extract counts from result message
+            fetched_count = int(result.get('fetched_count', 0))
+            total_count = int(result.get('total_count', 0))
+            message = f"Fetched CMP for {fetched_count} of {total_count} stocks" if total_count > 0 else "Fetched CMP"
         
         elif step_number == 12:
             # Step 12: Extract Analysis (GPT-4o extracts Pradip's analysis)
@@ -263,7 +270,10 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            # Extract counts from result
+            analyzed_count = int(result.get('analyzed_count', 0))
+            total_count = int(result.get('total_count', 0))
+            message = f"Extracted analysis for {analyzed_count} of {total_count} stocks" if total_count > 0 else "Extracted analysis"
         
         elif step_number == 13:
             # Step 13: Generate Charts (Dhan API candlestick charts with indicators)
@@ -273,7 +283,10 @@ def run_pipeline_step(job_id, step_number):
                 raise Exception(result['message'])
             
             output_files = result['output_files']
-            message = result['message']
+            # Extract chart counts from result
+            chart_count = int(result.get('chart_count', 0))
+            total_count = int(result.get('total_count', 0))
+            message = f"Charts generated for {chart_count} of {total_count} stocks" if total_count > 0 else "Charts generated"
         
         elif step_number == 14:
             # Step 14: Generate PDF (Professional SEBI-compliant report)
@@ -281,7 +294,7 @@ def run_pipeline_step(job_id, step_number):
             
             # Store full relative path for frontend to access
             output_files = [pdf_path]
-            message = f"PDF generated: {os.path.basename(pdf_path)} (Path: {pdf_path})"
+            message = "Success"
         
         # Step 15 is NOT part of automatic pipeline
         # It's triggered by user button clicks via API endpoints:
@@ -310,7 +323,8 @@ def run_pipeline_step(job_id, step_number):
     except Exception as e:
         error_msg = str(e)
         print(f"Pipeline step {step_number} error: {error_msg}")
-        update_step_status(job_id, step_number, 'failed', error_msg)
+        # Show simple "Failed" message to user, log detailed error internally
+        update_step_status(job_id, step_number, 'failed', "Failed")
         return False
 
 async def run_pipeline(job_id, start_step=1, end_step=15):
