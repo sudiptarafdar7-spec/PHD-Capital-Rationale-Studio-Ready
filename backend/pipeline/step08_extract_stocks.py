@@ -3,13 +3,14 @@ import re
 import psycopg2
 from openai import OpenAI
 
-
-# Custom symbol corrections for commonly confused stocks
+# Custom symbol corrections for commonly confused stocks (keys must be UPPERCASE)
 SYMBOL_CORRECTIONS = {
     "VEDANTA": "VEDL",
     "ZOMATO": "ETERNAL",
     "VODAFONE": "IDEA",
     "VI": "IDEA",
+    "SHRIRAM": "SHRIRAMFIN",
+    "SHRIRAMFINANCE": "SHRIRAMFIN",
 }
 
 
@@ -17,9 +18,11 @@ def parse_transcript_turns(transcript_content):
     """Parse transcript into structured turns with speaker, time, and text."""
     turns = []
     lines = transcript_content.strip().splitlines()
-    
+
     for line in lines:
-        match = re.match(r'\[(.+?)\]\s*(\d{2}:\d{2}:\d{2})\s*-\s*(\d{2}:\d{2}:\d{2})\s*\|\s*(.+)', line)
+        match = re.match(
+            r'\[(.+?)\]\s*(\d{2}:\d{2}:\d{2})\s*-\s*(\d{2}:\d{2}:\d{2})\s*\|\s*(.+)',
+            line)
         if match:
             speaker, start_time, end_time, text = match.groups()
             turns.append({
@@ -28,7 +31,7 @@ def parse_transcript_turns(transcript_content):
                 "end_time": end_time.strip(),
                 "text": text.strip()
             })
-    
+
     return turns
 
 
@@ -36,28 +39,31 @@ def pair_anchor_pradip_turns(turns, anchor_speaker, pradip_speaker):
     """Pair anchor questions with Pradip's responses."""
     pairs = []
     i = 0
-    
+
     while i < len(turns):
         if turns[i]["speaker"] == anchor_speaker:
             anchor_turn = turns[i]
             pradip_turns = []
-            
+
             j = i + 1
             while j < len(turns) and turns[j]["speaker"] == pradip_speaker:
                 pradip_turns.append(turns[j])
                 j += 1
-            
+
             if pradip_turns:
                 pairs.append({
-                    "anchor_text": anchor_turn["text"],
-                    "pradip_text": " ".join([t["text"] for t in pradip_turns]),
-                    "start_time": pradip_turns[0]["start_time"]
+                    "anchor_text":
+                    anchor_turn["text"],
+                    "pradip_text":
+                    " ".join([t["text"] for t in pradip_turns]),
+                    "start_time":
+                    pradip_turns[0]["start_time"]
                 })
-            
+
             i = j
         else:
             i += 1
-    
+
     return pairs
 
 
@@ -68,20 +74,20 @@ def has_analytical_cues(text):
         r'\b(target|price|level|support|resistance)\b',
         r'\b(stop.?loss|trailing|breakout|momentum)\b',
         r'\b(trading|rally|correction|positive|negative)\b',
-        r'\b\d+\s*(rupees?|rs\.?|₹)\b',
-        r'\b(view|recommend|advise|suggest)\b'
+        r'\b\d+\s*(rupees?|rs\.?|₹)\b', r'\b(view|recommend|advise|suggest)\b'
     ]
-    
+
     text_lower = text.lower()
-    return any(re.search(pattern, text_lower) for pattern in analytical_patterns)
+    return any(
+        re.search(pattern, text_lower) for pattern in analytical_patterns)
 
 
 def extract_stocks_from_pair(anchor_text, pradip_text, start_time, client):
     """Extract stocks from a single anchor-pradip conversation pair using GPT-4o."""
-    
+
     if not has_analytical_cues(pradip_text):
         return []
-    
+
     prompt = f"""Extract stock names from this financial TV conversation snippet.
 
 ANCHOR says: "{anchor_text}"
@@ -90,18 +96,23 @@ ANALYST responds: "{pradip_text}"
 Rules:
 1. ONLY extract if the ANALYST discusses/analyzes the stock (gives opinion, price levels, recommendation)
 2. Include stocks that ANCHOR mentions if ANALYST analyzes them (even without repeating name)
-3. Provide accurate NSE symbol (format: STOCKNAME.NS)
-4. Output format: STOCK NAME|SYMBOL (one per line, no extra text)
+3. Output format: STOCK NAME|SYMBOL (one per line, no extra text)
+4. Ignore non-stock mentions (e.g., "market", "indices")
 
-Common symbol corrections:
-- Vedanta → VEDL.NS
-- Zomato → ETERNAL.NS
-- Vodafone/VI → IDEA.NS
+MANDATORY SYMBOL MAPPINGS (use these EXACT symbols):
+- Vedanta → VEDL
+- Zomato → ETERNAL
+- Vodafone → IDEA
+- VI (Vodafone Idea) → IDEA
+- Shriram Finance → SHRIRAMFIN
 
 Examples:
-- "HDFC Bank|HDFCBANK.NS"
-- "Ashok Leyland|ASHOKLEY.NS"
-- "Bank of Baroda|BANKBARODA.NS"
+- "HDFC Bank|HDFCBANK"
+- "Ashok Leyland|ASHOKLEY"
+- "Bank of Baroda|BANKBARODA"
+- "Vedanta|VEDL"
+- "Vodafone|IDEA"
+- "Shriram Finance|SHRIRAMFIN"
 
 Extract now (stock names and NSE symbols only, one per line):"""
 
@@ -109,20 +120,21 @@ Extract now (stock names and NSE symbols only, one per line):"""
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{
-                "role": "system",
-                "content": "Extract stock names and NSE symbols. Output format: STOCK NAME|SYMBOL.NS (one per line, nothing else)."
+                "role":
+                "system",
+                "content":
+                "You are a stock symbol extractor. Use MANDATORY symbol mappings: Vedanta=VEDL, Zomato=ETERNAL, Vodafone=IDEA, VI=IDEA, Shriram Finance=SHRIRAMFIN. Output format: STOCK NAME|SYMBOL (no .NS/.BO suffix, one per line, nothing else)."
             }, {
                 "role": "user",
                 "content": prompt
             }],
             temperature=0,
             max_tokens=200,
-            timeout=15
-        )
+            timeout=15)
 
         content = (response.choices[0].message.content or "").strip()
         stocks = []
-        
+
         for line in content.splitlines():
             line = line.strip()
             if '|' in line and line.count('|') == 1:
@@ -130,18 +142,18 @@ Extract now (stock names and NSE symbols only, one per line):"""
                 if len(parts) == 2:
                     stock_name = parts[0].strip()
                     symbol = parts[1].strip().upper()
-                    
+
                     # Strip .NS and .BO suffixes
                     if symbol.endswith('.NS'):
                         symbol = symbol[:-3]
                     elif symbol.endswith('.BO'):
                         symbol = symbol[:-3]
-                    
+
                     # Apply custom symbol corrections
                     symbol_upper = symbol.upper()
                     if symbol_upper in SYMBOL_CORRECTIONS:
                         symbol = SYMBOL_CORRECTIONS[symbol_upper]
-                    
+
                     # Only add if we have a valid symbol
                     if symbol:
                         stocks.append({
@@ -149,9 +161,9 @@ Extract now (stock names and NSE symbols only, one per line):"""
                             "stock_symbol": symbol,
                             "start_time": start_time
                         })
-        
+
         return stocks
-        
+
     except Exception as e:
         print(f"   ⚠️ GPT extraction failed for pair: {e}")
         return []
@@ -161,20 +173,22 @@ def validate_and_format_csv(stocks):
     """Validate extracted stocks and format as CSV - deduplicate by symbol."""
     if not stocks:
         return "STOCK NAME,STOCK SYMBOL,START TIME\n"
-    
+
     seen_symbols = set()
     unique_stocks = []
-    
+
     for stock in stocks:
         symbol = stock["stock_symbol"]
         if symbol not in seen_symbols:
             seen_symbols.add(symbol)
             unique_stocks.append(stock)
-    
+
     csv_rows = ["STOCK NAME,STOCK SYMBOL,START TIME"]
     for stock in sorted(unique_stocks, key=lambda x: x["start_time"]):
-        csv_rows.append(f"{stock['stock_name']},{stock['stock_symbol']},{stock['start_time']}")
-    
+        csv_rows.append(
+            f"{stock['stock_name']},{stock['stock_symbol']},{stock['start_time']}"
+        )
+
     return "\n".join(csv_rows)
 
 
@@ -188,14 +202,23 @@ def run(job_folder):
     print(f"{'='*60}\n")
 
     try:
-        detected_speakers_file = os.path.join(job_folder, "analysis", "detected_speakers.txt")
-        filtered_transcript_file = os.path.join(job_folder, "transcripts", "filtered_transcription.txt")
-        output_csv = os.path.join(job_folder, "analysis", "extracted_stocks.csv")
+        detected_speakers_file = os.path.join(job_folder, "analysis",
+                                              "detected_speakers.txt")
+        filtered_transcript_file = os.path.join(job_folder, "transcripts",
+                                                "filtered_transcription.txt")
+        output_csv = os.path.join(job_folder, "analysis",
+                                  "extracted_stocks.csv")
 
         if not os.path.exists(detected_speakers_file):
-            return {'status': 'failed', 'message': f'Detected speakers file not found'}
+            return {
+                'status': 'failed',
+                'message': f'Detected speakers file not found'
+            }
         if not os.path.exists(filtered_transcript_file):
-            return {'status': 'failed', 'message': f'Filtered transcript file not found'}
+            return {
+                'status': 'failed',
+                'message': f'Filtered transcript file not found'
+            }
 
         print("📖 Reading detected speakers...")
         with open(detected_speakers_file, 'r', encoding='utf-8') as f:
@@ -223,30 +246,30 @@ def run(job_folder):
         print("🔑 Fetching OpenAI API key...")
         conn = psycopg2.connect(os.environ['DATABASE_URL'])
         cursor = conn.cursor()
-        cursor.execute("SELECT key_value FROM api_keys WHERE LOWER(provider) = 'openai' LIMIT 1")
+        cursor.execute(
+            "SELECT key_value FROM api_keys WHERE LOWER(provider) = 'openai' LIMIT 1"
+        )
         result = cursor.fetchone()
         cursor.close()
         conn.close()
 
         if not result:
             return {'status': 'failed', 'message': 'OpenAI API key not found'}
-        
+
         client = OpenAI(api_key=result[0])
 
         print("🎯 Extracting stocks from each pair (GPT-4o + validation)...\n")
         all_stocks = []
-        
+
         for i, pair in enumerate(pairs, 1):
-            stocks = extract_stocks_from_pair(
-                pair["anchor_text"],
-                pair["pradip_text"],
-                pair["start_time"],
-                client
-            )
+            stocks = extract_stocks_from_pair(pair["anchor_text"],
+                                              pair["pradip_text"],
+                                              pair["start_time"], client)
             all_stocks.extend(stocks)
-            
+
             if stocks:
-                print(f"   Pair {i}/{len(pairs)}: Found {len(stocks)} stock(s)")
+                print(
+                    f"   Pair {i}/{len(pairs)}: Found {len(stocks)} stock(s)")
 
         print(f"\n✅ Total extracted: {len(all_stocks)} stock mentions\n")
 
@@ -281,7 +304,8 @@ def run(job_folder):
 
 if __name__ == "__main__":
     import sys
-    test_folder = sys.argv[1] if len(sys.argv) > 1 else "backend/job_files/test_job"
+    test_folder = sys.argv[1] if len(
+        sys.argv) > 1 else "backend/job_files/test_job"
     result = run(test_folder)
     print(f"\n{'='*60}")
     print(f"Result: {result['status'].upper()}")
