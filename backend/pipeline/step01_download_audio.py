@@ -55,7 +55,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         
         # CRITICAL: Enable EJS (External JavaScript) for November 2025 YouTube support
         "remote_components": ["ejs:github"],  # Download JS challenge solvers
-        "js_runtimes": ["deno"],  # Use Deno runtime (installed system-wide)
+        "js_runtimes": {"deno": {}},  # Use Deno runtime (dict format required)
         
         "extractor_args": {
             "youtube": {
@@ -72,7 +72,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         
         # CRITICAL: Enable EJS for both attempts
         "remote_components": ["ejs:github"],
-        "js_runtimes": ["deno"],
+        "js_runtimes": {"deno": {}},  # Dict format: {runtime: {config}}
         
         "extractor_args": {
             "youtube": {
@@ -148,7 +148,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         
         # CRITICAL: Must use same EJS settings as format detection
         "remote_components": ["ejs:github"],
-        "js_runtimes": ["deno"],
+        "js_runtimes": {"deno": {}},  # Dict format: {runtime: {config}}
     }
 
     if using_cookies:
