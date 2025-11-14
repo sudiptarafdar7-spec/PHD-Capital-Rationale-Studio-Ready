@@ -98,10 +98,14 @@ def download_captions(job_id, youtube_url, cookies_file=None):
     os.makedirs(captions_folder, exist_ok=True)
     captions_json_path = os.path.join(captions_folder, 'captions.json')
 
-    # Extract video ID from URL
-    video_id_match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{11})", youtube_url)
+    # Extract video ID from URL - supports ALL YouTube URL formats
+    # Patterns: watch?v=, live/, shorts/, youtu.be/, embed/, v/
+    video_id_match = re.search(
+        r'(?:youtube\.com\/(?:watch\?v=|live\/|shorts\/|embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})',
+        youtube_url
+    )
     if not video_id_match:
-        return {'success': False, 'error': 'Invalid YouTube URL'}
+        return {'success': False, 'error': f'Invalid YouTube URL format: {youtube_url}'}
 
     video_id = video_id_match.group(1)
 
