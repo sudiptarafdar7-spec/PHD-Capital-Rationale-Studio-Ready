@@ -44,6 +44,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   // Use refs to avoid stale closures in polling interval
   const currentJobIdRef = useRef<string | null>(null);
   const tokenRef = useRef<string | null>(null);
+  const workflowStageRef = useRef<WorkflowStage>('input');
   
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
@@ -63,6 +64,11 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
+  
+  useEffect(() => {
+    workflowStageRef.current = workflowStage;
+    console.log('[DEBUG POLLING] workflowStageRef updated to:', workflowStage);
+  }, [workflowStage]);
   const [saveType, setSaveType] = useState<SaveType>(null);
   const [uploadedSignedFile, setUploadedSignedFile] = useState<{
     fileName: string;
@@ -234,10 +240,11 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
         }
         
         // Check if Step 12 completed and awaiting CSV review
-        console.log('[DEBUG CSV] Job status:', data.job.status, 'Current workflow stage:', workflowStage);
+        const currentWorkflowStage = workflowStageRef.current;
+        console.log('[DEBUG CSV] Job status:', data.job.status, 'Current workflow stage (ref):', currentWorkflowStage);
         if (data.job.status === 'awaiting_csv_review') {
           console.log('[DEBUG CSV] Status is awaiting_csv_review, checking workflow stage...');
-          if (workflowStage !== 'csv-review') {
+          if (currentWorkflowStage !== 'csv-review') {
             console.log('[DEBUG CSV] Transitioning to csv-review stage...');
             stopPolling();
             setWorkflowStage('csv-review');
@@ -299,7 +306,8 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
                                'pdf-preview';
             
             // Only show notification if this is a NEW PDF (path changed) or transitioning to a new stage
-            if (pdfFile !== lastNotifiedPdfPathRef.current || workflowStage !== targetStage) {
+            const currentStage = workflowStageRef.current;
+            if (pdfFile !== lastNotifiedPdfPathRef.current || currentStage !== targetStage) {
               console.log(`[DEBUG] Transitioning to ${targetStage} - PDF detected!`);
               lastNotifiedPdfPathRef.current = pdfFile;
               stopPolling();
