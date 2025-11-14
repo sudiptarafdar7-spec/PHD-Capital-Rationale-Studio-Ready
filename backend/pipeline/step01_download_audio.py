@@ -44,7 +44,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     audio_folder = os.path.join("backend", "job_files", job_id, "audio")
     os.makedirs(audio_folder, exist_ok=True)
 
-    raw_audio_path = os.path.join(audio_folder, "raw_audio.m4a")
+    raw_audio_path = os.path.join(audio_folder, "raw_audio")
     prepared_audio_path = os.path.join(audio_folder, "audio_16k_mono.wav")
 
     # Use youtube_cookies.txt from uploaded_files folder
@@ -55,7 +55,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     # OPTIMIZED YT-DLP OPTIONS (FAST)
     # -----------------------------
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "format": "bestaudio/best",  # Universal fallback - works with all videos
         "outtmpl": raw_audio_path,
         "quiet": False,
 
