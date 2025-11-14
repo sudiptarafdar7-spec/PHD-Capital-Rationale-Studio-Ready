@@ -28,11 +28,32 @@ export default function AIStyleJobRunner({
   onRestart
 }: AIStyleJobRunnerProps) {
   const totalSteps = getTotalSteps();
-  const currentStepConfig = getStepConfig(currentStepNumber);
-  const currentJobStep = jobSteps.find(step => step.step_number === currentStepNumber);
+  
+  // Calculate the actual display step number from jobSteps array
+  // Prefer: running → failed → next pending → default to 1
+  const calculateDisplayStep = (): number => {
+    // Find first running step
+    const runningStep = jobSteps.find(step => step.status === 'running');
+    if (runningStep) return runningStep.step_number;
+    
+    // Find first failed step
+    const failedStep = jobSteps.find(step => step.status === 'failed');
+    if (failedStep) return failedStep.step_number;
+    
+    // Find next pending step
+    const pendingStep = jobSteps.find(step => step.status === 'pending');
+    if (pendingStep) return pendingStep.step_number;
+    
+    // Default to currentStepNumber if >= 1, otherwise step 1
+    return Math.max(1, currentStepNumber);
+  };
+  
+  const displayStepNumber = calculateDisplayStep();
+  const currentStepConfig = getStepConfig(displayStepNumber);
+  const currentJobStep = jobSteps.find(step => step.step_number === displayStepNumber);
   
   const isFailed = jobStatus === 'failed' || currentJobStep?.status === 'failed';
-  const isCompleted = currentStepNumber >= totalSteps && jobStatus !== 'failed';
+  const isCompleted = displayStepNumber >= totalSteps && jobStatus !== 'failed';
 
   // Extract metric from step message if available (lightweight parsing, no backend changes)
   const getMetricValue = (): number | null => {
@@ -126,7 +147,7 @@ export default function AIStyleJobRunner({
           <div className="inline-flex items-center gap-2 bg-white/80 dark:bg-gray-800/80 px-4 py-2 rounded-full shadow-sm backdrop-blur-sm">
             <Sparkles className="w-4 h-4 text-purple-500" />
             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Step {currentStepNumber}/{totalSteps}
+              Step {displayStepNumber}/{totalSteps}
             </span>
           </div>
 
