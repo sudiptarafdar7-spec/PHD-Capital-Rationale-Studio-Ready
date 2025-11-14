@@ -53,6 +53,8 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         "dump_single_json": True,
         
         # CRITICAL: Add player client to bypass YouTube n-challenge
+        # NOTE: DO NOT add cookies here - Android/iOS clients don't support cookies
+        # and will be skipped if cookies are present, leaving only web client which fails
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "ios", "web"],
@@ -61,8 +63,8 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         },
     }
 
-    if using_cookies:
-        list_opts["cookiefile"] = cookies_file_path
+    # DON'T use cookies for format detection - Android/iOS clients don't support them
+    # Cookies will only be used during actual download (Step 2)
 
     try:
         with YoutubeDL(list_opts) as ydl:
