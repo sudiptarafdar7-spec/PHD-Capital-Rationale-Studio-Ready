@@ -241,7 +241,12 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
             console.log('[DEBUG CSV] Transitioning to csv-review stage...');
             stopPolling();
             setWorkflowStage('csv-review');
-            await fetchCsvData(targetJobId);
+            
+            // Fetch CSV data asynchronously without blocking state updates
+            fetchCsvData(targetJobId).catch((error) => {
+              console.error('[DEBUG CSV] Failed to fetch CSV data, but state updates will continue:', error);
+            });
+            
             playCompletionBell();
             toast.success('Step 12 Complete - Review CSV', {
               description: 'Please review the stocks analysis before continuing to charts',

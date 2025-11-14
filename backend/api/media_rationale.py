@@ -813,11 +813,21 @@ def get_csv_preview(job_id):
         
         # Read CSV and return as JSON
         import pandas as pd
+        import numpy as np
         df = pd.read_csv(csv_path)
+        
+        # Convert DataFrame to records, replacing NaN/Infinity with None (null in JSON)
+        # Use pd.isna to handle numpy scalars (float64, etc) that pandas returns
+        data = df.to_dict('records')
+        for row in data:
+            for key, value in row.items():
+                # Check for NaN or Infinity using pandas/numpy methods
+                if pd.isna(value) or (isinstance(value, (int, float, np.number)) and not np.isfinite(value)):
+                    row[key] = None
         
         return jsonify({
             'success': True,
-            'data': df.to_dict('records'),
+            'data': data,
             'columns': df.columns.tolist()
         }), 200
         
