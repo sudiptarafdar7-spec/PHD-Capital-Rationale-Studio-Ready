@@ -68,6 +68,7 @@ export default function UploadFilesPage() {
       // Organize files by type
       const masterFile = data.find((f: any) => f.file_type === 'masterFile');
       const companyLogo = data.find((f: any) => f.file_type === 'companyLogo');
+      const youtubeCookies = data.find((f: any) => f.file_type === 'youtubeCookies');
       const customFonts = data.filter((f: any) => f.file_type === 'customFont');
 
       setFiles({
@@ -83,6 +84,13 @@ export default function UploadFilesPage() {
           name: companyLogo.file_name,
           size: companyLogo.file_size,
           uploadedAt: companyLogo.uploaded_at.split('T')[0],
+          status: 'success',
+        } : null,
+        youtubeCookies: youtubeCookies ? {
+          id: youtubeCookies.id,
+          name: youtubeCookies.file_name,
+          size: youtubeCookies.file_size,
+          uploadedAt: youtubeCookies.uploaded_at.split('T')[0],
           status: 'success',
         } : null,
       });
