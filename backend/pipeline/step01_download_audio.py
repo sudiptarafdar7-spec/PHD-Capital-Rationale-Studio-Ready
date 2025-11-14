@@ -43,7 +43,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     using_cookies = os.path.exists(cookies_file_path)
 
     # -----------------------------
-    # STEP 0 - GET FORMAT LIST
+    # STEP 0 - GET FORMAT LIST (WITH PLAYER CLIENT BYPASS)
     # -----------------------------
     print("📌 Fetching available formats...")
 
@@ -51,6 +51,14 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         "quiet": True,
         "skip_download": True,
         "dump_single_json": True,
+        
+        # CRITICAL: Add player client to bypass YouTube n-challenge
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "web"],
+                "skip": ["dash", "hls"],  # Get all formats
+            }
+        },
     }
 
     if using_cookies:
