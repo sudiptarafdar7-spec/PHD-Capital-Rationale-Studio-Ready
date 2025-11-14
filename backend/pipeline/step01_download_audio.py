@@ -29,6 +29,11 @@ def download_audio(job_id, youtube_url, cookies_file=None):
             'error': str or None
         }
     """
+    # CRITICAL: Add Deno to PATH for yt-dlp EJS system
+    deno_path = os.path.expanduser("~/.deno/bin")
+    if deno_path not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"{deno_path}:{os.environ.get('PATH', '')}"
+        print(f"✓ Added Deno to PATH: {deno_path}")
 
     # -----------------------------
     # PATHS
