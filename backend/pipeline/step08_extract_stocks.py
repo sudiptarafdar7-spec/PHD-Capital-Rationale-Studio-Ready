@@ -4,6 +4,15 @@ import psycopg2
 from openai import OpenAI
 
 
+# Custom symbol corrections for commonly confused stocks
+SYMBOL_CORRECTIONS = {
+    "VEDANTA": "VEDL",
+    "ZOMATO": "ETERNAL",
+    "VODAFONE": "IDEA",
+    "VI": "IDEA",
+}
+
+
 def parse_transcript_turns(transcript_content):
     """Parse transcript into structured turns with speaker, time, and text."""
     turns = []
@@ -84,6 +93,11 @@ Rules:
 3. Provide accurate NSE symbol (format: STOCKNAME.NS)
 4. Output format: STOCK NAME|SYMBOL (one per line, no extra text)
 
+Common symbol corrections:
+- Vedanta → VEDL.NS
+- Zomato → ETERNAL.NS
+- Vodafone/VI → IDEA.NS
+
 Examples:
 - "HDFC Bank|HDFCBANK.NS"
 - "Ashok Leyland|ASHOKLEY.NS"
@@ -117,7 +131,19 @@ Extract now (stock names and NSE symbols only, one per line):"""
                     stock_name = parts[0].strip()
                     symbol = parts[1].strip().upper()
                     
-                    if symbol.endswith('.NS') or symbol.endswith('.BO'):
+                    # Strip .NS and .BO suffixes
+                    if symbol.endswith('.NS'):
+                        symbol = symbol[:-3]
+                    elif symbol.endswith('.BO'):
+                        symbol = symbol[:-3]
+                    
+                    # Apply custom symbol corrections
+                    symbol_upper = symbol.upper()
+                    if symbol_upper in SYMBOL_CORRECTIONS:
+                        symbol = SYMBOL_CORRECTIONS[symbol_upper]
+                    
+                    # Only add if we have a valid symbol
+                    if symbol:
                         stocks.append({
                             "stock_name": stock_name,
                             "stock_symbol": symbol,
