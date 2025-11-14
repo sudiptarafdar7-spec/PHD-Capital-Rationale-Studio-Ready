@@ -544,6 +544,24 @@ def make_premium_chart(df: pd.DataFrame,
     plt.close(fig)
 
 
+def update_step_message(job_folder, message):
+    """Update the step 13 message in the database"""
+    try:
+        job_id = os.path.basename(job_folder)
+        conn = psycopg2.connect(os.environ['DATABASE_URL'])
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE job_steps
+            SET message = %s
+            WHERE job_id = %s AND step_number = 13
+        """, (message, job_id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print(f"Warning: Could not update step message: {e}")
+
+
 def run(job_folder):
     """
     Generate candlestick charts for each stock using Dhan API
@@ -588,6 +606,7 @@ def run(job_folder):
 
         # Load stocks
         print("📊 Loading stocks with analysis...")
+        update_step_message(job_folder, "Loading stocks...")
         df = pd.read_csv(stocks_csv)
 
         # Normalize column names
@@ -642,9 +661,9 @@ def run(job_folder):
                 else:
                     exchange_segment = f"{exchange}_EQ" if exchange in ["NSE", "BSE"] else "NSE_EQ"
 
-                print(
-                    f"[{idx+1}/{len(df)}] Processing {short_name} ({chart_type}, {exchange_segment})..."
-                )
+                progress_msg = f"Processing {idx+1}/{len(df)}: {short_name}..."
+                print(f"[{idx+1}/{len(df)}] {short_name} ({chart_type}, {exchange_segment})...")
+                update_step_message(job_folder, progress_msg)
 
                 # Parse date and time
                 date_obj = parse_date(str(row["DATE"]).strip())
@@ -722,11 +741,14 @@ def run(job_folder):
                 time.sleep(1.5)
 
             except Exception as e:
-                print(f"  ❌ Error: {str(e)}")
+                error_msg = str(e)
+                print(f"  ❌ Error for {short_name}: {error_msg}")
+                # Add failed row with empty chart path
                 out_row = {c: row.get(c, "") for c in required}
                 out_row["CHART PATH"] = ""
                 out_rows.append(out_row)
                 failed_count += 1
+                # Continue with next stock - don't let one failure stop the whole process
 
         # Save output CSV
         print(f"\n💾 Saving output CSV...")
