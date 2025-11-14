@@ -5,11 +5,11 @@ from openai import OpenAI
 
 def run(job_folder):
     """
-    Step 8: Extract Stock Mentions (using GPT-5 for accuracy)
+    Step 8: Extract Stock Mentions (using OpenAI GPT-4 for accuracy)
     """
 
     print("\n" + "=" * 60)
-    print("STEP 8: Extract Stock Mentions (GPT-5)")
+    print("STEP 8: Extract Stock Mentions (OpenAI GPT-4)")
     print(f"{'='*60}\n")
 
     try:
@@ -78,8 +78,8 @@ def run(job_folder):
 
         client = OpenAI(api_key=openai_api_key)
 
-        # Step 4: Build GPT-5 prompt
-        print("🤖 Preparing GPT-5 prompt...")
+        # Step 4: Build OpenAI GPT-4 prompt
+        print("🤖 Preparing OpenAI GPT-4 prompt...")
 
         prompt = f"""
 You are a financial transcript analyzer using updated (2025) NSE and BSE stock listings.
@@ -106,11 +106,11 @@ Transcript:
 {transcript_content}
 """
 
-        # Step 5: Call GPT-5
-        print("🚀 Calling GPT-5 for stock extraction...\n")
+        # Step 5: Call OpenAI GPT-4
+        print("🚀 Calling OpenAI GPT-4 for stock extraction...\n")
 
         response = client.chat.completions.create(
-            model="gpt-5",  # ✅ Updated model
+            model="gpt-4o",  # Latest OpenAI model
             messages=[{
                 "role":
                 "system",
@@ -142,7 +142,7 @@ Transcript:
 
         return {
             "status": "success",
-            "message": f"Extracted {stock_count} stocks using GPT-5",
+            "message": f"Extracted {stock_count} stocks using OpenAI GPT-4",
             "output_files": ["analysis/extracted_stocks.csv"]
         }
 
