@@ -99,13 +99,15 @@ Rules:
 2. Include stocks that ANCHOR mentions if ANALYST analyzes them (even without repeating name)
 3. Output format: STOCK NAME|SYMBOL (one per line, no extra text)
 4. Ignore non-stock mentions (e.g., "market", "indices")
-
+5. Do not give any wrong STOCK NAME|SYMBOL pairs.
 MANDATORY SYMBOL MAPPINGS (use these EXACT symbols):
 - Vedanta → VEDL
 - Zomato → ETERNAL
 - Vodafone → IDEA
 - VI (Vodafone Idea) → IDEA
 - Shriram Finance → SHRIRAMFIN
+- SHREE FINANCE → SHRIRAMFIN
+- BL DEFENSE → BEL
 
 Examples:
 - "HDFC Bank|HDFCBANK"
