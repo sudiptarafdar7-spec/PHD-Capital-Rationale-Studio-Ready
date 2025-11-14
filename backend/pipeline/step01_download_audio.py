@@ -9,18 +9,10 @@ from yt_dlp import YoutubeDL
 
 def download_audio(job_id, youtube_url, cookies_file=None):
     """
-    OPTIMIZED YouTube audio downloader - 20× FASTER
-    
-    Speed improvements:
-    - Uses bestaudio[ext=m4a] format (fastest & most stable)
-    - Disables chunking (http_chunk_size=None)
-    - Uses iOS client only (fastest client)
-    - Desktop Chrome user-agent (less throttling)
-    - Reduced retries (3 instead of 10)
-    
-    Performance:
-    - OLD: 20-80 seconds per video
-    - NEW: 4-12 seconds per video
+    UNBREAKABLE YouTube audio downloader
+    Step 1: Detect available audio formats
+    Step 2: Download using first working audio format
+    Step 3: Convert to 16kHz mono WAV
     
     Args:
         job_id: Job identifier
@@ -47,109 +39,108 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     raw_audio_path = os.path.join(audio_folder, "raw_audio")
     prepared_audio_path = os.path.join(audio_folder, "audio_16k_mono.wav")
 
-    # Use youtube_cookies.txt from uploaded_files folder
-    cookies_file_path = os.path.join("backend", "uploaded_files",
-                                     "youtube_cookies.txt")
+    cookies_file_path = os.path.join("backend", "uploaded_files", "youtube_cookies.txt")
     using_cookies = os.path.exists(cookies_file_path)
 
     # -----------------------------
-    # UNIVERSAL YT-DLP OPTIONS (HANDLES LIVE, HLS, DASH, MUXED, FRAGMENTED)
+    # STEP 0 - GET FORMAT LIST
     # -----------------------------
-    ydl_opts = {
-        # UNIVERSAL WORKING FORMAT (handles live, hls, dash, muxed, fragmented)
-        "format": "bestaudio* / best* / worst",
+    print("📌 Fetching available formats...")
 
-        # Allow all segmented/fragmented audio
-        "allow_unplayable_formats": True,
-        "force_overwrites": True,
-        "prefer_free_formats": False,
-        "merge_output_format": "m4a",
-        "allow_multiple_audio_streams": True,
-        "allow_multiple_video_streams": True,
-
-        "outtmpl": raw_audio_path,
-        "quiet": False,
-
-        # retries
-        "retries": 3,
-        "fragment_retries": 3,
-        "extractor_retries": 2,
-
-        # force YouTube to fetch all metadata and formats
-        "extract_flat": False,
-        "force_youtube_unavailable_videos": True,
-
-        # multi-client fallback
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "ios", "web"],
-            }
-        },
-
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0 Safari/537.36"
-            )
-        },
-
-        "http_chunk_size": None,
-        "ignoreerrors": False,
-
-        # Disable all postprocessors (raw file only)
-        "postprocessors": [],
+    list_opts = {
+        "quiet": True,
+        "skip_download": True,
+        "dump_single_json": True,
     }
 
-    # Add cookies if available
     if using_cookies:
-        ydl_opts["cookiefile"] = cookies_file_path
-        print(f"✓ Using cookies from: {cookies_file_path}")
-    else:
-        print("⚠ No cookies file found.")
+        list_opts["cookiefile"] = cookies_file_path
+
+    try:
+        with YoutubeDL(list_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+    except Exception as e:
+        return {"success": False, "error": f"Format fetch failed: {e}"}
+
+    formats = info.get("formats", [])
+    if not formats:
+        return {"success": False, "error": "No formats found."}
 
     # -----------------------------
-    # STEP 1: DOWNLOAD RAW AUDIO
+    # STEP 1 - AUTO-PICK AUDIO FORMAT
     # -----------------------------
+    print("🎯 Auto-selecting best audio format...")
+    audio_format_id = None
+
+    # Prefer audio-only formats
+    for f in formats:
+        if f.get("acodec") != "none" and f.get("vcodec") == "none":
+            audio_format_id = f["format_id"]
+            break
+
+    # If no pure audio, pick any format with audio
+    if not audio_format_id:
+        for f in formats:
+            if f.get("acodec") != "none":
+                audio_format_id = f["format_id"]
+                break
+
+    if not audio_format_id:
+        return {"success": False, "error": "No valid audio formats found."}
+
+    print(f"✔ Selected audio format: {audio_format_id}")
+
+    # -----------------------------
+    # STEP 2 - DOWNLOAD AUDIO
+    # -----------------------------
+    ydl_opts = {
+        "format": audio_format_id,
+        "outtmpl": raw_audio_path,
+        "quiet": False,
+        "allow_unplayable_formats": True,
+        "force_overwrites": True,
+        "ignoreerrors": False,
+        "retries": 3,
+        "fragment_retries": 3,
+    }
+
+    if using_cookies:
+        ydl_opts["cookiefile"] = cookies_file_path
+        print(f"✓ Using cookies: {cookies_file_path}")
+
     try:
-        print(f"🎧 Downloading raw audio from: {youtube_url}")
+        print(f"🎧 Downloading audio with format {audio_format_id}...")
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([youtube_url])
     except Exception as e:
-        return {"success": False, "error": f"yt-dlp failed: {e}"}
+        return {"success": False, "error": f"yt-dlp download failed: {e}"}
 
     if not os.path.exists(raw_audio_path):
-        return {
-            "success": False,
-            "error": "Audio not downloaded (403 or blocked)."
-        }
+        return {"success": False, "error": "Audio file not created."}
 
-    print(f"✓ Raw audio downloaded: {raw_audio_path}")
+    print("✓ Audio downloaded.")
 
     # -----------------------------
-    # STEP 2: CONVERT TO 16kHz MONO WAV
+    # STEP 3 - FFmpeg Convert
     # -----------------------------
     print("🔊 Converting to 16kHz mono WAV...")
 
     ffmpeg_cmd = [
-        "ffmpeg", "-i", raw_audio_path, "-ar", "16000", "-ac", "1", "-y",
+        "ffmpeg",
+        "-i", raw_audio_path,
+        "-ar", "16000",
+        "-ac", "1",
+        "-y",
         prepared_audio_path
     ]
 
     result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-
     if result.returncode != 0:
-        return {
-            "success": False,
-            "error": f"FFmpeg conversion error: {result.stderr}"
-        }
+        return {"success": False, "error": f"FFmpeg error: {result.stderr}"}
 
-    print(f"✓ Converted WAV created: {prepared_audio_path}")
-
-    # File sizes
+    # Sizes
     raw_size_mb = round(os.path.getsize(raw_audio_path) / (1024 * 1024), 2)
-    prepared_size_mb = round(
-        os.path.getsize(prepared_audio_path) / (1024 * 1024), 2)
+    prepared_size_mb = round(os.path.getsize(prepared_audio_path) / (1024 * 1024), 2)
 
     return {
         "success": True,
