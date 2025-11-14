@@ -49,6 +49,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   const [progress, setProgress] = useState(0);
   const [workflowStage, setWorkflowStage] = useState<WorkflowStage>('input');
   const [currentStepNumber, setCurrentStepNumber] = useState(0);
+  const [actualJobStatus, setActualJobStatus] = useState<string>('pending');
   const [saveType, setSaveType] = useState<SaveType>(null);
   const [uploadedSignedFile, setUploadedSignedFile] = useState<{
     fileName: string;
@@ -197,6 +198,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
         setProgress(data.job.progress);
         setCurrentStepNumber(data.job.currentStep);
         setJobSteps(data.job.steps);
+        setActualJobStatus(data.job.status || 'pending');
         
         // Update video metadata if not already set
         if (!videoMetadata && data.job.videoTitle) {
@@ -1351,7 +1353,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
                   jobSteps={jobSteps}
                   currentStepNumber={currentStepNumber}
                   progressPercent={progress}
-                  jobStatus={workflowStage === 'processing' ? 'processing' : 'pending'}
+                  jobStatus={actualJobStatus}
                   onRestart={handleRestart}
                 />
               ) : (
