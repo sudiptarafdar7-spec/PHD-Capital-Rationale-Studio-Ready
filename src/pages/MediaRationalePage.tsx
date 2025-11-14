@@ -224,7 +224,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
           setVideoMetadata({
             title: data.job.videoTitle,
             uploadDate: data.job.videoUploadDate,
-            uploadTime: '00:00:00',
+            uploadTime: data.job.videoUploadTime || '00:00:00',
             duration: data.job.duration,
             videoId: data.job.videoId,
             channelName: data.job.channelName || '',

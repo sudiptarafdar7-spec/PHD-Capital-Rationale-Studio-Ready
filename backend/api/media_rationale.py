@@ -312,6 +312,7 @@ def get_job(job_id):
                 'videoTitle': job['title'],
                 'videoId': job['video_id'],
                 'videoUploadDate': job['date'].isoformat() if job.get('date') else '',
+                'videoUploadTime': str(job['time']) if job.get('time') else '00:00:00',
                 'youtubeUrl': job['youtube_url'],
                 'duration': job['duration'],
                 'channelName': job.get('channel_name'),
