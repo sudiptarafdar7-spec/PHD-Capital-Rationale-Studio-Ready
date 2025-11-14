@@ -43,34 +43,57 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     using_cookies = os.path.exists(cookies_file_path)
 
     # -----------------------------
-    # STEP 0 - GET FORMAT LIST (WITH PLAYER CLIENT BYPASS)
+    # STEP 0 - GET FORMAT LIST (SMART FALLBACK APPROACH)
     # -----------------------------
     print("📌 Fetching available formats...")
 
-    list_opts = {
+    # Try 1: Without cookies (allows Android/iOS clients)
+    list_opts_no_cookies = {
         "quiet": True,
         "skip_download": True,
         "dump_single_json": True,
-        
-        # CRITICAL: Add player client to bypass YouTube n-challenge
-        # NOTE: DO NOT add cookies here - Android/iOS clients don't support cookies
-        # and will be skipped if cookies are present, leaving only web client which fails
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "ios", "web"],
-                "skip": ["dash", "hls"],  # Get all formats
             }
         },
     }
 
-    # DON'T use cookies for format detection - Android/iOS clients don't support them
-    # Cookies will only be used during actual download (Step 2)
+    # Try 2: With cookies (for bot-protected videos, web client only)
+    list_opts_with_cookies = {
+        "quiet": True,
+        "skip_download": True,
+        "dump_single_json": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["web"],  # Only web client supports cookies
+            }
+        },
+    }
 
+    if using_cookies:
+        list_opts_with_cookies["cookiefile"] = cookies_file_path
+
+    # Try without cookies first
+    info = None
     try:
-        with YoutubeDL(list_opts) as ydl:
+        print("  → Trying without cookies (Android/iOS clients)...")
+        with YoutubeDL(list_opts_no_cookies) as ydl:
             info = ydl.extract_info(youtube_url, download=False)
-    except Exception as e:
-        return {"success": False, "error": f"Format fetch failed: {e}"}
+    except Exception as e1:
+        # If failed and cookies available, try with cookies
+        if using_cookies:
+            try:
+                print("  → Retrying with cookies (Web client)...")
+                with YoutubeDL(list_opts_with_cookies) as ydl:
+                    info = ydl.extract_info(youtube_url, download=False)
+            except Exception as e2:
+                return {"success": False, "error": f"Format fetch failed: {e2}"}
+        else:
+            return {"success": False, "error": f"Format fetch failed: {e1}"}
+
+    if not info:
+        return {"success": False, "error": "Could not fetch video info."}
 
     formats = info.get("formats", [])
     if not formats:
