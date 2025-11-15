@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Key, Upload, Check, X, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Key, Upload, Check, X, Loader2 } from 'lucide-react';
 import { API_ENDPOINTS, getAuthHeaders } from '../lib/api-config';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -9,15 +9,12 @@ import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 
 export default function ApiKeysPage() {
-  const [loading, setLoading] = useState(true);
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [keys, setKeys] = useState<Record<string, string>>({
     openai: '',
     assemblyai: '',
     dhan: '',
     youtubedata: '',
-    rapidapi: '',
   });
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [configuredProviders, setConfiguredProviders] = useState<Record<string, boolean>>({
@@ -26,7 +23,6 @@ export default function ApiKeysPage() {
     google_cloud: false,
     dhan: false,
     youtubedata: false,
-    rapidapi: false,
   });
 
   useEffect(() => {
@@ -51,7 +47,6 @@ export default function ApiKeysPage() {
           google_cloud: false,
           dhan: false,
           youtubedata: false,
-          rapidapi: false,
         };
         
         data.forEach((item: any) => {
@@ -76,8 +71,6 @@ export default function ApiKeysPage() {
     } catch (error) {
       console.error('Error loading API keys:', error);
       toast.error('Error loading API keys');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -191,18 +184,7 @@ export default function ApiKeysPage() {
     }
   };
 
-  const toggleShowKey = (provider: string) => {
-    setShowKeys(prev => ({ ...prev, [provider]: !prev[provider] }));
-  };
-
   const apiProviders = [
-    {
-      id: 'rapidapi',
-      name: 'RapidAPI Key',
-      description: 'Required for downloading YouTube audio (Media Rationale Step 1)',
-      type: 'key',
-      placeholder: '5fcbc64016msh6d450f3c020af51p10a9fdjsne613f6de65ae',
-    },
     {
       id: 'youtubedata',
       name: 'YouTube Data API v3',
@@ -308,23 +290,11 @@ export default function ApiKeysPage() {
                   <div className="relative">
                     <Input
                       id={provider.id}
-                      type={showKeys[provider.id] ? 'text' : 'password'}
+                      type="password"
                       placeholder={provider.placeholder}
                       value={keys[provider.id] || ''}
                       onChange={(e) => setKeys(prev => ({ ...prev, [provider.id]: e.target.value }))}
-                      className="pr-10"
                     />
-                    <button
-                      type="button"
-                      onClick={() => toggleShowKey(provider.id)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showKeys[provider.id] ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
-                    </button>
                   </div>
                   <div className="flex items-center justify-between">
                     <Button
