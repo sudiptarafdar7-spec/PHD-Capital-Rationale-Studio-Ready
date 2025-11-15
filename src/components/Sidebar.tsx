@@ -4,7 +4,6 @@ import {
   Video, 
   FileSpreadsheet, 
   PenTool, 
-  Activity, 
   FileText, 
   User, 
   Key, 
@@ -60,7 +59,6 @@ export default function Sidebar({ isOpen, onClose, currentPage, onNavigate, isCo
     {
       title: 'Management',
       items: [
-        { id: 'activity-log', label: 'Activity Log', icon: <Activity className="w-5 h-5" /> },
         { id: 'saved-rationale', label: 'Saved Rationale', icon: <FileText className="w-5 h-5" /> },
         { id: 'profile', label: 'View Profile', icon: <User className="w-5 h-5" /> },
       ],
