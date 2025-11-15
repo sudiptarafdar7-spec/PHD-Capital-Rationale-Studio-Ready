@@ -171,6 +171,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 if [ -d "$PROJECT_DIR" ]; then
     echo "   ℹ️  Project directory exists, updating..."
     cd "$PROJECT_DIR"
+    # Configure git safe directory to avoid ownership issues
+    git config --global --add safe.directory "$PROJECT_DIR"
     git fetch origin
     git reset --hard origin/main
     git pull origin main
@@ -183,6 +185,9 @@ else
 fi
 
 cd "$PROJECT_DIR"
+
+# Configure git safe directory for future operations
+git config --global --add safe.directory "$PROJECT_DIR"
 
 # Create necessary directories
 mkdir -p backend/uploaded_files backend/job_files backend/channel_logos
