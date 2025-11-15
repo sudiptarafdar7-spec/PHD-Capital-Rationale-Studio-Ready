@@ -100,18 +100,13 @@ def get_master_stocks():
         with open(master_csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Filter by EQUITY instrument
-                instrument = row.get('Instrument', row.get('INSTRUMENT', ''))
+                # Filter by EQUITY instrument (SEM_INSTRUMENT_NAME column)
+                instrument = row.get('SEM_INSTRUMENT_NAME', '')
                 if instrument.upper() != 'EQUITY':
                     continue
                 
-                # Get SEM_CUSTOM_SYMBOL (or fallback columns)
-                stock_name = (
-                    row.get('SEM_CUSTOM_SYMBOL') or 
-                    row.get('Custom name') or 
-                    row.get('Security Name') or 
-                    ''
-                )
+                # Get stock name from SEM_CUSTOM_SYMBOL
+                stock_name = row.get('SEM_CUSTOM_SYMBOL', '').strip()
                 
                 if not stock_name:
                     continue
@@ -122,9 +117,9 @@ def get_master_stocks():
                 
                 stocks.append({
                     'name': stock_name,
-                    'symbol': row.get('Trading Symbol', row.get('Symbol', '')),
-                    'securityId': row.get('Security Id', row.get('SM_KEY_SYMBOL', '')),
-                    'exchange': row.get('Exchange', 'NSE')
+                    'symbol': row.get('SEM_TRADING_SYMBOL', ''),
+                    'securityId': row.get('SEM_SMST_SECURITY_ID', ''),
+                    'exchange': row.get('SEM_EXM_EXCH_ID', 'BSE')
                 })
         
         # Sort by name and limit results
