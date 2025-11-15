@@ -457,30 +457,27 @@ def save_job(job_id):
         # Get actual PDF path from job folder
         pdf_path = os.path.join(job['folder_path'], 'pdf', 'premium_rationale.pdf')
         
-        # Save to saved_rationale table
+        # Save to saved_rationale table (match actual schema)
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("""
                 INSERT INTO saved_rationale (
-                    job_id, user_id, channel_id, tool_used, stock_name,
-                    youtube_url, video_upload_date, youtube_video_name,
-                    unsigned_pdf_path, status, created_at, updated_at
+                    job_id, channel_id, tool_used, title,
+                    date, youtube_url, unsigned_pdf_path,
+                    created_at, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (job_id) DO UPDATE SET
                     unsigned_pdf_path = EXCLUDED.unsigned_pdf_path,
-                    status = EXCLUDED.status,
+                    title = EXCLUDED.title,
                     updated_at = EXCLUDED.updated_at
             """, (
                 job_id,
-                current_user_id,
                 job['channel_id'],
                 'Manual Rationale',
-                stocks_str,
-                job.get('youtube_url'),  # Use youtube_url from jobs table
+                stocks_str,  # Use stocks list as title
                 job['date'],
-                job['title'],  # Use job title as youtube_video_name
+                job.get('youtube_url'),  # Use youtube_url from jobs table
                 pdf_path,  # Actual PDF path: premium_rationale.pdf
-                'completed',
                 datetime.now(),
                 datetime.now()
             ))

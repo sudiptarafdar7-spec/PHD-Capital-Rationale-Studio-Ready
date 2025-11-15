@@ -98,9 +98,12 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
         throw new Error('Failed to fetch saved rationale');
       }
 
-      const savedRationales = await response.json();
+      const data = await response.json();
       
-      // Ensure savedRationales is an array
+      // Extract rationales array from response
+      const savedRationales = data.rationales || [];
+      
+      // Ensure we have an array
       if (!Array.isArray(savedRationales)) {
         toast.error('Invalid response', {
           description: 'Failed to load saved rationales',
@@ -141,11 +144,11 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       }
 
       // Determine workflow stage based on signed file
-      if (savedRationale.signed_path) {
+      if (savedRationale.signed_pdf_path) {
         setWorkflowStage('completed');
         setSaveType('save-and-sign');
         setUploadedSignedFile({
-          fileName: savedRationale.signed_path.split('/').pop() || 'signed.pdf',
+          fileName: savedRationale.signed_pdf_path.split('/').pop() || 'signed.pdf',
           uploadedAt: savedRationale.signed_uploaded_at || new Date().toISOString(),
         });
       } else {
@@ -156,10 +159,10 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       // Load form data from saved rationale
       setSelectedChannelId(String(savedRationale.channel_id || ''));
       setUrl(savedRationale.youtube_url || '');
-      setDate(savedRationale.video_upload_date || '');
+      setDate(savedRationale.date || '');
 
       // Parse stock names into stock details (basic reconstruction)
-      const stockNames = savedRationale.stock_name.split(',').map((s: string) => s.trim());
+      const stockNames = savedRationale.title ? savedRationale.title.split(',').map((s: string) => s.trim()) : [];
       const loadedStocks = stockNames.map((name: string, index: number) => ({
         id: `loaded-${index}`,
         stockName: name,
