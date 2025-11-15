@@ -626,10 +626,9 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       });
 
       const formData = new FormData();
-      formData.append('signedPdf', file);
-      formData.append('jobId', currentJobId);
+      formData.append('file', file);
 
-      const response = await fetch(API_ENDPOINTS.savedRationale.uploadSigned, {
+      const response = await fetch(API_ENDPOINTS.manualV2.uploadSigned(currentJobId), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

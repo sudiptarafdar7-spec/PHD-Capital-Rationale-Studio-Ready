@@ -301,43 +301,31 @@ def download_pdf(job_id):
             if not job:
                 return jsonify({'error': 'Access denied'}), 403
             
-            # Debug logging for user_id comparison
-            print(f"[DEBUG] Job user_id: {job['user_id']}, type: {type(job['user_id'])}")
-            print(f"[DEBUG] Current user: {current_user}, type: {type(current_user)}")
-            
             # Verify job ownership - handle both string and dict formats
             job_user_id = str(job['user_id']) if job['user_id'] else None
             current_user_str = str(current_user) if isinstance(current_user, str) else str(current_user.get('sub', '')) if isinstance(current_user, dict) else None
             
             if job_user_id != current_user_str:
-                print(f"[DEBUG] Access denied: {job_user_id} != {current_user_str}")
                 return jsonify({'error': 'Access denied'}), 403
             
             # Parse payload if it's a string
             import json
             payload = job['payload']
-            print(f"[DEBUG] Raw payload: {payload}, type: {type(payload)}")
             if isinstance(payload, str):
                 payload = json.loads(payload)
-            print(f"[DEBUG] Parsed payload: {payload}")
             
             # Get PDF filename from payload
             pdf_filename = payload.get('pdf_filename') if payload else None
-            print(f"[DEBUG] PDF filename from payload: {pdf_filename}")
             
             if not pdf_filename:
-                print("[DEBUG] No PDF filename found in payload")
                 return jsonify({'error': 'Access denied'}), 403
             
             pdf_path = os.path.join(job['folder_path'], 'pdf', pdf_filename)
-            print(f"[DEBUG] PDF path: {pdf_path}, exists: {os.path.exists(pdf_path)}")
             
             # Convert to absolute path to ensure correct resolution
             abs_pdf_path = os.path.abspath(pdf_path)
-            print(f"[DEBUG] Absolute PDF path: {abs_pdf_path}, exists: {os.path.exists(abs_pdf_path)}")
             
             if not os.path.exists(abs_pdf_path):
-                print("[DEBUG] PDF file does not exist")
                 return jsonify({'error': 'Access denied'}), 403
             
             from flask import send_file
