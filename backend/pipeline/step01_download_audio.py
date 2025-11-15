@@ -7,6 +7,7 @@ import subprocess
 import requests
 import re
 import time
+import html
 
 
 def download_audio(job_id, youtube_url, cookies_file=None):
@@ -90,6 +91,9 @@ def download_audio(job_id, youtube_url, cookies_file=None):
                         "success": False,
                         "error": "API did not return a download link"
                     }
+                
+                # Decode HTML entities (API sometimes returns &amp; instead of &)
+                download_link = html.unescape(download_link)
                 
                 print(f"✅ Audio ready: {video_title}")
                 break
