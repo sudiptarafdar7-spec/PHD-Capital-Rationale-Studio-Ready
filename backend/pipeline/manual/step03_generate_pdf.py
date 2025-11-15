@@ -4,7 +4,6 @@ Creates manual_rationale.pdf
 """
 import os
 import csv
-from backend.pipeline.premium.step08_generate_pdf import generate_pdf_report
 
 def run(job_folder):
     """
@@ -17,6 +16,9 @@ def run(job_folder):
         dict: {success: bool, error: str (optional)}
     """
     try:
+        # Import the premium PDF generation step
+        from backend.pipeline.premium.step08_generate_pdf import run as generate_premium_pdf
+        
         # Read stocks with charts
         input_path = os.path.join(job_folder, 'analysis', 'stocks_with_charts.csv')
         if not os.path.exists(input_path):
@@ -31,34 +33,11 @@ def run(job_folder):
         if not stocks_data:
             return {'success': False, 'error': 'No stock data found'}
         
-        # Prepare PDF data
-        pdf_data = {
-            'date': stocks_data[0].get('DATE', ''),
-            'stocks': []
-        }
+        # Call premium PDF generation (it handles manual rationale too)
+        result = generate_premium_pdf(job_folder)
         
-        for stock in stocks_data:
-            pdf_data['stocks'].append({
-                'name': stock['STOCK SYMBOL'],
-                'symbol': stock['STOCK SYMBOL'],
-                'time': stock['TIME'],
-                'cmp': stock.get('CMP', 'N/A'),
-                'chart_type': stock['CHART TYPE'],
-                'analysis': stock['ANALYSIS'],
-                'chart_path': os.path.join(job_folder, 'charts', stock['CHART']) if stock.get('CHART') != 'N/A' else None
-            })
-        
-        # Generate PDF
-        pdf_path = os.path.join(job_folder, 'pdf', 'manual_rationale.pdf')
-        
-        success = generate_pdf_report(
-            pdf_path=pdf_path,
-            data=pdf_data,
-            template_type='manual'
-        )
-        
-        if not success:
-            return {'success': False, 'error': 'Failed to generate PDF'}
+        if not result.get('success'):
+            return result
         
         print(f"✓ Generated PDF report with {len(stocks_data)} stocks")
         return {'success': True}
