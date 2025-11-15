@@ -1,18 +1,16 @@
 """
 Step 1: Download Audio from YouTube Video
-Using external RapidAPI YouTube to MP3 converter
+Using RapidAPI YouTube Media Downloader
 """
 import os
 import subprocess
 import requests
 import re
-import time
-import html
 
 
 def download_audio(job_id, youtube_url, cookies_file=None):
     """
-    Simple YouTube audio downloader using external API
+    Simple YouTube audio downloader using RapidAPI
     
     Args:
         job_id: Job identifier
@@ -37,7 +35,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     audio_folder = os.path.join("backend", "job_files", job_id, "audio")
     os.makedirs(audio_folder, exist_ok=True)
     
-    raw_audio_path = os.path.join(audio_folder, "raw_audio.mp3")
+    raw_audio_path = os.path.join(audio_folder, "raw_audio.m4a")
     prepared_audio_path = os.path.join(audio_folder, "audio_16k_mono.wav")
     
     # Extract video ID from URL
@@ -49,9 +47,9 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         }
     
     print(f"📹 Video ID: {video_id}")
-    print(f"⏬ Requesting audio conversion...\n")
+    print(f"⏬ Fetching audio download link...\n")
     
-    # Call RapidAPI to get download link (with polling for processing status)
+    # Call RapidAPI to get video details with audio download link
     try:
         # Get API key from environment (fallback to provided key for convenience)
         rapidapi_key = os.environ.get(
@@ -59,140 +57,85 @@ def download_audio(job_id, youtube_url, cookies_file=None):
             "c7762ba089msh6c8a18942b1f9cdp1bbc0cjsn10d61d38bef5"
         )
         
-        api_url = "https://youtube-mp36.p.rapidapi.com/dl"
-        querystring = {"id": video_id}
+        api_url = "https://youtube-media-downloader.p.rapidapi.com/v2/video/details"
+        querystring = {
+            "videoId": video_id,
+            "urlAccess": "normal",
+            "videos": "auto",
+            "audios": "auto"
+        }
         headers = {
             "x-rapidapi-key": rapidapi_key,
-            "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
+            "x-rapidapi-host": "youtube-media-downloader.p.rapidapi.com"
         }
         
-        # Poll the API until processing is complete
-        max_attempts = 30  # Maximum 30 attempts (5 minutes with 10s intervals)
-        attempt = 0
-        download_link = None
-        video_title = None
+        print(f"📡 Calling API...")
+        response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
+        response.raise_for_status()
         
-        while attempt < max_attempts:
-            attempt += 1
-            
-            response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            status = data.get("status")
-            
-            if status == "ok":
-                # Processing complete
-                download_link = data.get("link")
-                video_title = data.get("title", "Unknown")
-                
-                if not download_link:
-                    return {
-                        "success": False,
-                        "error": "API did not return a download link"
-                    }
-                
-                # Decode HTML entities (API sometimes returns &amp; instead of &)
-                download_link = html.unescape(download_link)
-                
-                print(f"✅ Audio ready: {video_title}")
-                break
-                
-            elif status == "processing" or status == "in process":
-                # Still processing, wait and retry
-                progress = data.get("progress", 0)
-                print(f"⏳ Processing... {progress}% (attempt {attempt}/{max_attempts})")
-                time.sleep(10)  # Wait 10 seconds before next attempt
-                continue
-                
-            elif status == "fail":
-                # Processing failed
-                return {
-                    "success": False,
-                    "error": f"API processing failed: {data.get('msg', 'Unknown error')}"
-                }
-            else:
-                # Unknown status
-                return {
-                    "success": False,
-                    "error": f"API returned unknown status: {status}, message: {data.get('msg')}"
-                }
+        data = response.json()
         
-        # Check if we exhausted all attempts
+        # Check for errors
+        if data.get("errorId") != "Success":
+            return {
+                "success": False,
+                "error": f"API error: {data.get('errorId', 'Unknown error')}"
+            }
+        
+        # Get video title
+        video_title = data.get("title", "Unknown")
+        print(f"📹 Video: {video_title}")
+        
+        # Extract audio download URL
+        audios = data.get("audios", {})
+        if audios.get("errorId") != "Success":
+            return {
+                "success": False,
+                "error": f"Audio extraction failed: {audios.get('errorId', 'Unknown error')}"
+            }
+        
+        audio_items = audios.get("items", [])
+        if not audio_items:
+            return {
+                "success": False,
+                "error": "No audio streams available for this video"
+            }
+        
+        # Get the first audio item (usually best quality)
+        audio_item = audio_items[0]
+        download_link = audio_item.get("url")
+        audio_size = audio_item.get("sizeText", "Unknown size")
+        
         if not download_link:
             return {
                 "success": False,
-                "error": f"Audio processing timed out after {max_attempts} attempts. The video may be too long or the service is overloaded."
+                "error": "API did not return an audio download URL"
             }
         
-        print(f"📥 Downloading MP3 from: {download_link[:80]}...\n")
+        print(f"✅ Audio found: {audio_size}")
+        print(f"🔗 Download URL obtained")
         
-        # Download the MP3 file (with retries as links can be time-sensitive)
-        download_success = False
-        for retry in range(3):
-            try:
-                # Full Chrome fingerprint headers required by ytjar/tokyo.xyz CDN servers
-                download_headers = {
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/122.0.0.0 Safari/537.36"
-                    ),
-                    "Accept": "*/*",
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Accept-Encoding": "identity",
-                    "Connection": "keep-alive",
-                    
-                    # Required for ytjar / tokyo.xyz servers
-                    "Referer": "https://www.yt1s.com/",
-                    "Origin": "https://www.yt1s.com",
-                    
-                    # Critical: browser fingerprint (fixes 403 + empty responses)
-                    "Sec-CH-UA": '"Chromium";v="122", "Not(A:Brand";v="99"',
-                    "Sec-CH-UA-Mobile": "?0",
-                    "Sec-CH-UA-Platform": '"Windows"',
-                    "Sec-Fetch-Dest": "document",
-                    "Sec-Fetch-Mode": "navigate",
-                    "Sec-Fetch-Site": "cross-site",
-                    "Sec-Fetch-User": "?1",
-                }
-                
-                audio_response = requests.get(
-                    download_link, 
-                    headers=download_headers,
-                    timeout=120, 
-                    stream=True
-                )
-                audio_response.raise_for_status()
-                
-                # Write to file with progress tracking
-                downloaded_bytes = 0
-                with open(raw_audio_path, 'wb') as f:
-                    for chunk in audio_response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded_bytes += len(chunk)
-                
-                # Verify file was downloaded
-                if os.path.exists(raw_audio_path) and os.path.getsize(raw_audio_path) > 0:
-                    download_success = True
-                    size_mb = os.path.getsize(raw_audio_path) / (1024 * 1024)
-                    print(f"✅ Audio downloaded: {raw_audio_path} ({size_mb:.2f} MB)")
-                    break
-                else:
-                    raise Exception("Downloaded file is empty or doesn't exist")
-                    
-            except Exception as e:
-                print(f"⚠️  Download attempt {retry + 1}/3 failed: {str(e)}")
-                if retry < 2:
-                    print(f"   Retrying in 3 seconds...")
-                    time.sleep(3)
+        print(f"📥 Downloading audio...\n")
         
-        if not download_success:
+        # Download the audio file
+        audio_response = requests.get(download_link, timeout=120, stream=True)
+        audio_response.raise_for_status()
+        
+        # Write to file
+        with open(raw_audio_path, 'wb') as f:
+            for chunk in audio_response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        
+        # Verify file was downloaded
+        if not os.path.exists(raw_audio_path) or os.path.getsize(raw_audio_path) == 0:
             return {
                 "success": False,
-                "error": f"Failed to download audio after 3 attempts. The download link may have expired. Link was: {download_link}"
+                "error": "Downloaded file is empty or doesn't exist"
             }
+        
+        size_mb = os.path.getsize(raw_audio_path) / (1024 * 1024)
+        print(f"✅ Audio downloaded: {raw_audio_path} ({size_mb:.2f} MB)")
         
     except requests.exceptions.RequestException as e:
         return {
