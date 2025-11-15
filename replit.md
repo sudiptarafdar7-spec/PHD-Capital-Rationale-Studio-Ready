@@ -55,11 +55,12 @@ The application maintains a clear separation between a React-based frontend and 
     - **Manual Rationale v2 Pipeline**: Redesigned 3-step process (Fetch CMP → Generate Charts → Generate PDF) with clean architecture:
         - **Module location**: `backend/services/manual_v2/` (replaces old `backend/pipeline/manual/`)
         - **Orchestration**: Thread-based async pipeline with ManualRationaleOrchestrator
-        - **Step 1**: Fetches Current Market Price (CMP) from Dhan API with safe numeric parsing
-        - **Step 2**: Generates charts by reusing premium pipeline's chart generation functions
+        - **Step 1**: Fetches Current Market Price (CMP) from Dhan API with safe numeric parsing. Reads `input.csv`, outputs `stocks_with_cmp.csv` with CMP column added.
+        - **Step 2**: ✅ COMPLETE - Standalone chart generation with Dhan API integration. Reads `stocks_with_cmp.csv`, generates premium charts (candlestick + MA20/50/100/200 + RSI + volume), outputs `stocks_with_charts.csv` with CHART PATH column. Chart naming: `{SECURITY_ID}_{CHART_TYPE}_{YYYYMMDD}_{HHMMSS}.png`. Rate limited at 1.5s per stock.
         - **Step 3**: Generates PDF by reusing premium PDF generator (BLUE theme)
         - **Master data enrichment**: Server-side enrichment at job creation via `/manual-v2/jobs` endpoint
         - **API endpoints**: `/manual-v2/jobs` (create), `/manual-v2/jobs/<id>/run` (execute pipeline), `/manual-v2/jobs/<id>/save` (save to saved_rationale), `/manual-v2/jobs/<id>/upload-signed` (signed PDF upload), `/manual-v2/stocks` (autocomplete)
+        - **Job restart**: Jobs in any completion state (pdf_ready, completed, signed, failed) can be restarted via `/jobs/<id>/run`, which resets all steps to pending and re-runs the complete 3-step pipeline
     - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data, filtering EQUITY stocks from SEM_TRADING_SYMBOL column where SEM_INSTRUMENT_NAME='EQUITY' AND SEM_EXCH_INSTRUMENT_TYPE='ES'. Frontend provides autocomplete suggestions; backend performs master data lookup server-side for validation and enrichment. Uses 300ms debounced API calls.
     - **Master Data Enrichment**: Backend automatically fetches master data (SECURITY ID, LISTED NAME, SHORT NAME, EXCHANGE, INSTRUMENT) from uploaded master CSV when creating Manual Rationale jobs. Column mapping: SEM_SMST_SECURITY_ID→SECURITY ID, SM_SYMBOL_NAME→LISTED NAME, SEM_CUSTOM_SYMBOL→SHORT NAME, SEM_EXM_EXCH_ID→EXCHANGE, SEM_INSTRUMENT_NAME→INSTRUMENT. Validates all stock symbols exist in master CSV; returns 400 error for missing stocks.
     - **Date Format Normalization**: Backend accepts both DD/MM/YYYY and YYYY-MM-DD date formats from frontend, normalizes to ISO format (YYYY-MM-DD) before storing in database and CSV files.
