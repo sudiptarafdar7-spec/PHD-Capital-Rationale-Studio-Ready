@@ -297,8 +297,20 @@ def download_pdf(job_id):
             """, (job_id,))
             job = cursor.fetchone()
             
-            # Return 403 for any unauthorized access (prevents ID enumeration)
-            if not job or str(job['user_id']) != str(current_user):
+            # Return 403 for job not found (prevents ID enumeration)
+            if not job:
+                return jsonify({'error': 'Access denied'}), 403
+            
+            # Debug logging for user_id comparison
+            print(f"[DEBUG] Job user_id: {job['user_id']}, type: {type(job['user_id'])}")
+            print(f"[DEBUG] Current user: {current_user}, type: {type(current_user)}")
+            
+            # Verify job ownership - handle both string and dict formats
+            job_user_id = str(job['user_id']) if job['user_id'] else None
+            current_user_str = str(current_user) if isinstance(current_user, str) else str(current_user.get('sub', '')) if isinstance(current_user, dict) else None
+            
+            if job_user_id != current_user_str:
+                print(f"[DEBUG] Access denied: {job_user_id} != {current_user_str}")
                 return jsonify({'error': 'Access denied'}), 403
             
             # Parse payload if it's a string
