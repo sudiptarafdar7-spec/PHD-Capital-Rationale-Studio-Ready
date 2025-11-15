@@ -75,15 +75,6 @@ export const API_ENDPOINTS = {
     deleteJob: (jobId: string) => `${API_BASE_URL}/api/v1/manual-rationale/jobs/${jobId}`,
     restartStep: (jobId: string, stepNumber: number) => `${API_BASE_URL}/api/v1/manual-rationale/restart-step/${jobId}/${stepNumber}`,
   },
-  uploadRationale: {
-    startAnalysis: `${API_BASE_URL}/api/v1/upload-rationale/start-analysis`,
-    getJob: (jobId: string) => `${API_BASE_URL}/api/v1/upload-rationale/job/${jobId}`,
-    getSteps: (jobId: string) => `${API_BASE_URL}/api/v1/upload-rationale/job/${jobId}/steps`,
-    getCsv: (jobId: string) => `${API_BASE_URL}/api/v1/upload-rationale/job/${jobId}/csv`,
-    uploadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/upload-rationale/job/${jobId}/csv`,
-    downloadPdf: (filePath: string) => `${API_BASE_URL}/api/v1/upload-rationale/job/${encodeURIComponent(filePath)}/download`,
-    deleteJob: (jobId: string) => `${API_BASE_URL}/api/v1/upload-rationale/job/${jobId}`,
-  },
   manualV2: {
     stocks: (query: string) => `${API_BASE_URL}/api/v1/manual-v2/stocks?q=${encodeURIComponent(query)}`,
     createJob: `${API_BASE_URL}/api/v1/manual-v2/jobs`,

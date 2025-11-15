@@ -4,7 +4,6 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import MediaRationalePage from './pages/MediaRationalePage';
-import UploadRationalePage from './pages/UploadRationalePage';
 import PremiumRationalePage from './pages/PremiumRationalePage';
 import ManualRationalePage from './pages/ManualRationalePage';
 import ActivityLogPage from './pages/ActivityLogPage';
@@ -21,7 +20,6 @@ type PageType =
   | 'login'
   | 'dashboard'
   | 'media-rationale'
-  | 'upload-rationale'
   | 'premium-rationale'
   | 'manual-rationale'
   | 'activity-log'
@@ -59,8 +57,6 @@ function AppContent() {
         return <DashboardPage onNavigate={handleNavigate} />;
       case 'media-rationale':
         return <MediaRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
-      case 'upload-rationale':
-        return <UploadRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
       case 'premium-rationale':
         return <PremiumRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
       case 'manual-rationale':
