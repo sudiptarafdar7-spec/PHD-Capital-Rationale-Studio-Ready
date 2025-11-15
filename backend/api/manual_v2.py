@@ -332,13 +332,17 @@ def download_pdf(job_id):
             pdf_path = os.path.join(job['folder_path'], 'pdf', pdf_filename)
             print(f"[DEBUG] PDF path: {pdf_path}, exists: {os.path.exists(pdf_path)}")
             
-            if not os.path.exists(pdf_path):
+            # Convert to absolute path to ensure correct resolution
+            abs_pdf_path = os.path.abspath(pdf_path)
+            print(f"[DEBUG] Absolute PDF path: {abs_pdf_path}, exists: {os.path.exists(abs_pdf_path)}")
+            
+            if not os.path.exists(abs_pdf_path):
                 print("[DEBUG] PDF file does not exist")
                 return jsonify({'error': 'Access denied'}), 403
             
             from flask import send_file
             return send_file(
-                pdf_path,
+                abs_pdf_path,
                 mimetype='application/pdf',
                 as_attachment=True,
                 download_name=pdf_filename
