@@ -60,7 +60,7 @@ function AppContent() {
       case 'premium-rationale':
         return <PremiumRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
       case 'manual-rationale':
-        return <ManualRationalePage key={selectedJobId} selectedJobId={selectedJobId} />;
+        return <ManualRationalePage key={selectedJobId} selectedJobId={selectedJobId} onNavigate={handleNavigate} />;
       case 'activity-log':
         return <ActivityLogPage />;
       case 'saved-rationale':
