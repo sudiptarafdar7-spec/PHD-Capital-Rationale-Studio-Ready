@@ -51,6 +51,8 @@ def enrich_stocks_with_master_data(stocks: List[Dict]) -> List[Dict]:
                 'short_name': str(row['SEM_CUSTOM_SYMBOL']) if pd.notna(row['SEM_CUSTOM_SYMBOL']) else '',
                 'exchange': str(row['SEM_EXM_EXCH_ID']) if pd.notna(row['SEM_EXM_EXCH_ID']) else '',
                 'instrument': str(row['SEM_INSTRUMENT_NAME']) if pd.notna(row['SEM_INSTRUMENT_NAME']) else '',
+                'chart_type': stock.get('chart_type', 'Daily'),
+                'analysis': stock.get('analysis', ''),
                 'call': stock.get('call', ''),
                 'entry': stock.get('entry', ''),
                 'target': stock.get('target', ''),
