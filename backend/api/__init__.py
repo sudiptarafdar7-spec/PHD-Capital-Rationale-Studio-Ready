@@ -10,7 +10,8 @@ media_rationale_bp = Blueprint('media_rationale', __name__, url_prefix='/api/v1/
 premium_rationale_bp = Blueprint('premium_rationale', __name__, url_prefix='/api/v1/premium-rationale')
 saved_rationale_bp = Blueprint('saved_rationale', __name__, url_prefix='/api/v1/saved-rationale')
 activity_logs_bp = Blueprint('activity_logs', __name__, url_prefix='/api/v1/activity-logs')
-manual_rationale_bp = Blueprint('manual_rationale', __name__, url_prefix='/api/v1/manual-rationale')
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/v1/dashboard')
 
-from backend.api import auth, users, api_keys, pdf_template, uploaded_files, channels, media_rationale, premium_rationale, manual_rationale, saved_rationale, activity_logs, dashboard
+from backend.api import auth, users, api_keys, pdf_template, uploaded_files, channels, media_rationale, premium_rationale, saved_rationale, activity_logs, dashboard, manual_v2
+
+manual_v2_bp = manual_v2.manual_v2_bp

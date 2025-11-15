@@ -1,0 +1,99 @@
+import os
+import csv
+import pandas as pd
+from typing import Dict, List, Optional
+
+def get_master_csv_path() -> Optional[str]:
+    from backend.utils.database import get_db_cursor
+    
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT file_path FROM uploaded_files WHERE file_type = 'masterFile' ORDER BY uploaded_at DESC LIMIT 1"
+        )
+        result = cursor.fetchone()
+        if result:
+            return result['file_path']
+    return None
+
+def enrich_stocks_with_master_data(stocks: List[Dict]) -> List[Dict]:
+    master_csv_path = get_master_csv_path()
+    
+    if not master_csv_path or not os.path.exists(master_csv_path):
+        raise ValueError("Master CSV file not found. Please upload master file in Settings.")
+    
+    try:
+        df = pd.read_csv(master_csv_path)
+        
+        df_equity = df[
+            (df['SEM_INSTRUMENT_NAME'] == 'EQUITY') & 
+            (df['SEM_EXCH_INSTRUMENT_TYPE'] == 'ES')
+        ].copy()
+        
+        enriched_stocks = []
+        for stock in stocks:
+            symbol = stock['symbol'].upper()
+            
+            matching_row = df_equity[
+                df_equity['SEM_TRADING_SYMBOL'].str.upper() == symbol
+            ]
+            
+            if matching_row.empty:
+                raise ValueError(f"Stock symbol '{symbol}' not found in master CSV")
+            
+            row = matching_row.iloc[0]
+            
+            enriched_stock = {
+                'symbol': stock['symbol'],
+                'security_id': str(row['SEM_SMST_SECURITY_ID']) if pd.notna(row['SEM_SMST_SECURITY_ID']) else '',
+                'listed_name': str(row['SM_SYMBOL_NAME']) if pd.notna(row['SM_SYMBOL_NAME']) else '',
+                'short_name': str(row['SEM_CUSTOM_SYMBOL']) if pd.notna(row['SEM_CUSTOM_SYMBOL']) else '',
+                'exchange': str(row['SEM_EXM_EXCH_ID']) if pd.notna(row['SEM_EXM_EXCH_ID']) else '',
+                'instrument': str(row['SEM_INSTRUMENT_NAME']) if pd.notna(row['SEM_INSTRUMENT_NAME']) else '',
+                'call': stock.get('call', ''),
+                'entry': stock.get('entry', ''),
+                'target': stock.get('target', ''),
+                'stop_loss': stock.get('stop_loss', ''),
+                'cmp': stock.get('cmp', ''),
+                'change_percent': stock.get('change_percent', ''),
+                'chart_path': stock.get('chart_path', '')
+            }
+            enriched_stocks.append(enriched_stock)
+        
+        return enriched_stocks
+        
+    except Exception as e:
+        raise ValueError(f"Error enriching stocks with master data: {str(e)}")
+
+def get_stock_autocomplete(query: str, limit: int = 10) -> List[Dict]:
+    master_csv_path = get_master_csv_path()
+    
+    if not master_csv_path or not os.path.exists(master_csv_path):
+        return []
+    
+    try:
+        df = pd.read_csv(master_csv_path)
+        
+        df_equity = df[
+            (df['SEM_INSTRUMENT_NAME'] == 'EQUITY') & 
+            (df['SEM_EXCH_INSTRUMENT_TYPE'] == 'ES')
+        ].copy()
+        
+        query_upper = query.upper()
+        
+        matches = df_equity[
+            df_equity['SEM_TRADING_SYMBOL'].str.upper().str.contains(query_upper, na=False)
+        ].head(limit)
+        
+        results = []
+        for _, row in matches.iterrows():
+            results.append({
+                'symbol': str(row['SEM_TRADING_SYMBOL']) if pd.notna(row['SEM_TRADING_SYMBOL']) else '',
+                'name': str(row['SM_SYMBOL_NAME']) if pd.notna(row['SM_SYMBOL_NAME']) else '',
+                'exchange': str(row['SEM_EXM_EXCH_ID']) if pd.notna(row['SEM_EXM_EXCH_ID']) else ''
+            })
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error in autocomplete: {str(e)}")
+        return []

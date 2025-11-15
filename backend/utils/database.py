@@ -157,6 +157,19 @@ def init_database():
             );
         """)
         
+        # Add payload JSONB column for Manual Rationale stock data
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'jobs' AND column_name = 'payload'
+                ) THEN
+                    ALTER TABLE jobs ADD COLUMN payload JSONB;
+                END IF;
+            END $$;
+        """)
+        
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
         """)
@@ -211,6 +224,19 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        """)
+        
+        # Add metadata JSONB column for storing summary data
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'saved_rationale' AND column_name = 'metadata'
+                ) THEN
+                    ALTER TABLE saved_rationale ADD COLUMN metadata JSONB;
+                END IF;
+            END $$;
         """)
         
         cursor.execute("""
