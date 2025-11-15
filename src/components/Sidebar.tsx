@@ -52,6 +52,7 @@ export default function Sidebar({ isOpen, onClose, currentPage, onNavigate, isCo
       items: [
         { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
         { id: 'media-rationale', label: 'Media Rationale', icon: <Video className="w-5 h-5" /> },
+        { id: 'upload-rationale', label: 'Upload Rationale', icon: <Upload className="w-5 h-5" /> },
         { id: 'premium-rationale', label: 'Premium Rationale', icon: <FileSpreadsheet className="w-5 h-5" /> },
         { id: 'manual-rationale', label: 'Manual Rationale', icon: <PenTool className="w-5 h-5" /> },
       ],
@@ -69,7 +70,7 @@ export default function Sidebar({ isOpen, onClose, currentPage, onNavigate, isCo
         { id: 'users', label: 'Users', icon: <Users className="w-5 h-5" />, adminOnly: true },
         { id: 'api-keys', label: 'API Keys', icon: <Key className="w-5 h-5" />, adminOnly: true },
         { id: 'pdf-template', label: 'PDF Template', icon: <FileCode className="w-5 h-5" />, adminOnly: true },
-        { id: 'upload-files', label: 'Upload Required Files', icon: <Upload className="w-5 h-5" />, adminOnly: true },
+        { id: 'upload-files', label: 'Upload Required Files', icon: <FileCode className="w-5 h-5" />, adminOnly: true },
         { id: 'channel-logos', label: 'Manage Platform', icon: <Play className="w-5 h-5" />, adminOnly: true },
       ],
     },
