@@ -1,7 +1,7 @@
 # PHD Capital Rationale Studio
 
 ## Overview
-PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features two primary tools: Media Rationale, which transforms YouTube videos into SEBI-compliant PDFs, and Premium Rationale, which generates reports from manually entered stock calls. The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
+PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features three primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
 ## User Preferences
 - Keep frontend design unchanged (layout, forms, fields, animations, effects, flow)
@@ -31,6 +31,8 @@ The application maintains a clear separation between a React-based frontend and 
     - **Channel/Platform Management**: CRUD operations for various platforms, including logo uploads.
     - **Media Rationale Pipeline**: A 14-step process for YouTube videos (extraction, transcription, translation, analysis, report generation).
     - **Premium Rationale Pipeline**: An 8-step process for generating reports from text input (stock data fetching, technical/fundamental analysis, PDF generation).
+    - **Manual Rationale Pipeline**: A 4-step process for manual data entry (stock mapping, CMP fetching, chart generation, PDF creation).
+    - **Stock Autocomplete**: Intelligent stock name autocomplete using master CSV data, filtering EQUITY instruments from SEM_CUSTOM_SYMBOL column with debounced API calls.
 - **System Design Choices**:
     - **Modular API**: Endpoints are organized by feature.
     - **Pipeline-driven Processing**: Sequential analysis for both video and text.

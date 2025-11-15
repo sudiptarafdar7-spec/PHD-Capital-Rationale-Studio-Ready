@@ -6,6 +6,7 @@ from backend.api import uploaded_files_bp
 from datetime import datetime
 import os
 import uuid
+import csv
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploaded_files')
 ALLOWED_EXTENSIONS = {
@@ -67,6 +68,72 @@ def get_uploaded_files():
     except Exception as e:
         print(f"Error getting uploaded files: {e}")
         return jsonify({'error': str(e)}), 500
+
+@uploaded_files_bp.route('/master-stocks', methods=['GET'])
+@jwt_required()
+def get_master_stocks():
+    """Get EQUITY stocks from master CSV for autocomplete"""
+    try:
+        # Optional search query parameter
+        search_query = request.args.get('q', '').strip().lower()
+        
+        # Find master CSV file
+        master_csv_path = None
+        for filename in os.listdir(UPLOAD_FOLDER):
+            if filename.endswith('.csv') and 'master' in filename.lower():
+                master_csv_path = os.path.join(UPLOAD_FOLDER, filename)
+                break
+        
+        if not master_csv_path or not os.path.exists(master_csv_path):
+            return jsonify({'error': 'Master CSV file not found'}), 404
+        
+        # Read master CSV and filter EQUITY instruments
+        stocks = []
+        with open(master_csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Filter by EQUITY instrument
+                instrument = row.get('Instrument', row.get('INSTRUMENT', ''))
+                if instrument.upper() != 'EQUITY':
+                    continue
+                
+                # Get SEM_CUSTOM_SYMBOL (or fallback columns)
+                stock_name = (
+                    row.get('SEM_CUSTOM_SYMBOL') or 
+                    row.get('Custom name') or 
+                    row.get('Security Name') or 
+                    ''
+                )
+                
+                if not stock_name:
+                    continue
+                
+                # Filter by search query if provided
+                if search_query and search_query not in stock_name.lower():
+                    continue
+                
+                stocks.append({
+                    'name': stock_name,
+                    'symbol': row.get('Trading Symbol', row.get('Symbol', '')),
+                    'securityId': row.get('Security Id', row.get('SM_KEY_SYMBOL', '')),
+                    'exchange': row.get('Exchange', 'NSE')
+                })
+        
+        # Sort by name and limit results
+        stocks.sort(key=lambda x: x['name'])
+        
+        # Limit to first 50 results for performance
+        if len(stocks) > 50:
+            stocks = stocks[:50]
+        
+        return jsonify({
+            'success': True,
+            'stocks': stocks
+        }), 200
+        
+    except Exception as e:
+        print(f"Error reading master stocks: {str(e)}")
+        return jsonify({'error': f'Failed to read master stocks: {str(e)}'}), 500
 
 @uploaded_files_bp.route('/upload', methods=['POST'])
 @jwt_required()

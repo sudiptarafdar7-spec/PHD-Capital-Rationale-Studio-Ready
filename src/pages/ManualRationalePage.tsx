@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import StepProgressTracker from '../components/StepProgressTracker';
 import SignedFileUpload from '../components/SignedFileUpload';
+import { StockAutocompleteInput } from '../components/StockAutocompleteInput';
 import { playCompletionBell, playSuccessBell } from '../lib/sound-utils';
 import { JobStep } from '../types';
 import { API_ENDPOINTS, getAuthHeaders } from '../lib/api-config';
@@ -815,11 +816,12 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
                       <div className="space-y-2">
                         <div className="space-y-1.5">
                           <Label className="text-xs">Stock Name *</Label>
-                          <Input
+                          <StockAutocompleteInput
                             value={stock.stockName}
-                            onChange={(e) => updateStockDetail(stock.id, 'stockName', e.target.value)}
-                            placeholder="e.g., Reliance"
-                            className="bg-background border-input h-9 text-sm"
+                            onSelect={(stockName) => updateStockDetail(stock.id, 'stockName', stockName)}
+                            token={token || ''}
+                            placeholder="Type to search EQUITY stocks..."
+                            disabled={workflowStage !== 'input'}
                           />
                         </div>
 
