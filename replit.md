@@ -31,8 +31,10 @@ The application maintains a clear separation between a React-based frontend and 
     - **Channel/Platform Management**: CRUD operations for various platforms, including logo uploads.
     - **Media Rationale Pipeline**: A 14-step process for YouTube videos (extraction, transcription, translation, analysis, report generation).
     - **Premium Rationale Pipeline**: An 8-step process for generating reports from text input (stock data fetching, technical/fundamental analysis, PDF generation).
-    - **Manual Rationale Pipeline**: A 3-step process for manual data entry (CMP fetching, chart generation, PDF creation). Stock mapping is performed at input creation using autocomplete.
-    - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data, filtering EQUITY stocks from SEM_TRADING_SYMBOL column where SEM_INSTRUMENT_NAME='EQUITY' AND SEM_EXCH_INSTRUMENT_TYPE='ES'. Returns complete master data (security ID, listed name, short name, exchange, instrument) to eliminate mapping step. Uses 300ms debounced API calls.
+    - **Manual Rationale Pipeline**: A 3-step process for manual data entry (CMP fetching, chart generation, PDF creation). Backend automatically enriches stock symbols with master data at job creation.
+    - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data, filtering EQUITY stocks from SEM_TRADING_SYMBOL column where SEM_INSTRUMENT_NAME='EQUITY' AND SEM_EXCH_INSTRUMENT_TYPE='ES'. Frontend provides autocomplete suggestions; backend performs master data lookup server-side for validation and enrichment. Uses 300ms debounced API calls.
+    - **Master Data Enrichment**: Backend automatically fetches master data (SECURITY ID, LISTED NAME, SHORT NAME, EXCHANGE, INSTRUMENT) from uploaded master CSV when creating Manual Rationale jobs. Column mapping: SEM_SMST_SECURITY_ID→SECURITY ID, SM_SYMBOL_NAME→LISTED NAME, SEM_CUSTOM_SYMBOL→SHORT NAME, SEM_EXM_EXCH_ID→EXCHANGE, SEM_INSTRUMENT_NAME→INSTRUMENT. Validates all stock symbols exist in master CSV; returns 400 error for missing stocks.
+    - **Date Format Normalization**: Backend accepts both DD/MM/YYYY and YYYY-MM-DD date formats from frontend, normalizes to ISO format (YYYY-MM-DD) before storing in database and CSV files.
 - **System Design Choices**:
     - **Modular API**: Endpoints are organized by feature.
     - **Pipeline-driven Processing**: Sequential analysis for both video and text.

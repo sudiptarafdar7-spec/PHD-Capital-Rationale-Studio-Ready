@@ -99,11 +99,27 @@ def create_job():
         # Extract input data
         channel_id = data.get('channelId')
         url = data.get('url', '')  # Optional YouTube URL
-        call_date = data.get('callDate')
+        call_date_raw = data.get('callDate')
         stocks = data.get('stocks', [])  # [{stockName, time, chartType, analysis}]
         
-        if not channel_id or not call_date or not stocks:
+        if not channel_id or not call_date_raw or not stocks:
             return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Normalize date to YYYY-MM-DD format (frontend may send DD/MM/YYYY, YYYY-MM-DD, or with time)
+        try:
+            # Strip time component if present (e.g., "09/11/2025 00:00:00" → "09/11/2025")
+            date_part = call_date_raw.split()[0] if ' ' in call_date_raw else call_date_raw
+            
+            # Try parsing DD/MM/YYYY format first (common frontend format)
+            if '/' in date_part:
+                date_obj = datetime.strptime(date_part, '%d/%m/%Y')
+            else:
+                # Try ISO format YYYY-MM-DD
+                date_obj = datetime.strptime(date_part, '%Y-%m-%d')
+            
+            call_date = date_obj.strftime('%Y-%m-%d')  # Normalize to ISO format
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use DD/MM/YYYY or YYYY-MM-DD'}), 400
         
         # Get channel details
         with get_db_cursor() as cursor:
