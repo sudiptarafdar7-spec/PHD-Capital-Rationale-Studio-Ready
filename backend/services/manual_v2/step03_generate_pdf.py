@@ -20,7 +20,14 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PIL import Image as PILImage, ImageDraw
 from datetime import datetime
-from backend.utils.database import get_db_cursor
+import psycopg2
+from backend.utils.reportlab_html import extract_html_content
+
+
+def get_db_connection():
+    """Get database connection"""
+    import os
+    return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
 def sanitize_filename(s: str) -> str:
@@ -29,9 +36,12 @@ def sanitize_filename(s: str) -> str:
 
 
 def fetch_pdf_config(job_id: str):
-    """Fetch PDF configuration from database"""
-    with get_db_cursor() as cursor:
-        # Fetch job details with channel info
+    """Fetch PDF configuration from database tables"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Fetch job details with channel info (JOIN with channels table)
         cursor.execute("""
             SELECT c.channel_name, c.channel_logo_path, j.title
             FROM jobs j
@@ -39,45 +49,53 @@ def fetch_pdf_config(job_id: str):
             WHERE j.id = %s
         """, (job_id,))
         job_row = cursor.fetchone()
-        
         if not job_row:
             raise ValueError(f"Job {job_id} not found")
         
         channel_name, channel_logo_path_raw, title = job_row
         
-        # Construct full path for channel logo
+        # Construct full path for channel logo if it exists
         channel_logo_path = None
         if channel_logo_path_raw:
+            # Try to build full path
             if os.path.isabs(channel_logo_path_raw):
-                channel_logo_path = channel_logo_path_raw if os.path.exists(channel_logo_path_raw) else None
+                channel_logo_path = channel_logo_path_raw
             else:
+                # Try different path combinations
                 possible_paths = [
+                    f"/home/runner/workspace/backend/uploaded_files/{channel_logo_path_raw}",
                     f"backend/uploaded_files/{channel_logo_path_raw}",
                     channel_logo_path_raw
                 ]
                 for path in possible_paths:
                     if os.path.exists(path):
                         channel_logo_path = path
+                        print(f"✅ Found channel logo at: {path}")
                         break
+                
+                if not channel_logo_path:
+                    print(f"⚠️ Channel logo file not found: {channel_logo_path_raw}")
+                    print(f"   Tried paths: {possible_paths}")
         
-        # Fetch PDF template
+        # Fetch PDF template (company details, disclaimer, disclosure)
         cursor.execute("""
-            SELECT company_name, registration_details, disclaimer_text, disclosure_text
+            SELECT company_name, registration_details, disclaimer_text, disclosure_text, company_data
             FROM pdf_template
             ORDER BY id DESC
             LIMIT 1
         """)
         template_row = cursor.fetchone()
-        
         if template_row:
-            company_name, registration_details, disclaimer_text, disclosure_text = template_row
+            company_name, registration_details, disclaimer_text, disclosure_text, company_data = template_row
         else:
+            # Default values if no template exists
             company_name = "PHD CAPITAL PVT LTD"
-            registration_details = "SEBI Regd No - INH000016126 | AMFI Regd No - ARN-301724"
+            registration_details = "SEBI Regd No - INH000016126  |  AMFI Regd No - ARN-301724  |  APMI Regd No - APRN00865\nBSE Regd No - 6152  |  CIN No.- U67190WB2020PTC237908"
             disclaimer_text = None
             disclosure_text = None
+            company_data = None
         
-        # Fetch company logo and fonts
+        # Fetch uploaded files (company logo and custom fonts)
         cursor.execute("""
             SELECT file_type, file_path, file_name
             FROM uploaded_files
@@ -92,8 +110,10 @@ def fetch_pdf_config(job_id: str):
         
         for file_type, file_path, file_name in uploaded_files:
             if file_type == 'companyLogo' and not company_logo_path:
+                # Use the file_path as-is from database (already has full path)
                 company_logo_path = file_path
             elif file_type == 'customFont':
+                # Use the file_path as-is from database
                 if 'bold' in file_name.lower() and not font_bold_path:
                     font_bold_path = file_path
                 elif not font_regular_path:
@@ -107,10 +127,15 @@ def fetch_pdf_config(job_id: str):
             'registration_details': registration_details,
             'disclaimer_text': disclaimer_text,
             'disclosure_text': disclosure_text,
+            'company_data': company_data,
             'company_logo_path': company_logo_path,
             'font_regular_path': font_regular_path,
             'font_bold_path': font_bold_path
         }
+    
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def make_round_logo(src_path, diameter_px=360):
@@ -134,14 +159,6 @@ def make_round_logo(src_path, diameter_px=360):
         return src_path
 
 
-def extract_html_content(html_text):
-    """Simple HTML tag stripper for paragraph content"""
-    import re
-    if not html_text:
-        return ""
-    text = re.sub(r'<br\s*/?>', '\n', html_text)
-    text = re.sub(r'<[^>]+>', '', text)
-    return text.strip()
 
 
 def generate_manual_pdf(job_id: str, job_folder: str, stocks_with_charts):
