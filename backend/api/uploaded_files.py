@@ -95,7 +95,7 @@ def get_master_stocks():
         if not os.path.exists(master_csv_path):
             return jsonify({'error': 'Master CSV file not found on disk'}), 404
         
-        # Read master CSV and filter EQUITY instruments
+        # Read master CSV and filter EQUITY instruments with ES exchange type
         stocks = []
         with open(master_csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -103,6 +103,11 @@ def get_master_stocks():
                 # Filter by EQUITY instrument (SEM_INSTRUMENT_NAME column)
                 instrument = row.get('SEM_INSTRUMENT_NAME', '')
                 if instrument.upper() != 'EQUITY':
+                    continue
+                
+                # Filter by ES exchange type (SEM_EXCH_INSTRUMENT_TYPE column)
+                exch_type = row.get('SEM_EXCH_INSTRUMENT_TYPE', '')
+                if exch_type.upper() != 'ES':
                     continue
                 
                 # Get stock name from SEM_CUSTOM_SYMBOL
