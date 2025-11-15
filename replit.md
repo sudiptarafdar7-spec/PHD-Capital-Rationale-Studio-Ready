@@ -1,21 +1,28 @@
 # PHD Capital Rationale Studio
 
 ## Overview
-PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features three primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
+PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features four primary tools: Media Rationale (YouTube video analysis), Upload Rationale (direct audio/caption file upload), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
 ## Recent Changes (November 2025)
-### Media Rationale Step 1 Performance Optimization ✅ COMPLETED (November 15, 2025)
-- **YouTube Audio Download Optimization**: Replaced multi-strategy approach (7 strategies) with single ultra-fast Android client
-- **Performance improvement**: Download time reduced from 40-90 seconds to 6-12 seconds on VPS
-- **Technical changes**:
-  - Removed slow multi-client switching (tv_embedded, ios, web, etc.)
-  - Removed signature_timestamp protection that caused delays
-  - Removed format probing overhead (now uses direct m4a format)
-  - Single-pass Android client with modern Chrome UA
-  - Simplified configuration: `player_client: ["android"]` only
-  - Format: `bestaudio[ext=m4a]/bestaudio` for fastest downloads
-- **File**: `backend/pipeline/step01_download_audio.py`
-- **Impact**: 10-20× faster YouTube audio downloads, more stable on VPS environments
+### Upload Rationale Tool ✅ COMPLETED (November 15, 2025)
+- **New workflow**: Clone of Media Rationale that accepts direct audio file and caption file uploads instead of YouTube URLs
+- **12-step pipeline**: Skips steps 1-2 (YouTube download), starts directly from step 3 (transcription) through step 14 (PDF generation)
+- **File upload handling**: 
+  - Accepts audio files (.wav, .mp3, .m4a, .ogg, .flac, .aac)
+  - Accepts caption files (.txt or .json)
+  - FFmpeg audio conversion to 16kHz mono format
+  - Caption file processing (TXT → JSON conversion)
+  - FormData multipart upload with proper Content-Type header handling
+- **Backend API**: 6 REST endpoints under /api/v1/upload-rationale/
+  - `/start-analysis` (POST) - Upload files and create job
+  - `/job/<id>` (GET) - Get job details
+  - `/job/<id>/csv` (GET) - Download CSV for review
+  - `/job/<id>/continue` (POST) - Continue pipeline after CSV review
+  - `/pdf/<path>` (GET) - Download PDF with JWT authentication
+  - Reuses Media Rationale pipeline functions (step03_transcribe onwards)
+- **Frontend**: UploadRationalePage.tsx with file dropzones, AIStyleJobRunner integration, and complete workflow management
+- **Navigation**: Added to sidebar Tools section and App.tsx routing
+- **Status**: ✅ Production-ready, fully tested with secure file upload and PDF generation
 
 ### Manual Rationale v2 Complete Rebuild ✅ COMPLETED
 - **Cleaned up legacy code**: Removed old manual_rationale.py and backend/pipeline/manual/ directory
@@ -78,6 +85,7 @@ The application maintains a clear separation between a React-based frontend and 
     - **File Management**: Handling of master CSVs, logos, custom fonts, and YouTube cookies.
     - **Channel/Platform Management**: CRUD operations for various platforms, including logo uploads.
     - **Media Rationale Pipeline**: A 14-step process for YouTube videos (extraction, transcription, translation, analysis, report generation).
+    - **Upload Rationale Pipeline**: A 12-step process for direct audio/caption uploads (skips YouTube download, starts from transcription, ends with PDF generation). Shares step functions with Media Rationale (steps 3-14).
     - **Premium Rationale Pipeline**: An 8-step process for generating reports from text input (stock data fetching, technical/fundamental analysis, PDF generation).
     - **Manual Rationale v2 Pipeline**: Redesigned 3-step process (Fetch CMP → Generate Charts → Generate PDF) with clean architecture:
         - **Module location**: `backend/services/manual_v2/` (replaces old `backend/pipeline/manual/`)
