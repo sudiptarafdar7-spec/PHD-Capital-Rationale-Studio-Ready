@@ -139,25 +139,11 @@ def create_input_csv(job_id: str, folder_path: str) -> str:
         writer.writeheader()
         
         for stock in stocks:
-            # Determine chart type based on call
-            call = stock.get('call', '').upper()
-            if call in ['BUY', 'LONG']:
-                chart_type = 'BULLISH'
-            elif call in ['SELL', 'SHORT']:
-                chart_type = 'BEARISH'
-            else:
-                chart_type = 'NEUTRAL'
+            # Use chart type directly from user input (Daily/Weekly/Monthly)
+            chart_type = stock.get('chart_type', 'Daily')
             
-            # Build analysis text
-            analysis_parts = []
-            if stock.get('entry'):
-                analysis_parts.append(f"Entry: {stock['entry']}")
-            if stock.get('target'):
-                analysis_parts.append(f"Target: {stock['target']}")
-            if stock.get('stop_loss'):
-                analysis_parts.append(f"Stop Loss: {stock['stop_loss']}")
-            
-            analysis_text = ' | '.join(analysis_parts) if analysis_parts else ''
+            # Use analysis text directly from user input
+            analysis_text = stock.get('analysis', '')
             
             writer.writerow({
                 'DATE': job_date,

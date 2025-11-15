@@ -20,8 +20,8 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
   - Polling for in-progress jobs: Continues polling when loading jobs from dashboard
 - **Input CSV Generation**: Automated creation of input.csv before pipeline execution with columns: DATE, TIME, STOCK SYMBOL, CHART TYPE, LISTED NAME, SHORT NAME, SECURITY ID, EXCHANGE, INSTRUMENT, ANALYSIS
   - Master data automatically enriched from uploaded master CSV at job creation
-  - Chart type intelligently determined from call field (BUY/LONG → BULLISH, SELL/SHORT → BEARISH)
-  - Analysis column populated with entry, target, and stop loss data
+  - Chart type uses user's direct input (Daily/Weekly/Monthly)
+  - Analysis column populated with user's detailed analysis text
 - **Status**: ✅ Fully implemented, tested, and production-ready
 
 ## User Preferences
