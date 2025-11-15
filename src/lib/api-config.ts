@@ -65,6 +65,15 @@ export const API_ENDPOINTS = {
     deleteJob: (jobId: string) => `${API_BASE_URL}/api/v1/premium-rationale/jobs/${jobId}`,
     restartStep: (jobId: string, stepNumber: number) => `${API_BASE_URL}/api/v1/premium-rationale/restart-step/${jobId}/${stepNumber}`,
   },
+  manualRationale: {
+    createJob: `${API_BASE_URL}/api/v1/manual-rationale/create-job`,
+    getJob: (jobId: string) => `${API_BASE_URL}/api/v1/manual-rationale/jobs/${jobId}`,
+    save: (jobId: string) => `${API_BASE_URL}/api/v1/manual-rationale/job/${jobId}/save`,
+    uploadSigned: (jobId: string) => `${API_BASE_URL}/api/v1/saved-rationale/upload-signed`,
+    downloadPdf: (filePath: string) => `${API_BASE_URL}/api/v1/saved-rationale/download/${encodeURIComponent(filePath)}`,
+    deleteJob: (jobId: string) => `${API_BASE_URL}/api/v1/manual-rationale/jobs/${jobId}`,
+    restartStep: (jobId: string, stepNumber: number) => `${API_BASE_URL}/api/v1/manual-rationale/restart-step/${jobId}/${stepNumber}`,
+  },
   savedRationale: {
     getAll: `${API_BASE_URL}/api/v1/saved-rationale`,
     getOne: (id: number) => `${API_BASE_URL}/api/v1/saved-rationale/${id}`,

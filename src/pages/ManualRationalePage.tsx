@@ -1,24 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PenTool, Plus, Trash2, Calendar, Save, Download, FileSignature, Loader2, Clock } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import StepProgressTracker from '../components/StepProgressTracker';
 import SignedFileUpload from '../components/SignedFileUpload';
 import { playCompletionBell, playSuccessBell } from '../lib/sound-utils';
 import { JobStep } from '../types';
+import { API_ENDPOINTS, getAuthHeaders } from '../lib/api-config';
+import { useAuth } from '../lib/auth-context';
 
 interface ManualRationalePageProps {
   selectedJobId?: string;
+}
+
+interface Channel {
+  id: number;
+  channel_name: string;
+  platform: string;
+  channel_url?: string;
 }
 
 interface StockDetail {
   id: string;
   stockName: string;
   time: string;
+  chartType: string;
   analysis: string;
 }
 
@@ -34,12 +44,14 @@ const MANUAL_STEPS: JobStep[] = [
 ];
 
 export default function ManualRationalePage({ selectedJobId }: ManualRationalePageProps) {
-  const [platformName, setPlatformName] = useState('YouTube');
-  const [platformId, setPlatformId] = useState('');
+  const { token } = useAuth();
+  
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [selectedChannelId, setSelectedChannelId] = useState('');
   const [url, setUrl] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [stockDetails, setStockDetails] = useState<StockDetail[]>([
-    { id: '1', stockName: '', time: '', analysis: '' }
+    { id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }
   ]);
   
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
@@ -48,6 +60,27 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedSignedFile, setUploadedSignedFile] = useState<{ fileName: string; uploadedAt: string } | null>(null);
   const [saveType, setSaveType] = useState<'save' | 'save-and-sign' | null>(null);
+
+  // Load channels on mount
+  useEffect(() => {
+    loadChannels();
+  }, []);
+
+  const loadChannels = async () => {
+    try {
+      const response = await fetch(API_ENDPOINTS.channels.getAll, {
+        headers: getAuthHeaders(token || ''),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setChannels(data);
+      }
+    } catch (error) {
+      console.error('Error loading channels:', error);
+      toast.error('Failed to load platforms');
+    }
+  };
 
   const loadSavedJob = React.useCallback(async (jobId: string) => {
     // Import mock data functions
@@ -84,8 +117,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     }
 
     // Load form data from saved rationale (mock data for now)
-    setPlatformName('YouTube');
-    setPlatformId(savedRationale.youtube_video_name);
+    setSelectedChannelId(String(savedRationale.id || '1')); // Set channel ID from saved data
     setUrl(savedRationale.youtube_url);
     setDate(savedRationale.video_upload_date);
     
@@ -94,10 +126,11 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     const loadedStocks = stockNames.map((name, index) => ({
       id: `loaded-${index}`,
       stockName: name,
-      time: '10:00 AM', // Mock time
+      time: '10:00', // Mock time in HH:MM format
+      chartType: 'Daily', // Mock chart type
       analysis: 'Detailed analysis from saved rationale', // Mock analysis
     }));
-    setStockDetails(loadedStocks.length > 0 ? loadedStocks : [{ id: '1', stockName: '', time: '', analysis: '' }]);
+    setStockDetails(loadedStocks.length > 0 ? loadedStocks : [{ id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }]);
 
     toast.success('Loaded saved job', {
       description: `Job ID: ${jobId}`,
@@ -116,6 +149,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       id: Date.now().toString(),
       stockName: '',
       time: '',
+      chartType: 'Daily',
       analysis: ''
     };
     setStockDetails([...stockDetails, newStock]);
@@ -138,12 +172,8 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   };
 
   const validateForm = () => {
-    if (!platformName) {
-      toast.error('Validation Error', { description: 'Platform Name is required' });
-      return false;
-    }
-    if (!platformId) {
-      toast.error('Validation Error', { description: 'Platform ID is required' });
+    if (!selectedChannelId) {
+      toast.error('Validation Error', { description: 'Platform is required' });
       return false;
     }
     if (!date) {
@@ -152,8 +182,8 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     }
     
     for (const stock of stockDetails) {
-      if (!stock.stockName || !stock.time || !stock.analysis) {
-        toast.error('Validation Error', { description: 'All stock fields are required' });
+      if (!stock.stockName || !stock.time || !stock.chartType || !stock.analysis) {
+        toast.error('Validation Error', { description: 'All stock fields (name, time, chart type, analysis) are required' });
         return false;
       }
     }
@@ -161,7 +191,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     return true;
   };
 
-  const runStepsFromTo = async (fromStep: number, toStep: number, jobId: string) => {
+  const runStepsFromTo = async (fromStep: number, toStep: number) => {
     for (let stepNum = fromStep; stepNum <= toStep; stepNum++) {
       // Update step to running
       setJobSteps(prev => {
@@ -212,31 +242,100 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   const generateRationale = async () => {
     if (!validateForm()) return;
 
-    setIsProcessing(true);
-    const jobId = `MANUAL-${Date.now()}`;
-    setCurrentJobId(jobId);
-    setWorkflowStage('processing');
-    
-    // Initialize job steps
-    const initialSteps = MANUAL_STEPS.map(step => ({
-      ...step,
-      job_id: jobId,
-    }));
-    setJobSteps(initialSteps);
+    try {
+      setIsProcessing(true);
+      setWorkflowStage('processing');
 
-    toast.info('Job Created', {
-      description: `Job ID: ${jobId}`,
-    });
+      // Call backend API to create job
+      const response = await fetch(API_ENDPOINTS.manualRationale.createJob, {
+        method: 'POST',
+        headers: getAuthHeaders(token || ''),
+        body: JSON.stringify({
+          channelId: parseInt(selectedChannelId),
+          url: url,
+          callDate: date,
+          stocks: stockDetails.map(stock => ({
+            stockName: stock.stockName,
+            time: stock.time,
+            chartType: stock.chartType,
+            analysis: stock.analysis
+          }))
+        }),
+      });
 
-    // Run steps 1-5
-    await runStepsFromTo(1, 5, jobId);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create job');
+      }
 
-    setIsProcessing(false);
-    setWorkflowStage('pdf-preview');
-    
-    toast.success('PDF Generated Successfully', {
-      description: 'Your rationale report is ready',
-    });
+      const data = await response.json();
+      const jobId = data.jobId;
+      setCurrentJobId(jobId);
+
+      toast.success('Job Created!', {
+        description: `Job ID: ${jobId}`,
+      });
+
+      // Poll for job status
+      pollJobStatus(jobId);
+
+    } catch (error: any) {
+      console.error('Error creating job:', error);
+      toast.error('Failed to create job', {
+        description: error.message || 'Please try again',
+      });
+      setIsProcessing(false);
+      setWorkflowStage('input');
+    }
+  };
+
+  const pollJobStatus = async (jobId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(API_ENDPOINTS.manualRationale.getJob(jobId), {
+          headers: getAuthHeaders(token || ''),
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        
+        // Update job steps
+        const mappedSteps = data.job_steps.map((step: any) => ({
+          id: String(step.id),
+          job_id: step.job_id,
+          step_number: step.step_number,
+          name: step.step_name,
+          status: step.status === 'running' ? 'running' : 
+                  step.status === 'success' ? 'success' : 
+                  step.status,
+          message: step.error_message || undefined,
+          started_at: step.started_at || undefined,
+          ended_at: step.ended_at || undefined,
+        }));
+        setJobSteps(mappedSteps);
+
+        // Check if job is complete
+        if (data.status === 'pdf_ready') {
+          clearInterval(pollInterval);
+          setIsProcessing(false);
+          setWorkflowStage('pdf-preview');
+          playCompletionBell();
+          toast.success('PDF Generated Successfully!', {
+            description: 'Your rationale report is ready',
+          });
+        } else if (data.status === 'failed') {
+          clearInterval(pollInterval);
+          setIsProcessing(false);
+          toast.error('Job Failed', {
+            description: 'Please check the steps for errors',
+          });
+        }
+
+      } catch (error) {
+        console.error('Error polling job status:', error);
+      }
+    }, 2000); // Poll every 2 seconds
   };
 
   const handleDownloadPDF = () => {
@@ -248,74 +347,79 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   const handleSave = async () => {
     if (!currentJobId) return;
 
-    setSaveType('save');
+    try {
+      setSaveType('save');
 
-    toast.info('Saving rationale...', {
-      description: 'Saving PDF and job data',
-    });
+      toast.info('Saving rationale...', {
+        description: 'Saving PDF and job data',
+      });
 
-    // Update step 6 to running
-    setJobSteps(prev => {
-      const updated = [...prev];
-      const stepIndex = updated.findIndex(s => s.step_number === 6);
-      if (stepIndex !== -1) {
-        updated[stepIndex] = {
-          ...updated[stepIndex],
-          status: 'running',
-          started_at: new Date().toISOString(),
-        };
+      const response = await fetch(API_ENDPOINTS.manualRationale.save(currentJobId), {
+        method: 'POST',
+        headers: getAuthHeaders(token || ''),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save job');
       }
-      return updated;
-    });
 
-    // Simulate saving
-    await new Promise(resolve => setTimeout(resolve, 1500));
+      toast.success('Rationale saved successfully!', {
+        description: 'Job saved and logged. View in Saved Rationale.',
+      });
 
-    // Update step 6 to success
-    setJobSteps(prev => {
-      const updated = [...prev];
-      const stepIndex = updated.findIndex(s => s.step_number === 6);
-      if (stepIndex !== -1) {
-        updated[stepIndex] = {
-          ...updated[stepIndex],
-          status: 'success',
-          ended_at: new Date().toISOString(),
-          message: 'Rationale saved successfully',
-        };
-      }
-      return updated;
-    });
+      setWorkflowStage('saved');
 
-    toast.success('Rationale saved successfully!', {
-      description: 'Job saved and logged. View in Saved Rationale.',
-    });
-
-    setWorkflowStage('saved');
+    } catch (error: any) {
+      console.error('Error saving job:', error);
+      toast.error('Failed to save job', {
+        description: error.message || 'Please try again',
+      });
+    }
   };
 
   const handleSaveAndSign = async () => {
     if (!currentJobId) return;
 
-    setSaveType('save-and-sign');
+    try {
+      setSaveType('save-and-sign');
 
-    toast.info('Saving unsigned PDF and job data', {
-      description: 'Preparing for signed file upload',
-    });
+      toast.info('Saving unsigned PDF and job data', {
+        description: 'Preparing for signed file upload',
+      });
 
-    // Simulate saving
-    await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await fetch(API_ENDPOINTS.manualRationale.save(currentJobId), {
+        method: 'POST',
+        headers: getAuthHeaders(token || ''),
+      });
 
-    toast.success('Unsigned PDF saved successfully', {
-      description: 'Job and rationale log created. Please upload signed PDF.',
-    });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save job');
+      }
 
-    setWorkflowStage('upload-signed');
+      toast.success('Unsigned PDF saved successfully', {
+        description: 'Job and rationale log created. Please upload signed PDF.',
+      });
+
+      setWorkflowStage('upload-signed');
+
+    } catch (error: any) {
+      console.error('Error saving job:', error);
+      toast.error('Failed to save job', {
+        description: error.message || 'Please try again',
+      });
+    }
   };
 
-  const handleSignedFileUpload = async (uploadInfo: { fileName: string; uploadedAt: string }) => {
+  const handleSignedFileUpload = async (file: File) => {
     if (!currentJobId) return;
 
     // Store the uploaded file info
+    const uploadInfo = {
+      fileName: file.name,
+      uploadedAt: new Date().toISOString(),
+    };
     setUploadedSignedFile(uploadInfo);
 
     // Update step 6 to running
@@ -344,7 +448,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           ...updated[stepIndex],
           status: 'success',
           ended_at: new Date().toISOString(),
-          message: `Signed PDF uploaded: ${uploadInfo.fileName}`,
+          message: `Signed PDF uploaded: ${file.name}`,
         };
       }
       return updated;
@@ -360,19 +464,38 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     });
   };
 
-  const handleDeleteJob = () => {
-    toast.success('Job deleted successfully', {
-      description: 'Starting a new analysis',
-    });
-    handleRestart();
+  const handleDeleteJob = async () => {
+    if (!currentJobId) return;
+
+    try {
+      const response = await fetch(API_ENDPOINTS.manualRationale.deleteJob(currentJobId), {
+        method: 'DELETE',
+        headers: getAuthHeaders(token || ''),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete job');
+      }
+
+      toast.success('Job deleted successfully', {
+        description: 'Starting a new analysis',
+      });
+      handleRestart();
+
+    } catch (error: any) {
+      console.error('Error deleting job:', error);
+      toast.error('Failed to delete job', {
+        description: error.message || 'Please try again',
+      });
+    }
   };
 
   const handleRestart = () => {
-    setPlatformName('YouTube');
-    setPlatformId('');
+    setSelectedChannelId('');
     setUrl('');
     setDate(new Date().toISOString().split('T')[0]);
-    setStockDetails([{ id: '1', stockName: '', time: '', analysis: '' }]);
+    setStockDetails([{ id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }]);
     setCurrentJobId(null);
     setJobSteps([]);
     setWorkflowStage('input');
@@ -410,7 +533,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       setIsProcessing(true);
       
       // Run from the selected step to step 5
-      await runStepsFromTo(stepNumber, 5, currentJobId);
+      await runStepsFromTo(stepNumber, 5);
       
       setIsProcessing(false);
       setWorkflowStage('pdf-preview');
@@ -639,33 +762,19 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
                   {/* Platform Details */}
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="platform-name">Platform Name *</Label>
-                      <Select value={platformName} onValueChange={setPlatformName}>
+                      <Label htmlFor="channel">Channel / Platform *</Label>
+                      <Select value={selectedChannelId} onValueChange={setSelectedChannelId}>
                         <SelectTrigger className="bg-background border-input">
-                          <SelectValue placeholder="Select platform" />
+                          <SelectValue placeholder="Select channel / platform" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="YouTube">YouTube</SelectItem>
-                          <SelectItem value="Facebook">Facebook</SelectItem>
-                          <SelectItem value="Telegram">Telegram</SelectItem>
-                          <SelectItem value="Instagram">Instagram</SelectItem>
-                          <SelectItem value="Twitter">Twitter</SelectItem>
-                          <SelectItem value="LinkedIn">LinkedIn</SelectItem>
-                          <SelectItem value="WhatsApp">WhatsApp</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
+                          {channels.map((channel) => (
+                            <SelectItem key={channel.id} value={String(channel.id)}>
+                              {channel.channel_name} ({channel.platform})
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="platform-id">Platform ID *</Label>
-                      <Input
-                        id="platform-id"
-                        value={platformId}
-                        onChange={(e) => setPlatformId(e.target.value)}
-                        placeholder="e.g., @channelname, group ID"
-                        className="bg-background border-input"
-                      />
                     </div>
 
                     <div className="space-y-2">
@@ -782,14 +891,31 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
                           </div>
 
                           <div className="space-y-1.5">
-                            <Label className="text-xs">Analysis *</Label>
-                            <Input
-                              value={stock.analysis}
-                              onChange={(e) => updateStockDetail(stock.id, 'analysis', e.target.value)}
-                              placeholder="Detailed Analysis"
-                              className="bg-background border-input h-9 text-sm"
-                            />
+                            <Label className="text-xs">Chart Type *</Label>
+                            <Select 
+                              value={stock.chartType} 
+                              onValueChange={(value: string) => updateStockDetail(stock.id, 'chartType', value)}
+                            >
+                              <SelectTrigger className="bg-background border-input h-9 text-sm">
+                                <SelectValue placeholder="Select" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Daily">Daily</SelectItem>
+                                <SelectItem value="Weekly">Weekly</SelectItem>
+                                <SelectItem value="Monthly">Monthly</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Analysis *</Label>
+                          <Input
+                            value={stock.analysis}
+                            onChange={(e) => updateStockDetail(stock.id, 'analysis', e.target.value)}
+                            placeholder="Detailed Analysis"
+                            className="bg-background border-input h-9 text-sm"
+                          />
                         </div>
                       </div>
                     </Card>

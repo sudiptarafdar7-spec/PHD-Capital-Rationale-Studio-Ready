@@ -94,3 +94,4 @@ websockets
 yfinance
 yt-dlp
 youtube-transcript-api
+rapidfuzz

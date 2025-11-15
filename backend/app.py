@@ -3,7 +3,7 @@ from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from backend.config import Config
-from backend.api import auth_bp, users_bp, api_keys_bp, pdf_template_bp, uploaded_files_bp, channels_bp, media_rationale_bp, premium_rationale_bp, saved_rationale_bp, activity_logs_bp, dashboard_bp
+from backend.api import auth_bp, users_bp, api_keys_bp, pdf_template_bp, uploaded_files_bp, channels_bp, media_rationale_bp, premium_rationale_bp, manual_rationale_bp, saved_rationale_bp, activity_logs_bp, dashboard_bp
 from backend.utils.database import init_database
 
 def create_app():
@@ -52,6 +52,7 @@ def create_app():
     app.register_blueprint(channels_bp)
     app.register_blueprint(media_rationale_bp)
     app.register_blueprint(premium_rationale_bp)
+    app.register_blueprint(manual_rationale_bp)
     app.register_blueprint(saved_rationale_bp)
     app.register_blueprint(activity_logs_bp)
     app.register_blueprint(dashboard_bp)
