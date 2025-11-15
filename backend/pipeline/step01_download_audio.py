@@ -1,16 +1,14 @@
 """
 Step 1: Download Audio from YouTube Video
-Using RapidAPI YouTube Media Downloader
+Using yt-dlp command-line tool (simple subprocess approach)
 """
 import os
 import subprocess
-import requests
-import re
 
 
 def download_audio(job_id, youtube_url, cookies_file=None):
     """
-    Simple YouTube audio downloader using RapidAPI
+    Simple YouTube audio downloader using yt-dlp
     
     Args:
         job_id: Job identifier
@@ -38,111 +36,32 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     raw_audio_path = os.path.join(audio_folder, "raw_audio.m4a")
     prepared_audio_path = os.path.join(audio_folder, "audio_16k_mono.wav")
     
-    # Extract video ID from URL
-    video_id = extract_video_id(youtube_url)
-    if not video_id:
-        return {
-            "success": False,
-            "error": f"Could not extract video ID from URL: {youtube_url}"
-        }
+    print(f"📹 URL: {youtube_url}")
+    print(f"⏬ Downloading audio with yt-dlp...\n")
     
-    print(f"📹 Video ID: {video_id}")
-    print(f"⏬ Fetching audio download link...\n")
-    
-    # Call RapidAPI to get video details with audio download link
+    # Use yt-dlp to download audio - simple and reliable
     try:
-        # Get API key from environment (fallback to provided key for convenience)
-        rapidapi_key = os.environ.get(
-            "RAPIDAPI_KEY",
-            "c7762ba089msh6c8a18942b1f9cdp1bbc0cjsn10d61d38bef5"
-        )
+        ytdlp_cmd = [
+            "env", "-i",
+            "PATH=/nix/store/am2x1y1qyja0hbyjpffj7rcvycp9d644-yt-dlp-2025.6.30/bin:/usr/bin:/bin",
+            "yt-dlp",
+            "-f", "bestaudio[ext=m4a]/bestaudio",  # Best audio in m4a format
+            "-o", raw_audio_path,                   # Output file
+            "--no-playlist",                        # Don't download playlists
+            "--no-warnings",                        # Suppress warnings
+            "--quiet",                              # Quiet mode
+            "--progress",                           # Show progress
+            youtube_url
+        ]
         
-        api_url = "https://youtube-media-downloader.p.rapidapi.com/v2/video/details"
-        querystring = {
-            "videoId": video_id,
-            "urlAccess": "normal",
-            "videos": "auto",
-            "audios": "auto"
-        }
-        headers = {
-            "x-rapidapi-key": rapidapi_key,
-            "x-rapidapi-host": "youtube-media-downloader.p.rapidapi.com"
-        }
+        result = subprocess.run(ytdlp_cmd, capture_output=True, text=True, timeout=300)
         
-        print(f"📡 Calling API...")
-        response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # Check for errors
-        if data.get("errorId") != "Success":
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or "Unknown error"
             return {
                 "success": False,
-                "error": f"API error: {data.get('errorId', 'Unknown error')}"
+                "error": f"yt-dlp failed: {error_msg}"
             }
-        
-        # Get video title
-        video_title = data.get("title", "Unknown")
-        print(f"📹 Video: {video_title}")
-        
-        # Extract audio download URL
-        audios = data.get("audios", {})
-        if audios.get("errorId") != "Success":
-            return {
-                "success": False,
-                "error": f"Audio extraction failed: {audios.get('errorId', 'Unknown error')}"
-            }
-        
-        audio_items = audios.get("items", [])
-        if not audio_items:
-            return {
-                "success": False,
-                "error": "No audio streams available for this video"
-            }
-        
-        # Get the first audio item (usually best quality)
-        audio_item = audio_items[0]
-        download_link = audio_item.get("url")
-        audio_size = audio_item.get("sizeText", "Unknown size")
-        
-        if not download_link:
-            return {
-                "success": False,
-                "error": "API did not return an audio download URL"
-            }
-        
-        print(f"✅ Audio found: {audio_size}")
-        print(f"🔗 Download URL obtained")
-        
-        print(f"📥 Downloading audio...\n")
-        
-        # Download the audio file with proper headers for YouTube CDN
-        download_headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
-            ),
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "identity",
-            "Range": "bytes=0-",
-        }
-        
-        audio_response = requests.get(
-            download_link, 
-            headers=download_headers,
-            timeout=120, 
-            stream=True
-        )
-        audio_response.raise_for_status()
-        
-        # Write to file
-        with open(raw_audio_path, 'wb') as f:
-            for chunk in audio_response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
         
         # Verify file was downloaded
         if not os.path.exists(raw_audio_path) or os.path.getsize(raw_audio_path) == 0:
@@ -154,10 +73,10 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         size_mb = os.path.getsize(raw_audio_path) / (1024 * 1024)
         print(f"✅ Audio downloaded: {raw_audio_path} ({size_mb:.2f} MB)")
         
-    except requests.exceptions.RequestException as e:
+    except subprocess.TimeoutExpired:
         return {
             "success": False,
-            "error": f"API request failed: {str(e)}"
+            "error": "Download timed out after 5 minutes"
         }
     except Exception as e:
         return {
@@ -205,28 +124,3 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         "prepared_size_mb": prepared_size_mb,
         "error": None,
     }
-
-
-def extract_video_id(youtube_url):
-    """
-    Extract YouTube video ID from various URL formats
-    
-    Supports:
-    - https://www.youtube.com/watch?v=VIDEO_ID
-    - https://youtu.be/VIDEO_ID
-    - https://www.youtube.com/embed/VIDEO_ID
-    - https://m.youtube.com/watch?v=VIDEO_ID
-    - https://www.youtube.com/live/VIDEO_ID (live streams)
-    - https://www.youtube.com/shorts/VIDEO_ID
-    """
-    patterns = [
-        r'(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|live\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
-        r'[?&]v=([a-zA-Z0-9_-]{11})',
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, youtube_url)
-        if match:
-            return match.group(1)
-    
-    return None
