@@ -4,7 +4,99 @@ Creates stocks_with_charts.csv by adding CHART column
 """
 import os
 import csv
-from backend.pipeline.premium.step04_generate_charts import generate_chart_for_stock
+import pandas as pd
+from datetime import datetime, timedelta
+from backend.pipeline.premium.step04_generate_charts import (
+    _post, zip_candles, make_premium_chart
+)
+
+def fetch_chart_data(security_id, dhan_api_key, timeframe='1D', days_back=180):
+    """
+    Fetch chart data from Dhan API
+    
+    Args:
+        security_id: Security ID from master file
+        dhan_api_key: Dhan API key
+        timeframe: Chart timeframe (1D, 1W, 1M)
+        days_back: Number of days of historical data
+    
+    Returns:
+        DataFrame with OHLCV data or None
+    """
+    try:
+        # Calculate date range
+        to_date = datetime.now().date()
+        from_date = to_date - timedelta(days=days_back)
+        
+        # Prepare API request
+        headers = {
+            "access-token": dhan_api_key,
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "securityId": str(security_id),
+            "exchangeSegment": "NSE_EQ",
+            "instrument": "EQUITY",
+            "expiryCode": 0,
+            "fromDate": from_date.strftime("%Y-%m-%d"),
+            "toDate": to_date.strftime("%Y-%m-%d")
+        }
+        
+        # Fetch historical data
+        response = _post("/v2/charts/historical", payload, headers)
+        
+        if not response or 'data' not in response:
+            return None
+        
+        # Convert to DataFrame
+        df = zip_candles(response)
+        
+        if df.empty:
+            return None
+        
+        return df
+        
+    except Exception as e:
+        print(f"Error fetching chart data: {str(e)}")
+        return None
+
+def generate_chart(security_id, stock_symbol, chart_path, dhan_api_key, timeframe='1D'):
+    """
+    Generate stock chart and save to file
+    
+    Args:
+        security_id: Security ID
+        stock_symbol: Stock trading symbol
+        chart_path: Path to save chart image
+        dhan_api_key: Dhan API key
+        timeframe: Chart timeframe (1D, 1W, 1M)
+    
+    Returns:
+        bool: True if successful
+    """
+    try:
+        # Fetch chart data
+        df = fetch_chart_data(security_id, dhan_api_key, timeframe)
+        
+        if df is None or df.empty:
+            print(f"No chart data available for {stock_symbol}")
+            return False
+        
+        # Prepare metadata
+        meta = {
+            'stock_name': stock_symbol,
+            'chart_type': timeframe
+        }
+        
+        # Generate chart
+        make_premium_chart(df, meta, chart_path, chart_type=timeframe)
+        
+        return os.path.exists(chart_path)
+        
+    except Exception as e:
+        print(f"Error generating chart for {stock_symbol}: {str(e)}")
+        return False
 
 def run(job_folder, dhan_api_key):
     """
@@ -37,9 +129,9 @@ def run(job_folder, dhan_api_key):
         
         # Generate chart for each stock based on chart type
         for i, stock in enumerate(stocks_data):
-            security_id = stock['SECURITY ID']
-            chart_type = stock['CHART TYPE']  # Daily, Weekly, or Monthly
-            stock_symbol = stock['STOCK SYMBOL']
+            security_id = stock.get('SECURITY ID', '')
+            chart_type = stock.get('CHART TYPE', 'Daily')
+            stock_symbol = stock.get('STOCK SYMBOL', '')
             
             # Map chart type to timeframe
             timeframe_map = {
@@ -49,13 +141,13 @@ def run(job_folder, dhan_api_key):
             }
             timeframe = timeframe_map.get(chart_type, '1D')
             
-            if security_id:
+            if security_id and security_id.strip():
                 chart_filename = f"stock_{i+1}_{stock_symbol.replace(' ', '_')}.png"
                 chart_path = os.path.join(charts_folder, chart_filename)
                 
-                success = generate_chart_for_stock(
+                success = generate_chart(
                     security_id=security_id,
-                    stock_name=stock_symbol,
+                    stock_symbol=stock_symbol,
                     chart_path=chart_path,
                     dhan_api_key=dhan_api_key,
                     timeframe=timeframe
@@ -63,6 +155,7 @@ def run(job_folder, dhan_api_key):
                 
                 stock['CHART'] = chart_filename if success else 'N/A'
             else:
+                print(f"⚠️ Missing SECURITY ID for {stock_symbol}")
                 stock['CHART'] = 'N/A'
         
         # Write output CSV
