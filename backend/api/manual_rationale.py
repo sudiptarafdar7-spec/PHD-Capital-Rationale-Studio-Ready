@@ -334,7 +334,7 @@ def process_manual_job_async(job_id):
                 with get_db_cursor(commit=True) as cursor:
                     cursor.execute("""
                         UPDATE job_steps 
-                        SET status = 'failed', error_message = %s, ended_at = %s
+                        SET status = 'failed', message = %s, ended_at = %s
                         WHERE job_id = %s AND step_number = %s
                     """, (error_msg, datetime.now(), job_id, step_num))
                     
