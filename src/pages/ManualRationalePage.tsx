@@ -83,59 +83,89 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   };
 
   const loadSavedJob = React.useCallback(async (jobId: string) => {
-    // Import mock data functions
-    const { mockSavedRationale, getMockManualRationaleSteps } = await import('../lib/mock-data');
-    
-    // Find the saved rationale
-    const savedRationale = mockSavedRationale.find(r => r.job_id === jobId);
-    
-    if (!savedRationale) {
-      toast.error('Job not found', {
-        description: `Could not find job with ID: ${jobId}`,
+    try {
+      // Fetch saved rationale from backend
+      const response = await fetch(API_ENDPOINTS.savedRationale.getAll, {
+        headers: getAuthHeaders(token || ''),
       });
-      return;
-    }
 
-    // Set the job ID
-    setCurrentJobId(jobId);
+      if (!response.ok) {
+        throw new Error('Failed to fetch saved rationale');
+      }
 
-    // Load completed steps
-    const steps = getMockManualRationaleSteps(jobId, true);
-    setJobSteps(steps);
+      const savedRationales = await response.json();
+      const savedRationale = savedRationales.find((r: any) => r.job_id === jobId);
 
-    // Determine workflow stage based on signed file
-    if (savedRationale.signed_path) {
-      setWorkflowStage('completed');
-      setSaveType('save-and-sign');
-      setUploadedSignedFile({
-        fileName: 'final_rationale_report_signed.pdf',
-        uploadedAt: savedRationale.signed_uploaded_at || new Date().toISOString(),
+      if (!savedRationale) {
+        toast.error('Job not found', {
+          description: `Could not find job with ID: ${jobId}`,
+        });
+        return;
+      }
+
+      // Set the job ID
+      setCurrentJobId(jobId);
+
+      // Fetch job steps from backend
+      const jobResponse = await fetch(API_ENDPOINTS.manualRationale.getJob(jobId), {
+        headers: getAuthHeaders(token || ''),
       });
-    } else {
-      setWorkflowStage('saved');
-      setSaveType('save');
+
+      if (jobResponse.ok) {
+        const jobData = await jobResponse.json();
+        const mappedSteps = jobData.job_steps.map((step: any) => ({
+          id: String(step.id),
+          job_id: step.job_id,
+          step_number: step.step_number,
+          name: step.step_name,
+          status: step.status,
+          message: step.error_message || undefined,
+          started_at: step.started_at || undefined,
+          ended_at: step.ended_at || undefined,
+        }));
+        setJobSteps(mappedSteps);
+      }
+
+      // Determine workflow stage based on signed file
+      if (savedRationale.signed_path) {
+        setWorkflowStage('completed');
+        setSaveType('save-and-sign');
+        setUploadedSignedFile({
+          fileName: savedRationale.signed_path.split('/').pop() || 'signed.pdf',
+          uploadedAt: savedRationale.signed_uploaded_at || new Date().toISOString(),
+        });
+      } else {
+        setWorkflowStage('saved');
+        setSaveType('save');
+      }
+
+      // Load form data from saved rationale
+      setSelectedChannelId(String(savedRationale.channel_id || ''));
+      setUrl(savedRationale.youtube_url || '');
+      setDate(savedRationale.video_upload_date || '');
+
+      // Parse stock names into stock details (basic reconstruction)
+      const stockNames = savedRationale.stock_name.split(',').map((s: string) => s.trim());
+      const loadedStocks = stockNames.map((name: string, index: number) => ({
+        id: `loaded-${index}`,
+        stockName: name,
+        time: '10:00',
+        chartType: 'Daily' as const,
+        analysis: '',
+      }));
+      setStockDetails(loadedStocks.length > 0 ? loadedStocks : [{ id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }]);
+
+      toast.success('Loaded saved job', {
+        description: `Job ID: ${jobId}`,
+      });
+
+    } catch (error: any) {
+      console.error('Error loading saved job:', error);
+      toast.error('Failed to load saved job', {
+        description: error.message || 'Please try again',
+      });
     }
-
-    // Load form data from saved rationale (mock data for now)
-    setSelectedChannelId(String(savedRationale.id || '1')); // Set channel ID from saved data
-    setUrl(savedRationale.youtube_url);
-    setDate(savedRationale.video_upload_date);
-    
-    // Parse stock names into stock details
-    const stockNames = savedRationale.stock_name.split(',').map(s => s.trim());
-    const loadedStocks = stockNames.map((name, index) => ({
-      id: `loaded-${index}`,
-      stockName: name,
-      time: '10:00', // Mock time in HH:MM format
-      chartType: 'Daily', // Mock chart type
-      analysis: 'Detailed analysis from saved rationale', // Mock analysis
-    }));
-    setStockDetails(loadedStocks.length > 0 ? loadedStocks : [{ id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }]);
-
-    toast.success('Loaded saved job', {
-      description: `Job ID: ${jobId}`,
-    });
-  }, []);
+  }, [token]);
 
   React.useEffect(() => {
     if (selectedJobId) {
@@ -191,53 +221,6 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     return true;
   };
 
-  const runStepsFromTo = async (fromStep: number, toStep: number) => {
-    for (let stepNum = fromStep; stepNum <= toStep; stepNum++) {
-      // Update step to running
-      setJobSteps(prev => {
-        const updated = [...prev];
-        const stepIndex = updated.findIndex(s => s.step_number === stepNum);
-        if (stepIndex !== -1) {
-          updated[stepIndex] = {
-            ...updated[stepIndex],
-            status: 'running',
-            started_at: new Date().toISOString(),
-          };
-        }
-        return updated;
-      });
-
-      // Simulate step execution
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Update step to success
-      setJobSteps(prev => {
-        const updated = [...prev];
-        const stepIndex = updated.findIndex(s => s.step_number === stepNum);
-        if (stepIndex !== -1) {
-          updated[stepIndex] = {
-            ...updated[stepIndex],
-            status: 'success',
-            ended_at: new Date().toISOString(),
-            message: `Completed ${updated[stepIndex].name}`,
-          };
-        }
-        return updated;
-      });
-
-      toast.success(`Step ${stepNum} Complete`, {
-        description: MANUAL_STEPS[stepNum - 1].name,
-      });
-
-      // Play bell sound for step 5 (Generate PDF)
-      if (stepNum === 5) {
-        playCompletionBell();
-        toast.success('PDF Generated! 📄', {
-          description: 'Rationale report is ready',
-        });
-      }
-    }
-  };
 
   const generateRationale = async () => {
     if (!validateForm()) return;
@@ -415,53 +398,47 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   const handleSignedFileUpload = async (file: File) => {
     if (!currentJobId) return;
 
-    // Store the uploaded file info
-    const uploadInfo = {
-      fileName: file.name,
-      uploadedAt: new Date().toISOString(),
-    };
-    setUploadedSignedFile(uploadInfo);
+    try {
+      toast.info('Uploading signed PDF...', {
+        description: 'Processing signed file',
+      });
 
-    // Update step 6 to running
-    setJobSteps(prev => {
-      const updated = [...prev];
-      const stepIndex = updated.findIndex(s => s.step_number === 6);
-      if (stepIndex !== -1) {
-        updated[stepIndex] = {
-          ...updated[stepIndex],
-          status: 'running',
-          started_at: new Date().toISOString(),
-        };
+      const formData = new FormData();
+      formData.append('signedPdf', file);
+      formData.append('jobId', currentJobId);
+
+      const response = await fetch(API_ENDPOINTS.savedRationale.uploadSigned, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to upload signed PDF');
       }
-      return updated;
-    });
 
-    // Simulate final processing
-    await new Promise(resolve => setTimeout(resolve, 1500));
+      const uploadInfo = {
+        fileName: file.name,
+        uploadedAt: new Date().toISOString(),
+      };
+      setUploadedSignedFile(uploadInfo);
 
-    // Update step 6 to success
-    setJobSteps(prev => {
-      const updated = [...prev];
-      const stepIndex = updated.findIndex(s => s.step_number === 6);
-      if (stepIndex !== -1) {
-        updated[stepIndex] = {
-          ...updated[stepIndex],
-          status: 'success',
-          ended_at: new Date().toISOString(),
-          message: `Signed PDF uploaded: ${file.name}`,
-        };
-      }
-      return updated;
-    });
+      setWorkflowStage('completed');
+      playSuccessBell();
 
-    setWorkflowStage('completed');
+      toast.success('Workflow completed! 🎉', {
+        description: 'Signed PDF uploaded successfully',
+      });
 
-    // Play success bell for signed file upload
-    playSuccessBell();
-
-    toast.success('Workflow completed! 🎉', {
-      description: 'All steps finished successfully with signed PDF',
-    });
+    } catch (error: any) {
+      console.error('Error uploading signed PDF:', error);
+      toast.error('Failed to upload signed PDF', {
+        description: error.message || 'Please try again',
+      });
+    }
   };
 
   const handleDeleteJob = async () => {
@@ -507,69 +484,39 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   const handleRestartFromStep = async (stepNumber: number) => {
     if (!currentJobId) return;
 
-    const stepName = MANUAL_STEPS[stepNumber - 1]?.name || `Step ${stepNumber}`;
-    toast.info('Restarting Pipeline', {
-      description: `Restarting from ${stepName} - All steps from ${stepNumber} to 6 will be re-executed`,
-    });
-
-    // Reset all steps from stepNumber onwards to pending
-    setJobSteps(prev => {
-      const updated = [...prev];
-      for (let i = stepNumber - 1; i < updated.length; i++) {
-        updated[i] = {
-          ...updated[i],
-          status: 'pending',
-          started_at: undefined,
-          ended_at: undefined,
-          message: undefined,
-        };
-      }
-      return updated;
-    });
-
-    // If restarting from steps 1-5, run pipeline through step 5, then continue with step 6
-    if (stepNumber <= 5) {
-      setWorkflowStage('processing');
-      setIsProcessing(true);
-      
-      // Run from the selected step to step 5
-      await runStepsFromTo(stepNumber, 5);
-      
-      setIsProcessing(false);
-      setWorkflowStage('pdf-preview');
-      
-      toast.success('Steps 1-5 Completed', {
-        description: 'PDF generated successfully. Now executing Step 6...',
+    try {
+      const stepName = MANUAL_STEPS[stepNumber - 1]?.name || `Step ${stepNumber}`;
+      toast.info('Restarting Pipeline', {
+        description: `Restarting from ${stepName}`,
       });
 
-      // Auto-execute Step 6 based on previous save type
-      if (saveType === 'save') {
-        await handleSave();
-      } else if (saveType === 'save-and-sign') {
-        await handleSaveAndSign();
-      } else {
-        // If no save type was set before, just show PDF preview
-        toast.info('PDF Ready for Review', {
-          description: 'Choose Save or Save & Sign to complete Step 6',
-        });
+      // Call backend API to restart from step
+      const response = await fetch(API_ENDPOINTS.manualRationale.restartStep(currentJobId, stepNumber), {
+        method: 'POST',
+        headers: getAuthHeaders(token || ''),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to restart step');
       }
-    } else if (stepNumber === 6) {
-      // If restarting step 6 only
-      if (saveType === 'save-and-sign') {
-        setWorkflowStage('upload-signed');
-        setUploadedSignedFile(null);
-        toast.info('Ready for Signed PDF Upload', {
-          description: 'Please upload the signed PDF to complete Step 6',
-        });
-      } else if (saveType === 'save') {
-        // Re-run save
-        await handleSave();
-      } else {
-        setWorkflowStage('pdf-preview');
-        toast.info('Back to PDF Preview', {
-          description: 'Choose Save or Save & Sign to complete Step 6',
-        });
-      }
+
+      // Set processing state
+      setIsProcessing(true);
+      setWorkflowStage('processing');
+
+      toast.success('Restart initiated', {
+        description: 'Pipeline is restarting from the selected step',
+      });
+
+      // Poll for job status (reuse existing polling logic)
+      pollJobStatus(currentJobId);
+
+    } catch (error: any) {
+      console.error('Error restarting step:', error);
+      toast.error('Failed to restart step', {
+        description: error.message || 'Please try again',
+      });
     }
   };
 
