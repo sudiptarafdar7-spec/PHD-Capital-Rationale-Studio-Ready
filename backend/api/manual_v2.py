@@ -126,15 +126,33 @@ def get_job(job_id):
 @jwt_required()
 def run_job(job_id):
     try:
-        with get_db_cursor() as cursor:
+        with get_db_cursor(commit=True) as cursor:
             cursor.execute("SELECT status FROM jobs WHERE id = %s", (job_id,))
             job = cursor.fetchone()
             
             if not job:
                 return jsonify({'error': 'Job not found'}), 404
             
-            if job['status'] not in ['pending', 'failed']:
-                return jsonify({'error': 'Job is already running or completed'}), 400
+            current_status = job['status']
+            
+            # Allow restart if job is completed, failed, or pending
+            if current_status == 'processing':
+                return jsonify({'error': 'Job is currently running. Please wait for it to complete.'}), 400
+            
+            # Reset job status to pending for restart
+            if current_status in ['pdf_ready', 'completed', 'signed', 'failed']:
+                cursor.execute("""
+                    UPDATE jobs 
+                    SET status = %s, progress = %s, current_step = %s, updated_at = %s 
+                    WHERE id = %s
+                """, ('pending', 0, 0, datetime.now(), job_id))
+                
+                # Reset all job steps to pending
+                cursor.execute("""
+                    UPDATE job_steps 
+                    SET status = %s, message = NULL, started_at = NULL, ended_at = NULL 
+                    WHERE job_id = %s
+                """, ('pending', job_id))
         
         orchestrator = ManualRationaleOrchestrator(job_id)
         orchestrator.run_async()
