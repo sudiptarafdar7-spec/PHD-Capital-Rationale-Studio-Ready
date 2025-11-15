@@ -8,10 +8,71 @@ import os
 import secrets
 import threading
 import json
+import csv
 
 def is_admin(user_id):
     user = User.find_by_id(user_id)
     return user and user.get('role') == 'admin'
+
+def load_master_stock_data():
+    """
+    Load master CSV and create lookup dictionary for EQUITY stocks
+    Returns: dict mapping stock_symbol -> {securityId, listedName, shortName, exchange, instrument}
+    """
+    try:
+        # Get master CSV file path from database
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT file_path FROM uploaded_files 
+                WHERE file_type = 'masterFile' 
+                ORDER BY uploaded_at DESC 
+                LIMIT 1
+            """)
+            result = cursor.fetchone()
+            
+            if not result:
+                return None
+            
+            master_csv_path = result['file_path']
+        
+        if not os.path.exists(master_csv_path):
+            return None
+        
+        # Read master CSV and build lookup dictionary
+        stock_lookup = {}
+        with open(master_csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Filter by EQUITY instrument
+                instrument = row.get('SEM_INSTRUMENT_NAME', '')
+                if instrument.upper() != 'EQUITY':
+                    continue
+                
+                # Filter by ES exchange type
+                exch_type = row.get('SEM_EXCH_INSTRUMENT_TYPE', '')
+                if exch_type.upper() != 'ES':
+                    continue
+                
+                # Get stock symbol from SEM_TRADING_SYMBOL
+                stock_symbol = row.get('SEM_TRADING_SYMBOL', '').strip()
+                
+                if not stock_symbol:
+                    continue
+                
+                # Store master data indexed by stock symbol (case-insensitive)
+                stock_lookup[stock_symbol.upper()] = {
+                    'securityId': row.get('SEM_SMST_SECURITY_ID', ''),
+                    'listedName': row.get('SM_SYMBOL_NAME', ''),
+                    'shortName': row.get('SEM_CUSTOM_SYMBOL', stock_symbol),
+                    'exchange': row.get('SEM_EXM_EXCH_ID', 'BSE'),
+                    'instrument': row.get('SEM_INSTRUMENT_NAME', 'EQUITY')
+                }
+        
+        return stock_lookup
+        
+    except Exception as e:
+        print(f"Error loading master stock data: {str(e)}")
+        return None
 
 def check_job_access(job_id, current_user_id):
     """Verify user owns this job or is admin"""
@@ -37,9 +98,9 @@ def create_job():
         
         # Extract input data
         channel_id = data.get('channelId')
-        url = data.get('url', '')  # Optional
+        url = data.get('url', '')  # Optional YouTube URL
         call_date = data.get('callDate')
-        stocks = data.get('stocks', [])  # [{stockName, time, chartType, analysis, securityId, listedName, shortName, exchange, instrument}]
+        stocks = data.get('stocks', [])  # [{stockName, time, chartType, analysis}]
         
         if not channel_id or not call_date or not stocks:
             return jsonify({'error': 'Missing required fields'}), 400
@@ -56,6 +117,51 @@ def create_job():
             if not channel:
                 return jsonify({'error': 'Channel not found'}), 404
         
+        # Load master stock data for automatic enrichment
+        stock_lookup = load_master_stock_data()
+        if stock_lookup is None:
+            return jsonify({'error': 'Master CSV file not found or cannot be read'}), 500
+        
+        # Enrich stock data with master CSV lookup
+        enriched_stocks = []
+        missing_stocks = []
+        
+        for stock in stocks:
+            stock_symbol = stock.get('stockName', '').strip().upper()
+            
+            if not stock_symbol:
+                continue
+            
+            # Lookup master data
+            master_data = stock_lookup.get(stock_symbol)
+            
+            if not master_data:
+                missing_stocks.append(stock_symbol)
+                continue
+            
+            # Enrich with master data
+            enriched_stock = {
+                'stockName': stock_symbol,
+                'time': stock.get('time', ''),
+                'chartType': stock.get('chartType', 'Daily'),
+                'analysis': stock.get('analysis', ''),
+                'securityId': master_data['securityId'],
+                'listedName': master_data['listedName'],
+                'shortName': master_data['shortName'],
+                'exchange': master_data['exchange'],
+                'instrument': master_data['instrument']
+            }
+            enriched_stocks.append(enriched_stock)
+        
+        # Validate that all stocks were found
+        if missing_stocks:
+            return jsonify({
+                'error': f'Stock symbols not found in master CSV: {", ".join(missing_stocks)}'
+            }), 400
+        
+        if not enriched_stocks:
+            return jsonify({'error': 'No valid stocks provided'}), 400
+        
         # Generate unique job ID
         job_id = f"manual-{secrets.token_hex(4)}"
         
@@ -66,21 +172,7 @@ def create_job():
         os.makedirs(os.path.join(job_folder, 'charts'), exist_ok=True)
         os.makedirs(os.path.join(job_folder, 'pdf'), exist_ok=True)
         
-        # Save input data to input.json
-        input_data = {
-            'channelId': channel_id,
-            'channelName': channel['channel_name'],
-            'platform': channel['platform'],
-            'url': url,
-            'callDate': call_date,
-            'stocks': stocks
-        }
-        input_file_path = os.path.join(job_folder, 'input.json')
-        with open(input_file_path, 'w', encoding='utf-8') as f:
-            json.dump(input_data, f, indent=2)
-        
-        # Create input.csv with all master data immediately (skip mapping step)
-        import csv
+        # Create input.csv with enriched master data
         input_csv_path = os.path.join(job_folder, 'analysis', 'input.csv')
         with open(input_csv_path, 'w', newline='', encoding='utf-8') as f:
             fieldnames = ['DATE', 'TIME', 'STOCK SYMBOL', 'CHART TYPE', 
@@ -88,24 +180,27 @@ def create_job():
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             
-            for stock in stocks:
+            for stock in enriched_stocks:
                 writer.writerow({
                     'DATE': call_date,
-                    'TIME': stock.get('time', ''),
-                    'STOCK SYMBOL': stock.get('stockName', ''),
-                    'CHART TYPE': stock.get('chartType', 'Daily'),
-                    'LISTED NAME': stock.get('listedName', ''),
-                    'SHORT NAME': stock.get('shortName', stock.get('stockName', '')),
-                    'SECURITY ID': stock.get('securityId', ''),
-                    'EXCHANGE': stock.get('exchange', 'BSE'),
-                    'INSTRUMENT': stock.get('instrument', 'EQUITY'),
-                    'ANALYSIS': stock.get('analysis', '')
+                    'TIME': stock['time'],
+                    'STOCK SYMBOL': stock['stockName'],
+                    'CHART TYPE': stock['chartType'],
+                    'LISTED NAME': stock['listedName'],
+                    'SHORT NAME': stock['shortName'],
+                    'SECURITY ID': stock['securityId'],
+                    'EXCHANGE': stock['exchange'],
+                    'INSTRUMENT': stock['instrument'],
+                    'ANALYSIS': stock['analysis']
                 })
         
         # Generate rationale title
         rationale_title = f"{channel['platform'].upper()} - {channel['channel_name']} - {call_date}"
         
-        # Create job record in database
+        # Store enriched stocks count
+        stocks_str = ', '.join([s['stockName'] for s in enriched_stocks])
+        
+        # Create job record in database with youtube_url
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("""
                 INSERT INTO jobs (
@@ -122,7 +217,7 @@ def create_job():
                 rationale_title,
                 call_date,
                 '00:00:00',
-                url if url else None,
+                url if url else None,  # Store YouTube URL
                 'pending',
                 0,
                 0,
@@ -184,11 +279,6 @@ def process_manual_job_async(job_id):
             job = cursor.fetchone()
         
         job_folder = job['folder_path']
-        
-        # Read input data
-        input_file_path = os.path.join(job_folder, 'input.json')
-        with open(input_file_path, 'r', encoding='utf-8') as f:
-            input_data = json.load(f)
         
         # Get API keys from database
         with get_db_cursor() as cursor:
@@ -322,17 +412,21 @@ def save_job(job_id):
         if not has_access:
             return jsonify({'error': error}), 403 if error == "Access denied" else 404
         
-        # Get job and input data
+        # Get job data
         with get_db_cursor() as cursor:
             cursor.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
             job = cursor.fetchone()
         
-        # Read input data
-        input_file_path = os.path.join(job['folder_path'], 'input.json')
-        with open(input_file_path, 'r', encoding='utf-8') as f:
-            input_data = json.load(f)
+        # Read stock symbols from input.csv
+        input_csv_path = os.path.join(job['folder_path'], 'analysis', 'input.csv')
+        stock_symbols = []
+        if os.path.exists(input_csv_path):
+            with open(input_csv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    stock_symbols.append(row.get('STOCK SYMBOL', ''))
         
-        stocks_str = ', '.join([s['stockName'] for s in input_data['stocks']])
+        stocks_str = ', '.join(stock_symbols) if stock_symbols else 'Manual Rationale'
         
         # Save to saved_rationale table
         with get_db_cursor(commit=True) as cursor:
@@ -353,9 +447,9 @@ def save_job(job_id):
                 job['channel_id'],
                 'Manual Rationale',
                 stocks_str,
-                input_data.get('url'),
+                job.get('youtube_url'),  # Use youtube_url from jobs table
                 job['date'],
-                input_data.get('channelName'),
+                job['title'],  # Use job title as youtube_video_name
                 job.get('pdf_path'),
                 'completed',
                 datetime.now(),
