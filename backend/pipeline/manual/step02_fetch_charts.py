@@ -1,5 +1,5 @@
 """
-Step 3: Fetch stock charts based on chart type
+Step 2: Fetch stock charts based on chart type
 Creates stocks_with_charts.csv by adding CHART column
 """
 import os
@@ -78,5 +78,5 @@ def run(job_folder, dhan_api_key):
         return {'success': True}
         
     except Exception as e:
-        print(f"Error in step03_fetch_charts: {str(e)}")
+        print(f"Error in step02_fetch_charts: {str(e)}")
         return {'success': False, 'error': str(e)}

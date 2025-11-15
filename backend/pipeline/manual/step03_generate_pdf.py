@@ -1,5 +1,5 @@
 """
-Step 4: Generate PDF report from stocks with charts
+Step 3: Generate PDF report from stocks with charts
 Creates manual_rationale.pdf
 """
 import os
@@ -64,5 +64,5 @@ def run(job_folder):
         return {'success': True}
         
     except Exception as e:
-        print(f"Error in step04_generate_pdf: {str(e)}")
+        print(f"Error in step03_generate_pdf: {str(e)}")
         return {'success': False, 'error': str(e)}

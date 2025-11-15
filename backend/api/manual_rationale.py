@@ -165,9 +165,9 @@ def process_manual_job_async(job_id):
     try:
         # Import pipeline steps
         from backend.pipeline.manual import (
-            step02_fetch_cmp,
-            step03_fetch_charts,
-            step04_generate_pdf
+            step01_fetch_cmp,
+            step02_fetch_charts,
+            step03_generate_pdf
         )
         
         # Update job status to processing
@@ -196,11 +196,11 @@ def process_manual_job_async(job_id):
             dhan_key_row = cursor.fetchone()
             dhan_api_key = dhan_key_row['key_value'] if dhan_key_row else None
         
-        # Define pipeline steps (skip step 1 - mapping is done at input creation)
+        # Define pipeline steps (3 steps total - mapping done at input creation)
         steps = [
-            (1, lambda: step02_fetch_cmp.run(job_folder, dhan_api_key)),
-            (2, lambda: step03_fetch_charts.run(job_folder, dhan_api_key)),
-            (3, lambda: step04_generate_pdf.run(job_folder)),
+            (1, lambda: step01_fetch_cmp.run(job_folder, dhan_api_key)),
+            (2, lambda: step02_fetch_charts.run(job_folder, dhan_api_key)),
+            (3, lambda: step03_generate_pdf.run(job_folder)),
         ]
         
         # Execute steps sequentially

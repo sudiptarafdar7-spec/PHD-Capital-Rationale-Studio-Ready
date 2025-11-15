@@ -1,5 +1,5 @@
 """
-Step 2: Fetch Current Market Price for stocks
+Step 1: Fetch Current Market Price for stocks
 Creates stocks_with_cmp.csv by adding CMP column
 """
 import os
@@ -54,5 +54,5 @@ def run(job_folder, dhan_api_key):
         return {'success': True}
         
     except Exception as e:
-        print(f"Error in step02_fetch_cmp: {str(e)}")
+        print(f"Error in step01_fetch_cmp: {str(e)}")
         return {'success': False, 'error': str(e)}
