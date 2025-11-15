@@ -585,36 +585,35 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     if (!currentJobId) return;
 
     try {
-      const stepName = MANUAL_STEPS[stepNumber - 1]?.name || `Step ${stepNumber}`;
       toast.info('Restarting Pipeline', {
-        description: `Restarting from ${stepName}`,
+        description: 'Re-running entire pipeline (Manual v2 - 3 steps)',
       });
 
-      // Call backend API to restart from step
-      const response = await fetch(API_ENDPOINTS.manualRationale.restartStep(currentJobId, stepNumber), {
+      // For Manual v2, re-run the entire pipeline (it's only 3 steps and very fast)
+      const response = await fetch(API_ENDPOINTS.manualV2.runPipeline(currentJobId), {
         method: 'POST',
         headers: getAuthHeaders(token || ''),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to restart step');
+        throw new Error(error.error || 'Failed to restart pipeline');
       }
 
       // Set processing state
       setIsProcessing(true);
       setWorkflowStage('processing');
 
-      toast.success('Restart initiated', {
-        description: 'Pipeline is restarting from the selected step',
+      toast.success('Pipeline restarted', {
+        description: 'Running all 3 steps from beginning',
       });
 
-      // Poll for job status (reuse existing polling logic)
+      // Poll for job status
       pollJobStatus(currentJobId);
 
     } catch (error: any) {
       console.error('Error restarting step:', error);
-      toast.error('Failed to restart step', {
+      toast.error('Failed to restart pipeline', {
         description: error.message || 'Please try again',
       });
     }
