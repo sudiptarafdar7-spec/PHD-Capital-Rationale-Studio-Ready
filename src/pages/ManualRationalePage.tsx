@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PenTool, Plus, Trash2, Calendar, Save, Download, FileSignature, Loader2, Clock } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -50,6 +51,7 @@ const MANUAL_STEPS: JobStep[] = [
 
 export default function ManualRationalePage({ selectedJobId }: ManualRationalePageProps) {
   const { token } = useAuth();
+  const navigate = useNavigate();
   
   const [channels, setChannels] = useState<Channel[]>([]);
   const [selectedChannelId, setSelectedChannelId] = useState('');
@@ -897,7 +899,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
               </div>
             )}
             <Button
-              onClick={() => window.location.href = '/saved-rationale'}
+              onClick={() => navigate('/saved-rationale')}
               className="bg-green-600 hover:bg-green-700 text-white"
             >
               View in Saved Rationale
