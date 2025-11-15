@@ -117,8 +117,25 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         
         print(f"📥 Downloading audio...\n")
         
-        # Download the audio file
-        audio_response = requests.get(download_link, timeout=120, stream=True)
+        # Download the audio file with proper headers for YouTube CDN
+        download_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "identity",
+            "Range": "bytes=0-",
+        }
+        
+        audio_response = requests.get(
+            download_link, 
+            headers=download_headers,
+            timeout=120, 
+            stream=True
+        )
         audio_response.raise_for_status()
         
         # Write to file
