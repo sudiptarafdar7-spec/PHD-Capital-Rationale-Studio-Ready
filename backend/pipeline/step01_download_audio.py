@@ -127,18 +127,36 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         download_success = False
         for retry in range(3):
             try:
-                audio_response = requests.get(download_link, timeout=120, stream=True)
+                # Add browser-like headers to mimic auto-download behavior
+                download_headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive'
+                }
+                
+                audio_response = requests.get(
+                    download_link, 
+                    headers=download_headers,
+                    timeout=120, 
+                    stream=True,
+                    allow_redirects=True  # Follow redirects if any
+                )
                 audio_response.raise_for_status()
                 
+                # Write to file with progress tracking
+                downloaded_bytes = 0
                 with open(raw_audio_path, 'wb') as f:
                     for chunk in audio_response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
+                            downloaded_bytes += len(chunk)
                 
                 # Verify file was downloaded
                 if os.path.exists(raw_audio_path) and os.path.getsize(raw_audio_path) > 0:
                     download_success = True
-                    print(f"✅ Audio downloaded: {raw_audio_path}")
+                    size_mb = os.path.getsize(raw_audio_path) / (1024 * 1024)
+                    print(f"✅ Audio downloaded: {raw_audio_path} ({size_mb:.2f} MB)")
                     break
                 else:
                     raise Exception("Downloaded file is empty or doesn't exist")
