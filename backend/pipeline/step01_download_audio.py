@@ -6,6 +6,7 @@ import os
 import subprocess
 import requests
 import re
+import time
 
 
 def download_audio(job_id, youtube_url, cookies_file=None):
@@ -49,7 +50,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     print(f"📹 Video ID: {video_id}")
     print(f"⏬ Requesting audio conversion...\n")
     
-    # Call RapidAPI to get download link
+    # Call RapidAPI to get download link (with polling for processing status)
     try:
         api_url = "https://youtube-mp36.p.rapidapi.com/dl"
         querystring = {"id": video_id}
@@ -58,27 +59,62 @@ def download_audio(job_id, youtube_url, cookies_file=None):
             "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
         }
         
-        response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
-        response.raise_for_status()
+        # Poll the API until processing is complete
+        max_attempts = 30  # Maximum 30 attempts (5 minutes with 10s intervals)
+        attempt = 0
+        download_link = None
+        video_title = None
         
-        data = response.json()
+        while attempt < max_attempts:
+            attempt += 1
+            
+            response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            status = data.get("status")
+            
+            if status == "ok":
+                # Processing complete
+                download_link = data.get("link")
+                video_title = data.get("title", "Unknown")
+                
+                if not download_link:
+                    return {
+                        "success": False,
+                        "error": "API did not return a download link"
+                    }
+                
+                print(f"✅ Audio ready: {video_title}")
+                break
+                
+            elif status == "processing" or status == "in process":
+                # Still processing, wait and retry
+                progress = data.get("progress", 0)
+                print(f"⏳ Processing... {progress}% (attempt {attempt}/{max_attempts})")
+                time.sleep(10)  # Wait 10 seconds before next attempt
+                continue
+                
+            elif status == "fail":
+                # Processing failed
+                return {
+                    "success": False,
+                    "error": f"API processing failed: {data.get('msg', 'Unknown error')}"
+                }
+            else:
+                # Unknown status
+                return {
+                    "success": False,
+                    "error": f"API returned unknown status: {status}, message: {data.get('msg')}"
+                }
         
-        if data.get("status") != "ok":
-            return {
-                "success": False,
-                "error": f"API returned status: {data.get('status')}, message: {data.get('msg')}"
-            }
-        
-        download_link = data.get("link")
-        video_title = data.get("title", "Unknown")
-        
+        # Check if we exhausted all attempts
         if not download_link:
             return {
                 "success": False,
-                "error": "API did not return a download link"
+                "error": f"Audio processing timed out after {max_attempts} attempts. The video may be too long or the service is overloaded."
             }
         
-        print(f"✅ Audio ready: {video_title}")
         print(f"📥 Downloading from API...\n")
         
         # Download the MP3 file
