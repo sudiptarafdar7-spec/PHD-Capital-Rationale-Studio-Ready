@@ -246,7 +246,13 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
             stockName: stock.stockName,
             time: stock.time,
             chartType: stock.chartType,
-            analysis: stock.analysis
+            analysis: stock.analysis,
+            // Include master file data
+            securityId: stock.securityId || '',
+            listedName: stock.listedName || '',
+            shortName: stock.shortName || stock.stockName,
+            exchange: stock.exchange || 'BSE',
+            instrument: stock.instrument || 'EQUITY'
           }))
         }),
       });
