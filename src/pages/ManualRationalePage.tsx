@@ -99,6 +99,15 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       }
 
       const savedRationales = await response.json();
+      
+      // Ensure savedRationales is an array
+      if (!Array.isArray(savedRationales)) {
+        toast.error('Invalid response', {
+          description: 'Failed to load saved rationales',
+        });
+        return;
+      }
+      
       const savedRationale = savedRationales.find((r: any) => r.job_id === jobId);
 
       if (!savedRationale) {
@@ -124,7 +133,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           step_number: step.step_number,
           name: step.step_name,
           status: step.status,
-          message: step.error_message || undefined,
+          message: step.message || undefined,
           started_at: step.started_at || undefined,
           ended_at: step.ended_at || undefined,
         }));
