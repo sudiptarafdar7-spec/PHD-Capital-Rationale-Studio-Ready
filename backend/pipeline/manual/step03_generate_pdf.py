@@ -32,7 +32,7 @@ def run(job_folder):
         # Input paths
         analysis_folder = os.path.join(job_folder, 'analysis')
         manual_csv = os.path.join(analysis_folder, 'stocks_with_charts.csv')  # Manual output name
-        premium_csv = os.path.join(analysis_folder, 'stocks_with_chart.csv')  # Premium expects this name
+        premium_csv = os.path.join(analysis_folder, 'stocks_with_analysis.csv')  # Premium PDF expects this name
 
         # Verify input file exists
         if not os.path.exists(manual_csv):
@@ -44,10 +44,10 @@ def run(job_folder):
         print(f"📊 Using CSV: {manual_csv}")
         
         # Copy/rename CSV to match what Premium PDF generator expects
-        # This allows us to use the same PDF generator without modifying it
-        if manual_csv != premium_csv:
-            print(f"📝 Copying CSV to Premium format name...")
-            shutil.copy2(manual_csv, premium_csv)
+        # Premium expects stocks_with_analysis.csv (from its step 7)
+        # Manual only goes to charts, so we rename it
+        print(f"📝 Renaming CSV to Premium format: stocks_with_analysis.csv")
+        shutil.copy2(manual_csv, premium_csv)
 
         # Call Premium PDF generation
         # NOTE: Currently uses BLUE theme from Premium pipeline
