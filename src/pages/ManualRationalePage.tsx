@@ -184,7 +184,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       }
 
       const data = await response.json();
-      const savedRationales = data.rationales || [];
+      const savedRationales = Array.isArray(data.rationales) ? data.rationales : [];
       const savedRationale = savedRationales.find((r: any) => r.job_id === jobId);
 
       if (!savedRationale) {
