@@ -873,16 +873,36 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     if (workflowStage === 'completed') {
       return (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg text-foreground">Workflow Completed</h3>
+          <div className="bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-lg p-6 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="rounded-full bg-green-100 dark:bg-green-900/40 p-3">
+                <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+            <h3 className="text-xl font-semibold text-green-800 dark:text-green-200 mb-2">
+              Workflow Completed Successfully! 🎉
+            </h3>
+            <p className="text-green-700 dark:text-green-300 mb-4">
+              Your signed PDF has been uploaded and the rationale is now complete.
+            </p>
+            {uploadedSignedFile && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 mb-4">
+                <p className="text-sm text-muted-foreground mb-1">Signed PDF:</p>
+                <p className="font-medium text-foreground">{uploadedSignedFile.fileName}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Uploaded: {new Date(uploadedSignedFile.uploadedAt).toLocaleString()}
+                </p>
+              </div>
+            )}
+            <Button
+              onClick={() => window.location.href = '/saved-rationale'}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              View in Saved Rationale
+            </Button>
           </div>
-
-          {/* Show the SignedFileUpload component which will display the signed PDF */}
-          <SignedFileUpload
-            jobId={currentJobId || ''}
-            uploadedFile={uploadedSignedFile}
-            onUploadComplete={handleSignedFileUpload}
-          />
         </div>
       );
     }
