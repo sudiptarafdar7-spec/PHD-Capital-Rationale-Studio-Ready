@@ -39,7 +39,7 @@ def run(job_folder, dhan_api_key):
         for i, stock in enumerate(stocks_data):
             security_id = stock['SECURITY ID']
             chart_type = stock['CHART TYPE']  # Daily, Weekly, or Monthly
-            stock_name = stock['STOCK NAME']
+            stock_symbol = stock['STOCK SYMBOL']
             
             # Map chart type to timeframe
             timeframe_map = {
@@ -50,12 +50,12 @@ def run(job_folder, dhan_api_key):
             timeframe = timeframe_map.get(chart_type, '1D')
             
             if security_id:
-                chart_filename = f"stock_{i+1}_{stock_name.replace(' ', '_')}.png"
+                chart_filename = f"stock_{i+1}_{stock_symbol.replace(' ', '_')}.png"
                 chart_path = os.path.join(charts_folder, chart_filename)
                 
                 success = generate_chart_for_stock(
                     security_id=security_id,
-                    stock_name=stock_name,
+                    stock_name=stock_symbol,
                     chart_path=chart_path,
                     dhan_api_key=dhan_api_key,
                     timeframe=timeframe

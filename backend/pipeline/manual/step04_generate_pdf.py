@@ -39,7 +39,7 @@ def run(job_folder):
         
         for stock in stocks_data:
             pdf_data['stocks'].append({
-                'name': stock['STOCK NAME'],
+                'name': stock['STOCK SYMBOL'],
                 'symbol': stock['STOCK SYMBOL'],
                 'time': stock['TIME'],
                 'cmp': stock.get('CMP', 'N/A'),

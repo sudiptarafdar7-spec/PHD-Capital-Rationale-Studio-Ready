@@ -815,7 +815,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
 
                       <div className="space-y-2">
                         <div className="space-y-1.5">
-                          <Label className="text-xs">Stock Name *</Label>
+                          <Label className="text-xs">Stock Symbol *</Label>
                           <StockAutocompleteInput
                             value={stock.stockName}
                             onSelect={(stockName) => updateStockDetail(stock.id, 'stockName', stockName)}

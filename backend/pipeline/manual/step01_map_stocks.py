@@ -37,42 +37,48 @@ def run(job_folder, input_data):
         if not master_csv_path or not os.path.exists(master_csv_path):
             return {'success': False, 'error': 'Master CSV file not found'}
         
-        # Read master CSV
+        # Read master CSV and map by trading symbol
         master_data = {}
         with open(master_csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                # Map by custom name (assumed column name)
-                custom_name = row.get('Custom name', row.get('Security Name', ''))
-                if custom_name:
-                    master_data[custom_name.lower()] = {
-                        'symbol': row.get('Trading Symbol', row.get('Symbol', '')),
-                        'listed_name': row.get('Security Name', ''),
-                        'short_name': row.get('Short Name', custom_name),
-                        'security_id': row.get('Security Id', row.get('SM_KEY_SYMBOL', '')),
-                        'exchange': row.get('Exchange', 'NSE'),
-                        'instrument': row.get('Instrument', 'EQUITY')
+                # Filter EQUITY instruments with ES exchange type
+                if row.get('SEM_INSTRUMENT_NAME', '').upper() != 'EQUITY':
+                    continue
+                if row.get('SEM_EXCH_INSTRUMENT_TYPE', '').upper() != 'ES':
+                    continue
+                
+                # Map by trading symbol (SEM_TRADING_SYMBOL)
+                trading_symbol = row.get('SEM_TRADING_SYMBOL', '')
+                if trading_symbol:
+                    master_data[trading_symbol.lower()] = {
+                        'symbol': trading_symbol,
+                        'listed_name': row.get('SM_SYMBOL_NAME', ''),
+                        'short_name': row.get('SEM_CUSTOM_SYMBOL', trading_symbol),
+                        'security_id': row.get('SEM_SMST_SECURITY_ID', ''),
+                        'exchange': row.get('SEM_EXM_EXCH_ID', 'BSE'),
+                        'instrument': row.get('SEM_INSTRUMENT_NAME', 'EQUITY')
                     }
         
         # Map stocks and create output CSV
         output_path = os.path.join(job_folder, 'analysis', 'mapped_master_file.csv')
         
         with open(output_path, 'w', newline='', encoding='utf-8') as f:
-            fieldnames = ['DATE', 'TIME', 'STOCK NAME', 'CHART TYPE', 'STOCK SYMBOL', 
+            fieldnames = ['DATE', 'TIME', 'STOCK SYMBOL', 'CHART TYPE', 
                           'LISTED NAME', 'SHORT NAME', 'SECURITY ID', 'EXCHANGE', 'INSTRUMENT', 'ANALYSIS']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             
             for stock in stocks:
-                stock_name = stock['stockName']
+                stock_symbol = stock['stockName']  # Now contains trading symbol from autocomplete
                 
-                # Try exact match first
-                match_data = master_data.get(stock_name.lower())
+                # Try exact match first (by trading symbol)
+                match_data = master_data.get(stock_symbol.lower())
                 
                 # If no exact match, use fuzzy matching
                 if not match_data:
                     matches = process.extract(
-                        stock_name.lower(),
+                        stock_symbol.lower(),
                         master_data.keys(),
                         scorer=fuzz.WRatio,
                         limit=1
@@ -80,11 +86,11 @@ def run(job_folder, input_data):
                     if matches and matches[0][1] > 70:  # 70% confidence threshold
                         match_data = master_data[matches[0][0]]
                     else:
-                        # No good match found - use stock name as is
+                        # No good match found - use stock symbol as is
                         match_data = {
-                            'symbol': stock_name.upper(),
-                            'listed_name': stock_name,
-                            'short_name': stock_name,
+                            'symbol': stock_symbol.upper(),
+                            'listed_name': stock_symbol,
+                            'short_name': stock_symbol,
                             'security_id': '',
                             'exchange': 'NSE',
                             'instrument': 'EQUITY'
@@ -93,9 +99,8 @@ def run(job_folder, input_data):
                 writer.writerow({
                     'DATE': call_date,
                     'TIME': stock['time'],
-                    'STOCK NAME': stock_name,
+                    'STOCK SYMBOL': stock_symbol,
                     'CHART TYPE': stock['chartType'],
-                    'STOCK SYMBOL': match_data['symbol'],
                     'LISTED NAME': match_data['listed_name'],
                     'SHORT NAME': match_data['short_name'],
                     'SECURITY ID': match_data['security_id'],

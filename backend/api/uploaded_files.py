@@ -110,19 +110,19 @@ def get_master_stocks():
                 if exch_type.upper() != 'ES':
                     continue
                 
-                # Get stock name from SEM_CUSTOM_SYMBOL
-                stock_name = row.get('SEM_CUSTOM_SYMBOL', '').strip()
+                # Get stock symbol from SEM_TRADING_SYMBOL
+                stock_symbol = row.get('SEM_TRADING_SYMBOL', '').strip()
                 
-                if not stock_name:
+                if not stock_symbol:
                     continue
                 
                 # Filter by search query if provided
-                if search_query and search_query not in stock_name.lower():
+                if search_query and search_query not in stock_symbol.lower():
                     continue
                 
                 stocks.append({
-                    'name': stock_name,
-                    'symbol': row.get('SEM_TRADING_SYMBOL', ''),
+                    'name': stock_symbol,
+                    'symbol': stock_symbol,
                     'securityId': row.get('SEM_SMST_SECURITY_ID', ''),
                     'exchange': row.get('SEM_EXM_EXCH_ID', 'BSE')
                 })
