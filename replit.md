@@ -4,7 +4,7 @@
 PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features three primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
 ## Recent Changes (November 2025)
-### Manual Rationale v2 Complete Rebuild
+### Manual Rationale v2 Complete Rebuild ✅ COMPLETED
 - **Cleaned up legacy code**: Removed old manual_rationale.py and backend/pipeline/manual/ directory
 - **New service architecture**: Created backend/services/manual_v2/ with clean separation of concerns
 - **Improved pipeline orchestration**: Thread-based async execution with proper status tracking
@@ -12,7 +12,11 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **Database enhancements**: Added `payload` JSONB column to jobs table, `metadata` JSONB column to saved_rationale table
 - **Robust error handling**: Safe numeric parsing in CMP step to handle empty/invalid user inputs
 - **New API endpoints**: 8 REST endpoints under /api/v1/manual-v2/ for complete job lifecycle management
-- **Status**: Backend fully implemented and tested; frontend rebuild pending
+- **Frontend updates**: 
+  - Stock autocomplete displays symbols (e.g., "RELIANCE") instead of company names
+  - Job loading fixed: Now correctly loads from jobs table (for unsaved jobs) with fallback to saved_rationale
+  - Contract mismatches resolved: Stock autocomplete accepts both 'q' and 'query' parameters, job creation sends correct payload structure
+- **Status**: ✅ Fully implemented, tested, and production-ready
 
 ## User Preferences
 - Keep frontend design unchanged (layout, forms, fields, animations, effects, flow)

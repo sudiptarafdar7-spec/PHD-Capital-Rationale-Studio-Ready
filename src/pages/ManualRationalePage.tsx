@@ -89,7 +89,71 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
 
   const loadSavedJob = React.useCallback(async (jobId: string) => {
     try {
-      // Fetch saved rationale from backend - v2 fixed
+      // Try to fetch from v2 jobs API first (for unsaved jobs)
+      const jobResponse = await fetch(API_ENDPOINTS.manualV2.getJob(jobId), {
+        headers: getAuthHeaders(token || ''),
+      });
+
+      if (jobResponse.ok) {
+        const jobData = await jobResponse.json();
+        
+        // Set the job ID
+        setCurrentJobId(jobId);
+
+        // Map job steps
+        const mappedSteps = jobData.job_steps?.map((step: any) => ({
+          id: String(step.id),
+          job_id: step.job_id,
+          step_number: step.step_number,
+          name: step.step_name,
+          status: step.status,
+          message: step.message || undefined,
+          started_at: step.started_at || undefined,
+          ended_at: step.ended_at || undefined,
+        })) || [];
+        setJobSteps(mappedSteps);
+
+        // Determine workflow stage based on job status
+        const jobStatus = jobData.status;
+        if (jobStatus === 'completed') {
+          setWorkflowStage('saved');
+        } else if (jobStatus === 'signed') {
+          setWorkflowStage('completed');
+          setSaveType('save-and-sign');
+        } else if (jobStatus === 'pdf_ready') {
+          setWorkflowStage('ready-to-save');
+        } else if (jobStatus === 'processing') {
+          setWorkflowStage('processing');
+          setIsProcessing(true);
+        } else if (jobStatus === 'failed') {
+          setWorkflowStage('input');
+          toast.error('Job failed', {
+            description: 'This job encountered an error during processing',
+          });
+        }
+
+        // Load form data from job payload
+        const payload = jobData.payload || {};
+        setSelectedChannelId(String(jobData.channel_id || ''));
+        setDate(payload.date || jobData.date || '');
+
+        // Reconstruct stock details from payload
+        const stocks = payload.stocks || [];
+        const loadedStocks = stocks.length > 0 ? 
+          stocks.map((stock: any, index: number) => ({
+            id: `loaded-${index}`,
+            stockName: stock.symbol || '',
+            time: stock.call_time || '10:00',
+            chartType: (stock.chart_type || 'Daily') as 'Daily' | 'Weekly' | 'Monthly',
+            analysis: stock.analysis || '',
+          })) : 
+          [{ id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }];
+        
+        setStockDetails(loadedStocks);
+        return;
+      }
+
+      // Fallback to saved_rationale if not found in jobs table
       const response = await fetch(API_ENDPOINTS.savedRationale.getAll, {
         headers: getAuthHeaders(token || ''),
       });
@@ -99,27 +163,8 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       }
 
       const data = await response.json();
-      
-      console.log('[DEBUG] API Response:', data);
-      console.log('[DEBUG] Looking for job_id:', jobId);
-      
-      // Extract rationales array from response
       const savedRationales = data.rationales || [];
-      
-      console.log('[DEBUG] Extracted rationales:', savedRationales);
-      console.log('[DEBUG] Is array?', Array.isArray(savedRationales));
-      
-      // Ensure we have an array
-      if (!Array.isArray(savedRationales)) {
-        console.error('[ERROR] savedRationales is not an array:', savedRationales);
-        toast.error('Invalid response', {
-          description: 'Failed to load saved rationales',
-        });
-        return;
-      }
-      
       const savedRationale = savedRationales.find((r: any) => r.job_id === jobId);
-      console.log('[DEBUG] Found saved rationale:', savedRationale);
 
       if (!savedRationale) {
         toast.error('Job not found', {
@@ -130,26 +175,6 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
 
       // Set the job ID
       setCurrentJobId(jobId);
-
-      // Fetch job steps from backend
-      const jobResponse = await fetch(API_ENDPOINTS.manualV2.getJob(jobId), {
-        headers: getAuthHeaders(token || ''),
-      });
-
-      if (jobResponse.ok) {
-        const jobData = await jobResponse.json();
-        const mappedSteps = jobData.job_steps.map((step: any) => ({
-          id: String(step.id),
-          job_id: step.job_id,
-          step_number: step.step_number,
-          name: step.step_name,
-          status: step.status,
-          message: step.message || undefined,
-          started_at: step.started_at || undefined,
-          ended_at: step.ended_at || undefined,
-        }));
-        setJobSteps(mappedSteps);
-      }
 
       // Determine workflow stage based on signed file
       if (savedRationale.signed_pdf_path) {
