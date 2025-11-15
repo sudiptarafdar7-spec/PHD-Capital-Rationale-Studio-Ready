@@ -55,9 +55,9 @@ The application maintains a clear separation between a React-based frontend and 
     - **Manual Rationale v2 Pipeline**: Redesigned 3-step process (Fetch CMP → Generate Charts → Generate PDF) with clean architecture:
         - **Module location**: `backend/services/manual_v2/` (replaces old `backend/pipeline/manual/`)
         - **Orchestration**: Thread-based async pipeline with ManualRationaleOrchestrator
-        - **Step 1**: Fetches Current Market Price (CMP) from Dhan API with safe numeric parsing. Reads `input.csv`, outputs `stocks_with_cmp.csv` with CMP column added.
+        - **Step 1**: ✅ COMPLETE - Fetches Current Market Price (CMP) from Dhan API with safe numeric parsing. Reads `input.csv`, outputs `stocks_with_cmp.csv` with CMP column added.
         - **Step 2**: ✅ COMPLETE - Standalone chart generation with Dhan API integration. Reads `stocks_with_cmp.csv`, generates premium charts (candlestick + MA20/50/100/200 + RSI + volume), outputs `stocks_with_charts.csv` with CHART PATH column. Chart naming: `{SECURITY_ID}_{CHART_TYPE}_{YYYYMMDD}_{HHMMSS}.png`. Rate limited at 1.5s per stock.
-        - **Step 3**: Generates PDF by reusing premium PDF generator (BLUE theme)
+        - **Step 3**: ✅ COMPLETE - Professional PDF generation with premium blue theme. Reads `stocks_with_charts.csv`, generates A4 PDF with company letterhead, platform branding, full-width charts, rationale sections, and disclaimer/disclosure pages. Features: circular platform logos, crisp headings, responsive layout, date/time stamps for each stock.
         - **Master data enrichment**: Server-side enrichment at job creation via `/manual-v2/jobs` endpoint
         - **API endpoints**: `/manual-v2/jobs` (create), `/manual-v2/jobs/<id>/run` (execute pipeline), `/manual-v2/jobs/<id>/save` (save to saved_rationale), `/manual-v2/jobs/<id>/upload-signed` (signed PDF upload), `/manual-v2/stocks` (autocomplete)
         - **Job restart**: Jobs in any completion state (pdf_ready, completed, signed, failed) can be restarted via `/jobs/<id>/run`, which resets all steps to pending and re-runs the complete 3-step pipeline
