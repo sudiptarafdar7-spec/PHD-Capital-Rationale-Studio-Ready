@@ -167,12 +167,16 @@ def run(job_folder, template_config=None):
         charts_folder = os.path.join(job_folder, 'charts')
         os.makedirs(pdf_folder, exist_ok=True)
         
+        # Support both Premium (stocks_with_analysis.csv) and Manual (stocks_with_charts.csv) 
         stocks_csv = os.path.join(analysis_folder, 'stocks_with_analysis.csv')
+        if not os.path.exists(stocks_csv):
+            # Fallback to Manual Rationale CSV name
+            stocks_csv = os.path.join(analysis_folder, 'stocks_with_charts.csv')
         
         if not os.path.exists(stocks_csv):
             return {
                 'success': False,
-                'error': f'Stocks with analysis file not found: {stocks_csv}'
+                'error': f'Stock analysis CSV not found in {analysis_folder}'
             }
         
         print("📖 Loading stocks with analysis...")

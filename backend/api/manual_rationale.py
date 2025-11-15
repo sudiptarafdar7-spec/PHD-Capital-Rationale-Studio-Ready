@@ -354,13 +354,13 @@ def process_manual_job_async(job_id):
                 """, (datetime.now(), job_id, step_num))
         
         # All steps completed - mark job as pdf_ready
-        pdf_path = os.path.join(job_folder, 'pdf', 'manual_rationale.pdf')
+        # Note: jobs table doesn't have pdf_path column - PDF stored in saved_rationale table
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("""
                 UPDATE jobs 
-                SET status = 'pdf_ready', progress = 100, pdf_path = %s, updated_at = %s
+                SET status = 'pdf_ready', progress = 100, updated_at = %s
                 WHERE id = %s
-            """, (pdf_path, datetime.now(), job_id))
+            """, (datetime.now(), job_id))
         
         print(f"Manual Rationale job {job_id} completed successfully")
         
@@ -393,13 +393,23 @@ def get_job(job_id):
             cursor.execute("SELECT * FROM job_steps WHERE job_id = %s ORDER BY step_number", (job_id,))
             steps = cursor.fetchall()
         
+        # Get PDF path from saved_rationale if job is saved
+        pdf_path = None
+        with get_db_cursor() as cursor2:
+            cursor2.execute("""
+                SELECT unsigned_pdf_path FROM saved_rationale WHERE job_id = %s
+            """, (job_id,))
+            saved = cursor2.fetchone()
+            if saved:
+                pdf_path = saved['unsigned_pdf_path']
+        
         return jsonify({
             'jobId': job['id'],
             'title': job['title'],
             'status': job['status'],
             'progress': job['progress'],
             'currentStep': job['current_step'],
-            'pdfPath': job.get('pdf_path'),
+            'pdfPath': pdf_path,
             'job_steps': [{
                 'id': step['id'],
                 'job_id': step['job_id'],
@@ -444,6 +454,9 @@ def save_job(job_id):
         
         stocks_str = ', '.join(stock_symbols) if stock_symbols else 'Manual Rationale'
         
+        # Get actual PDF path from job folder
+        pdf_path = os.path.join(job['folder_path'], 'pdf', 'premium_rationale.pdf')
+        
         # Save to saved_rationale table
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("""
@@ -466,7 +479,7 @@ def save_job(job_id):
                 job.get('youtube_url'),  # Use youtube_url from jobs table
                 job['date'],
                 job['title'],  # Use job title as youtube_video_name
-                job.get('pdf_path'),
+                pdf_path,  # Actual PDF path: premium_rationale.pdf
                 'completed',
                 datetime.now(),
                 datetime.now()
