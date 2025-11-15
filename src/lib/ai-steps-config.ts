@@ -84,10 +84,85 @@ export const MEDIA_RATIONALE_STEPS: StepConfig[] = [
   },
 ];
 
+export const UPLOAD_RATIONALE_STEPS: StepConfig[] = [
+  {
+    stepNumber: 1,
+    publicMessage: "Now Detecting Speech",
+    icon: Mic,
+  },
+  {
+    stepNumber: 2,
+    publicMessage: "Polishing transcription",
+    icon: FileText,
+  },
+  {
+    stepNumber: 3,
+    publicMessage: "Translating Audio to English",
+    icon: Languages,
+  },
+  {
+    stepNumber: 4,
+    publicMessage: "Detecting All Speakers",
+    icon: Users,
+  },
+  {
+    stepNumber: 5,
+    publicMessage: "Removing Other Speakers",
+    icon: UserX,
+  },
+  {
+    stepNumber: 6,
+    publicMessage: "Extracting All Stock Names",
+    icon: TrendingUp,
+    showMetrics: 'stocks_extracted',
+  },
+  {
+    stepNumber: 7,
+    publicMessage: "Mapping with Real Stock Data",
+    icon: Link,
+    showMetrics: 'stocks_mapped',
+  },
+  {
+    stepNumber: 8,
+    publicMessage: "Gathering Timestamp",
+    icon: Clock,
+  },
+  {
+    stepNumber: 9,
+    publicMessage: "Fetching CMP",
+    icon: DollarSign,
+    showMetrics: 'stocks_cmp',
+  },
+  {
+    stepNumber: 10,
+    publicMessage: "Generating Rationale Overview",
+    icon: FileBarChart,
+  },
+  {
+    stepNumber: 11,
+    publicMessage: "Fetching Candle Charts / applying indicators",
+    icon: BarChart3,
+    showMetrics: 'charts_fetched',
+  },
+  {
+    stepNumber: 12,
+    publicMessage: "Generating Final PDF",
+    icon: FileCheck,
+  },
+];
+
 export const getStepConfig = (stepNumber: number): StepConfig | undefined => {
   return MEDIA_RATIONALE_STEPS.find(step => step.stepNumber === stepNumber);
 };
 
+export const getUploadStepConfig = (stepNumber: number): StepConfig | undefined => {
+  return UPLOAD_RATIONALE_STEPS.find(step => step.stepNumber === stepNumber);
+};
+
 export const getTotalSteps = (): number => {
   return MEDIA_RATIONALE_STEPS.length;
+};
+
+export const getUploadTotalSteps = (): number => {
+  return UPLOAD_RATIONALE_STEPS.length;
 };
