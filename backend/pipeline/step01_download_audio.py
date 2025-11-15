@@ -1,28 +1,21 @@
 """
 Step 1: Download Audio from YouTube Video
-PRODUCTION-GRADE: TV Embedded Client + Signature Protection + Randomized User Agents
+Using external RapidAPI YouTube to MP3 converter
 """
 import os
 import subprocess
-from yt_dlp import YoutubeDL
-import time
-import random
+import requests
+import re
 
 
 def download_audio(job_id, youtube_url, cookies_file=None):
     """
-    PRODUCTION-GRADE YouTube audio downloader
-    
-    Uses industry-proven strategies to bypass YouTube bot detection:
-    - TV Embedded Client (strongest bypass, never rate-limited)
-    - Signature timestamp protection
-    - Randomized Android user agents
-    - Multiple fallback strategies
+    Simple YouTube audio downloader using external API
     
     Args:
         job_id: Job identifier
         youtube_url: YouTube video URL
-        cookies_file: Optional (uses uploaded cookies if available)
+        cookies_file: Not used (kept for compatibility)
     
     Returns:
         dict: {
@@ -35,290 +28,79 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         }
     """
     print("\n" + "="*60)
-    print("🎧 YOUTUBE AUDIO DOWNLOADER - PRODUCTION MODE")
+    print("🎧 YOUTUBE AUDIO DOWNLOADER")
     print("="*60 + "\n")
     
     # Paths
     audio_folder = os.path.join("backend", "job_files", job_id, "audio")
     os.makedirs(audio_folder, exist_ok=True)
     
-    raw_audio_path = os.path.join(audio_folder, "raw_audio.%(ext)s")
-    final_raw_audio = os.path.join(audio_folder, "raw_audio")
+    raw_audio_path = os.path.join(audio_folder, "raw_audio.mp3")
     prepared_audio_path = os.path.join(audio_folder, "audio_16k_mono.wav")
     
-    cookies_file_path = os.path.join("backend", "uploaded_files", "youtube_cookies.txt")
-    using_cookies = os.path.exists(cookies_file_path)
+    # Extract video ID from URL
+    video_id = extract_video_id(youtube_url)
+    if not video_id:
+        return {
+            "success": False,
+            "error": f"Could not extract video ID from URL: {youtube_url}"
+        }
     
-    # Randomized Android User Agents (bypasses fingerprinting)
-    android_agents = [
-        "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36",
-        "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.72 Mobile Safari/537.36",
-        "Mozilla/5.0 (Linux; Android 8.0; SM-A520F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.93 Mobile Safari/537.36",
-        "Mozilla/5.0 (Linux; Android 9; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.101 Mobile Safari/537.36",
-    ]
+    print(f"📹 Video ID: {video_id}")
+    print(f"⏬ Requesting audio conversion...\n")
     
-    # Base options (shared across all strategies)
-    base_opts = {
-        "outtmpl": raw_audio_path,
-        "quiet": False,
-        "no_warnings": False,
+    # Call RapidAPI to get download link
+    try:
+        api_url = "https://youtube-mp36.p.rapidapi.com/dl"
+        querystring = {"id": video_id}
+        headers = {
+            "x-rapidapi-key": "c7762ba089msh6c8a18942b1f9cdp1bbc0cjsn10d61d38bef5",
+            "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
+        }
         
-        # CRITICAL: Don't verify formats - accept whatever is available
-        "check_formats": False,
-        "no_check_formats": True,
+        response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
+        response.raise_for_status()
         
-        # Aggressive retries
-        "retries": 10,
-        "fragment_retries": 10,
-        "skip_unavailable_fragments": True,
+        data = response.json()
         
-        # Force overwrites
-        "force_overwrites": True,
-        
-        # Accept any certificate
-        "nocheckcertificate": True,
-        
-        # Prefer free formats (no DRM)
-        "prefer_free_formats": True,
-        
-        # Randomized user agent (bypass fingerprinting)
-        "user_agent": random.choice(android_agents),
-        
-        # Signature timestamp protection
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["web"],
-                "force_desktop": False,
-                "skip": [],
-                "format_sort_force": True,
-                "player_skip": [],
-                "player_prefs": {"signature_timestamp": "0"}
+        if data.get("status") != "ok":
+            return {
+                "success": False,
+                "error": f"API returned status: {data.get('status')}, message: {data.get('msg')}"
             }
-        },
-    }
-    
-    # Strategies with different approaches
-    strategies = [
-        # ✅ GOLDEN STRATEGY: TV Embedded Client (strongest bypass)
-        {
-            "name": "TV Embedded Client (strongest bypass)",
-            "opts": {
-                **base_opts,
-                "format": "bestaudio/best",
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["tv_embedded"],
-                        "player_skip": ["configs", "webpage"],
-                        "visitors": ["android-tv"],
-                    }
-                },
-                "http_headers": {
-                    "User-Agent": "Mozilla/5.0 (Chromecast; Linux; Android 7.0)",
-                    "X-YouTube-Client-Name": "85",
-                    "X-YouTube-Client-Version": "4.30.5",
-                },
-            },
-            "require_cookies": False,
-        },
         
-        # Strategy 2: Android Client with signature protection
-        {
-            "name": "Android Client (with signature protection)",
-            "opts": {
-                **base_opts,
-                "format": "bestaudio*",
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["android"],
-                        "skip": [],
-                        "player_prefs": {"signature_timestamp": "0"}
-                    }
-                },
-            },
-            "require_cookies": False,
-        },
+        download_link = data.get("link")
+        video_title = data.get("title", "Unknown")
         
-        # Strategy 3: iOS Client with signature protection
-        {
-            "name": "iOS Client (with signature protection)",
-            "opts": {
-                **base_opts,
-                "format": "bestaudio",
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["ios"],
-                        "skip": [],
-                        "player_prefs": {"signature_timestamp": "0"}
-                    }
-                },
-            },
-            "require_cookies": False,
-        },
+        if not download_link:
+            return {
+                "success": False,
+                "error": "API did not return a download link"
+            }
         
-        # Strategy 4: Web Client with cookies (for authenticated videos)
-        {
-            "name": "Web Client with Cookies",
-            "opts": {
-                **base_opts,
-                "format": "bestaudio/best",
-                "cookiefile": cookies_file_path if using_cookies else None,
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["web"],
-                        "skip": [],
-                        "player_prefs": {"signature_timestamp": "0"}
-                    }
-                },
-            },
-            "require_cookies": True,
-        },
+        print(f"✅ Audio ready: {video_title}")
+        print(f"📥 Downloading from API...\n")
         
-        # Strategy 5: Multi-client fallback
-        {
-            "name": "Multi-Client Fallback",
-            "opts": {
-                **base_opts,
-                "format": "bestaudio/best",
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["android", "ios", "web"],
-                        "skip": [],
-                        "player_prefs": {"signature_timestamp": "0"}
-                    }
-                },
-            },
-            "require_cookies": False,
-        },
+        # Download the MP3 file
+        audio_response = requests.get(download_link, timeout=120, stream=True)
+        audio_response.raise_for_status()
         
-        # Strategy 6: Accept ANY format with audio (last resort)
-        {
-            "name": "Accept ANY audio format (last resort)",
-            "opts": {
-                **base_opts,
-                "format": "worst",  # Literally accept worst quality if needed
-            },
-            "require_cookies": False,
-        },
+        with open(raw_audio_path, 'wb') as f:
+            for chunk in audio_response.iter_content(chunk_size=8192):
+                f.write(chunk)
         
-        # Strategy 7: Zero constraints (ultimate fallback)
-        {
-            "name": "Zero Constraints (ultimate fallback)",
-            "opts": {
-                "outtmpl": raw_audio_path,
-                "quiet": False,
-                "check_formats": False,
-                "no_check_formats": True,
-                "retries": 15,
-                "fragment_retries": 15,
-                "force_overwrites": True,
-                "nocheckcertificate": True,
-                "user_agent": random.choice(android_agents),
-                "cookiefile": cookies_file_path if using_cookies else None,
-            },
-            "require_cookies": False,
-        },
-    ]
-    
-    # Filter strategies based on cookie availability
-    if not using_cookies:
-        strategies = [s for s in strategies if not s.get("require_cookies", False)]
-        print("⚠️ No cookies found - skipping cookie-dependent strategies")
-        print(f"   Upload cookies to: {cookies_file_path}")
-    else:
-        print(f"✅ Using cookies from: {cookies_file_path}")
-    
-    print(f"\n📋 Will try {len(strategies)} strategies")
-    print(f"🎲 Using randomized user agent for anti-fingerprinting\n")
-    
-    # Try each strategy
-    last_error = None
-    strategy_num = 0
-    
-    for strategy in strategies:
-        strategy_num += 1
-        print("="*60)
-        print(f"🎯 Strategy {strategy_num}/{len(strategies)}: {strategy['name']}")
-        print("="*60)
+        print(f"✅ Audio downloaded: {raw_audio_path}")
         
-        # Remove None values from opts
-        opts = {k: v for k, v in strategy["opts"].items() if v is not None}
-        
-        try:
-            print(f"⏬ Attempting download...")
-            
-            with YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(youtube_url, download=True)
-            
-            # Find the downloaded file
-            downloaded_file = None
-            for ext in ['webm', 'm4a', 'mp4', 'opus', 'ogg', 'mp3']:
-                test_path = os.path.join(audio_folder, f"raw_audio.{ext}")
-                if os.path.exists(test_path):
-                    downloaded_file = test_path
-                    break
-            
-            if not downloaded_file and os.path.exists(final_raw_audio):
-                downloaded_file = final_raw_audio
-            
-            if not downloaded_file:
-                # Check for any file in audio folder
-                files = [f for f in os.listdir(audio_folder) if f.startswith('raw_audio')]
-                if files:
-                    downloaded_file = os.path.join(audio_folder, files[0])
-            
-            if not downloaded_file or not os.path.exists(downloaded_file):
-                raise FileNotFoundError("Audio file not found after download")
-            
-            # Rename to standard name if needed
-            if downloaded_file != final_raw_audio:
-                if os.path.exists(final_raw_audio):
-                    os.remove(final_raw_audio)
-                os.rename(downloaded_file, final_raw_audio)
-                downloaded_file = final_raw_audio
-            
-            print(f"✅ SUCCESS! Audio downloaded: {downloaded_file}")
-            break
-            
-        except Exception as e:
-            last_error = str(e)
-            print(f"\n❌ Strategy {strategy_num} failed:")
-            print(f"   {last_error}")
-            
-            # Cleanup failed attempts
-            for ext in ['webm', 'm4a', 'mp4', 'opus', 'ogg', 'mp3']:
-                test_path = os.path.join(audio_folder, f"raw_audio.{ext}")
-                if os.path.exists(test_path):
-                    try:
-                        os.remove(test_path)
-                    except:
-                        pass
-            
-            if os.path.exists(final_raw_audio):
-                try:
-                    os.remove(final_raw_audio)
-                except:
-                    pass
-            
-            # Wait before next attempt (progressive backoff)
-            if strategy_num < len(strategies):
-                wait_time = min(2 + strategy_num, 8)  # Progressive backoff: 3s, 4s, 5s... up to 8s
-                print(f"⏳ Waiting {wait_time}s before next strategy...\n")
-                time.sleep(wait_time)
-            
-            continue
-    else:
-        # All strategies failed
-        error_msg = f"All {len(strategies)} download strategies failed."
-        if "bot" in last_error.lower():
-            error_msg += "\n\n⚠️ YouTube is blocking automated access. Solutions:"
-            error_msg += "\n   1. Upload fresh cookies from a logged-in browser"
-            error_msg += "\n   2. Wait a few hours (IP rate limiting)"
-            error_msg += "\n   3. Try a different video"
-            error_msg += f"\n\nLast error: {last_error}"
-        else:
-            error_msg += f"\n\nLast error: {last_error}"
-        
-        return {"success": False, "error": error_msg}
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"API request failed: {str(e)}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Download failed: {str(e)}"
+        }
     
     # Convert to 16kHz mono WAV
     print("\n" + "="*60)
@@ -327,7 +109,7 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     
     ffmpeg_cmd = [
         "ffmpeg",
-        "-i", final_raw_audio,
+        "-i", raw_audio_path,
         "-ar", "16000",
         "-ac", "1",
         "-y",
@@ -344,20 +126,42 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     print("✅ Audio converted successfully!")
     
     # Calculate sizes
-    raw_size_mb = round(os.path.getsize(final_raw_audio) / (1024 * 1024), 2)
+    raw_size_mb = round(os.path.getsize(raw_audio_path) / (1024 * 1024), 2)
     prepared_size_mb = round(os.path.getsize(prepared_audio_path) / (1024 * 1024), 2)
     
     print(f"\n📊 Final Results:")
-    print(f"   ✅ Strategy used: {strategies[strategy_num-1]['name']}")
     print(f"   📦 Raw audio: {raw_size_mb} MB")
     print(f"   🎵 Prepared audio: {prepared_size_mb} MB")
     print(f"   Status: ✅ SUCCESS\n")
     
     return {
         "success": True,
-        "raw_audio": final_raw_audio,
+        "raw_audio": raw_audio_path,
         "prepared_audio": prepared_audio_path,
         "raw_size_mb": raw_size_mb,
         "prepared_size_mb": prepared_size_mb,
         "error": None,
     }
+
+
+def extract_video_id(youtube_url):
+    """
+    Extract YouTube video ID from various URL formats
+    
+    Supports:
+    - https://www.youtube.com/watch?v=VIDEO_ID
+    - https://youtu.be/VIDEO_ID
+    - https://www.youtube.com/embed/VIDEO_ID
+    - https://m.youtube.com/watch?v=VIDEO_ID
+    """
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
+        r'[?&]v=([a-zA-Z0-9_-]{11})',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, youtube_url)
+        if match:
+            return match.group(1)
+    
+    return None
