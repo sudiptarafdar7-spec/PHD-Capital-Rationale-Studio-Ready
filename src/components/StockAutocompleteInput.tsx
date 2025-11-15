@@ -106,8 +106,8 @@ export function StockAutocompleteInput({
   }, [value]);
 
   const handleSelect = (stock: Stock) => {
-    setInputValue(stock.name);
-    onSelect(stock, stock.name);
+    setInputValue(stock.symbol);
+    onSelect(stock, stock.symbol);
     setOpen(false);
   };
 
@@ -152,7 +152,7 @@ export function StockAutocompleteInput({
                 {suggestions.map((stock, index) => (
                   <CommandItem
                     key={`${stock.securityId}-${index}`}
-                    value={stock.name}
+                    value={stock.symbol}
                     onMouseDown={(e) => {
                       e.preventDefault(); // Prevent blur
                       handleSelect(stock);
@@ -161,12 +161,12 @@ export function StockAutocompleteInput({
                   >
                     <div className="flex items-center justify-between w-full">
                       <div className="flex flex-col">
-                        <span className="font-medium">{stock.name}</span>
+                        <span className="font-medium">{stock.symbol}</span>
                         <span className="text-xs text-muted-foreground">
-                          {stock.symbol} • {stock.exchange}
+                          {stock.name} • {stock.exchange}
                         </span>
                       </div>
-                      {inputValue === stock.name && (
+                      {inputValue === stock.symbol && (
                         <Check className="w-4 h-4 text-primary" />
                       )}
                     </div>
