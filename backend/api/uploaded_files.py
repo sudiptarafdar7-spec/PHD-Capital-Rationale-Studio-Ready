@@ -124,7 +124,10 @@ def get_master_stocks():
                     'name': stock_symbol,
                     'symbol': stock_symbol,
                     'securityId': row.get('SEM_SMST_SECURITY_ID', ''),
-                    'exchange': row.get('SEM_EXM_EXCH_ID', 'BSE')
+                    'exchange': row.get('SEM_EXM_EXCH_ID', 'BSE'),
+                    'listedName': row.get('SM_SYMBOL_NAME', ''),
+                    'shortName': row.get('SEM_CUSTOM_SYMBOL', stock_symbol),
+                    'instrument': row.get('SEM_INSTRUMENT_NAME', 'EQUITY')
                 })
         
         # Sort by name and limit results

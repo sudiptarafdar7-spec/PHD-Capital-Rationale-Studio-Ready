@@ -4,16 +4,19 @@ import { Input } from './ui/input';
 import { API_ENDPOINTS, getAuthHeaders } from '../lib/api-config';
 import { Check, Loader2 } from 'lucide-react';
 
-interface Stock {
+export interface Stock {
   name: string;
   symbol: string;
   securityId: string;
   exchange: string;
+  listedName: string;
+  shortName: string;
+  instrument: string;
 }
 
 interface StockAutocompleteInputProps {
   value: string;
-  onSelect: (stockName: string) => void;
+  onSelect: (stock: Stock | null, stockSymbol: string) => void;
   token: string;
   placeholder?: string;
   disabled?: boolean;
@@ -98,14 +101,14 @@ export function StockAutocompleteInput({
 
   const handleSelect = (stock: Stock) => {
     setInputValue(stock.name);
-    onSelect(stock.name);
+    onSelect(stock, stock.name);
     setOpen(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setInputValue(newValue);
-    onSelect(newValue); // Update parent state immediately
+    onSelect(null, newValue); // Update parent state immediately with null stock data
     
     if (newValue.length >= 2) {
       setOpen(true);

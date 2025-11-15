@@ -31,8 +31,8 @@ The application maintains a clear separation between a React-based frontend and 
     - **Channel/Platform Management**: CRUD operations for various platforms, including logo uploads.
     - **Media Rationale Pipeline**: A 14-step process for YouTube videos (extraction, transcription, translation, analysis, report generation).
     - **Premium Rationale Pipeline**: An 8-step process for generating reports from text input (stock data fetching, technical/fundamental analysis, PDF generation).
-    - **Manual Rationale Pipeline**: A 4-step process for manual data entry (stock mapping, CMP fetching, chart generation, PDF creation).
-    - **Stock Autocomplete**: Intelligent stock name autocomplete using master CSV data, filtering EQUITY instruments from SEM_CUSTOM_SYMBOL column with debounced API calls.
+    - **Manual Rationale Pipeline**: A 3-step process for manual data entry (CMP fetching, chart generation, PDF creation). Stock mapping is performed at input creation using autocomplete.
+    - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data, filtering EQUITY stocks from SEM_TRADING_SYMBOL column where SEM_INSTRUMENT_NAME='EQUITY' AND SEM_EXCH_INSTRUMENT_TYPE='ES'. Returns complete master data (security ID, listed name, short name, exchange, instrument) to eliminate mapping step. Uses 300ms debounced API calls.
 - **System Design Choices**:
     - **Modular API**: Endpoints are organized by feature.
     - **Pipeline-driven Processing**: Sequential analysis for both video and text.

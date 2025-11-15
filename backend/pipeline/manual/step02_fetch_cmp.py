@@ -21,10 +21,10 @@ def run(job_folder, dhan_api_key):
         if not dhan_api_key:
             return {'success': False, 'error': 'Dhan API key not configured'}
         
-        # Read mapped master file
-        input_path = os.path.join(job_folder, 'analysis', 'mapped_master_file.csv')
+        # Read input CSV (created at job creation with all master data)
+        input_path = os.path.join(job_folder, 'analysis', 'input.csv')
         if not os.path.exists(input_path):
-            return {'success': False, 'error': 'Mapped master file not found'}
+            return {'success': False, 'error': 'Input CSV file not found'}
         
         stocks_data = []
         with open(input_path, 'r', encoding='utf-8') as f:

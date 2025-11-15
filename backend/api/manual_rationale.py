@@ -39,7 +39,7 @@ def create_job():
         channel_id = data.get('channelId')
         url = data.get('url', '')  # Optional
         call_date = data.get('callDate')
-        stocks = data.get('stocks', [])  # [{stockName, time, chartType, analysis}]
+        stocks = data.get('stocks', [])  # [{stockName, time, chartType, analysis, securityId, listedName, shortName, exchange, instrument}]
         
         if not channel_id or not call_date or not stocks:
             return jsonify({'error': 'Missing required fields'}), 400
@@ -79,6 +79,29 @@ def create_job():
         with open(input_file_path, 'w', encoding='utf-8') as f:
             json.dump(input_data, f, indent=2)
         
+        # Create input.csv with all master data immediately (skip mapping step)
+        import csv
+        input_csv_path = os.path.join(job_folder, 'analysis', 'input.csv')
+        with open(input_csv_path, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = ['DATE', 'TIME', 'STOCK SYMBOL', 'CHART TYPE', 
+                          'LISTED NAME', 'SHORT NAME', 'SECURITY ID', 'EXCHANGE', 'INSTRUMENT', 'ANALYSIS']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            
+            for stock in stocks:
+                writer.writerow({
+                    'DATE': call_date,
+                    'TIME': stock.get('time', ''),
+                    'STOCK SYMBOL': stock.get('stockName', ''),
+                    'CHART TYPE': stock.get('chartType', 'Daily'),
+                    'LISTED NAME': stock.get('listedName', ''),
+                    'SHORT NAME': stock.get('shortName', stock.get('stockName', '')),
+                    'SECURITY ID': stock.get('securityId', ''),
+                    'EXCHANGE': stock.get('exchange', 'BSE'),
+                    'INSTRUMENT': stock.get('instrument', 'EQUITY'),
+                    'ANALYSIS': stock.get('analysis', '')
+                })
+        
         # Generate rationale title
         rationale_title = f"{channel['platform'].upper()} - {channel['channel_name']} - {call_date}"
         
@@ -108,12 +131,11 @@ def create_job():
                 datetime.now()
             ))
             
-            # Initialize job steps (4 steps for Manual Rationale)
+            # Initialize job steps (3 steps for Manual Rationale - mapping is done at input creation)
             manual_steps = [
-                {'step_number': 1, 'step_name': 'Map Stocks with Master File'},
-                {'step_number': 2, 'step_name': 'Fetch Current Market Price'},
-                {'step_number': 3, 'step_name': 'Generate Stock Charts'},
-                {'step_number': 4, 'step_name': 'Generate PDF Report'},
+                {'step_number': 1, 'step_name': 'Fetch Current Market Price'},
+                {'step_number': 2, 'step_name': 'Generate Stock Charts'},
+                {'step_number': 3, 'step_name': 'Generate PDF Report'},
             ]
             
             for step in manual_steps:
@@ -143,7 +165,6 @@ def process_manual_job_async(job_id):
     try:
         # Import pipeline steps
         from backend.pipeline.manual import (
-            step01_map_stocks,
             step02_fetch_cmp,
             step03_fetch_charts,
             step04_generate_pdf
@@ -175,12 +196,11 @@ def process_manual_job_async(job_id):
             dhan_key_row = cursor.fetchone()
             dhan_api_key = dhan_key_row['key_value'] if dhan_key_row else None
         
-        # Define pipeline steps
+        # Define pipeline steps (skip step 1 - mapping is done at input creation)
         steps = [
-            (1, lambda: step01_map_stocks.run(job_folder, input_data)),
-            (2, lambda: step02_fetch_cmp.run(job_folder, dhan_api_key)),
-            (3, lambda: step03_fetch_charts.run(job_folder, dhan_api_key)),
-            (4, lambda: step04_generate_pdf.run(job_folder)),
+            (1, lambda: step02_fetch_cmp.run(job_folder, dhan_api_key)),
+            (2, lambda: step03_fetch_charts.run(job_folder, dhan_api_key)),
+            (3, lambda: step04_generate_pdf.run(job_folder)),
         ]
         
         # Execute steps sequentially

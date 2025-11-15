@@ -31,17 +31,21 @@ interface StockDetail {
   time: string;
   chartType: string;
   analysis: string;
+  // Master file data
+  securityId?: string;
+  listedName?: string;
+  shortName?: string;
+  exchange?: string;
+  instrument?: string;
 }
 
 type WorkflowStage = 'input' | 'processing' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
 
 const MANUAL_STEPS: JobStep[] = [
-  { id: 'step-1', job_id: '', step_number: 1, name: 'Create Structured CSV', status: 'pending' },
-  { id: 'step-2', job_id: '', step_number: 2, name: 'Map Master File', status: 'pending' },
-  { id: 'step-3', job_id: '', step_number: 3, name: 'Fetch CMP', status: 'pending' },
-  { id: 'step-4', job_id: '', step_number: 4, name: 'Generate Charts', status: 'pending' },
-  { id: 'step-5', job_id: '', step_number: 5, name: 'Generate PDF', status: 'pending' },
-  { id: 'step-6', job_id: '', step_number: 6, name: 'Save / Save & Sign & Log', status: 'pending', message: 'Save final output and update logs' },
+  { id: 'step-1', job_id: '', step_number: 1, name: 'Fetch CMP', status: 'pending' },
+  { id: 'step-2', job_id: '', step_number: 2, name: 'Generate Charts', status: 'pending' },
+  { id: 'step-3', job_id: '', step_number: 3, name: 'Generate PDF', status: 'pending' },
+  { id: 'step-4', job_id: '', step_number: 4, name: 'Save / Save & Sign & Log', status: 'pending', message: 'Save final output and update logs' },
 ];
 
 export default function ManualRationalePage({ selectedJobId }: ManualRationalePageProps) {
@@ -818,7 +822,25 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
                           <Label className="text-xs">Stock Symbol *</Label>
                           <StockAutocompleteInput
                             value={stock.stockName}
-                            onSelect={(stockName) => updateStockDetail(stock.id, 'stockName', stockName)}
+                            onSelect={(stockData, stockSymbol) => {
+                              if (stockData) {
+                                // Update with complete master data
+                                setStockDetails(stockDetails.map(s => 
+                                  s.id === stock.id ? {
+                                    ...s,
+                                    stockName: stockSymbol,
+                                    securityId: stockData.securityId,
+                                    listedName: stockData.listedName,
+                                    shortName: stockData.shortName,
+                                    exchange: stockData.exchange,
+                                    instrument: stockData.instrument
+                                  } : s
+                                ));
+                              } else {
+                                // Just update the stock name if typing manually
+                                updateStockDetail(stock.id, 'stockName', stockSymbol);
+                              }
+                            }}
                             token={token || ''}
                             placeholder="Type to search EQUITY stocks..."
                             disabled={workflowStage !== 'input'}
