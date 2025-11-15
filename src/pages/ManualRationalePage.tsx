@@ -132,7 +132,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       setCurrentJobId(jobId);
 
       // Fetch job steps from backend
-      const jobResponse = await fetch(API_ENDPOINTS.manualRationale.getJob(jobId), {
+      const jobResponse = await fetch(API_ENDPOINTS.manualV2.getJob(jobId), {
         headers: getAuthHeaders(token || ''),
       });
 
@@ -268,40 +268,51 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       setIsProcessing(true);
       setWorkflowStage('processing');
 
-      // Call backend API to create job
-      const response = await fetch(API_ENDPOINTS.manualRationale.createJob, {
+      // Step 1: Create job with v2 API
+      const stockNames = stockDetails.map(s => s.stockName).join(', ');
+      const createResponse = await fetch(API_ENDPOINTS.manualV2.createJob, {
         method: 'POST',
         headers: getAuthHeaders(token || ''),
         body: JSON.stringify({
-          channelId: parseInt(selectedChannelId),
-          url: url,
-          callDate: date,
+          channel_id: parseInt(selectedChannelId),
+          title: stockNames,
+          date: date,
+          call_time: stockDetails[0]?.time || '10:00',
           stocks: stockDetails.map(stock => ({
-            stockName: stock.stockName,
-            time: stock.time,
-            chartType: stock.chartType,
+            symbol: stock.stockName,
+            call_time: stock.time,
+            chart_type: stock.chartType,
             analysis: stock.analysis,
-            // Include master file data
-            securityId: stock.securityId || '',
-            listedName: stock.listedName || '',
-            shortName: stock.shortName || stock.stockName,
-            exchange: stock.exchange || 'BSE',
-            instrument: stock.instrument || 'EQUITY'
           }))
         }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
+      if (!createResponse.ok) {
+        const error = await createResponse.json();
         throw new Error(error.error || 'Failed to create job');
       }
 
-      const data = await response.json();
-      const jobId = data.jobId;
+      const createData = await createResponse.json();
+      const jobId = createData.job_id;
       setCurrentJobId(jobId);
 
       toast.success('Job Created!', {
-        description: `Job ID: ${jobId}`,
+        description: `Job ID: ${jobId}. Starting pipeline...`,
+      });
+
+      // Step 2: Start the pipeline
+      const runResponse = await fetch(API_ENDPOINTS.manualV2.runPipeline(jobId), {
+        method: 'POST',
+        headers: getAuthHeaders(token || ''),
+      });
+
+      if (!runResponse.ok) {
+        const error = await runResponse.json();
+        throw new Error(error.error || 'Failed to start pipeline');
+      }
+
+      toast.info('Pipeline started', {
+        description: 'Processing manual rationale...',
       });
 
       // Poll for job status
@@ -320,7 +331,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(API_ENDPOINTS.manualRationale.getJob(jobId), {
+        const response = await fetch(API_ENDPOINTS.manualV2.getJob(jobId), {
           headers: getAuthHeaders(token || ''),
         });
 
@@ -382,7 +393,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
         description: 'Saving PDF and job data',
       });
 
-      const response = await fetch(API_ENDPOINTS.manualRationale.save(currentJobId), {
+      const response = await fetch(API_ENDPOINTS.manualV2.save(currentJobId), {
         method: 'POST',
         headers: getAuthHeaders(token || ''),
       });
@@ -416,7 +427,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
         description: 'Preparing for signed file upload',
       });
 
-      const response = await fetch(API_ENDPOINTS.manualRationale.save(currentJobId), {
+      const response = await fetch(API_ENDPOINTS.manualV2.save(currentJobId), {
         method: 'POST',
         headers: getAuthHeaders(token || ''),
       });
@@ -862,6 +873,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
                           <Label className="text-xs">Stock Symbol *</Label>
                           <StockAutocompleteInput
                             value={stock.stockName}
+                            useV2Api={true}
                             onSelect={(stockData, stockSymbol) => {
                               if (stockData) {
                                 // Update with complete master data

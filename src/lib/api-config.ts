@@ -75,6 +75,16 @@ export const API_ENDPOINTS = {
     deleteJob: (jobId: string) => `${API_BASE_URL}/api/v1/manual-rationale/jobs/${jobId}`,
     restartStep: (jobId: string, stepNumber: number) => `${API_BASE_URL}/api/v1/manual-rationale/restart-step/${jobId}/${stepNumber}`,
   },
+  manualV2: {
+    stocks: (query: string) => `${API_BASE_URL}/api/v1/manual-v2/stocks?q=${encodeURIComponent(query)}`,
+    createJob: `${API_BASE_URL}/api/v1/manual-v2/jobs`,
+    getJob: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}`,
+    runPipeline: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/run`,
+    getSteps: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/steps`,
+    save: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/save`,
+    uploadSigned: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/upload-signed`,
+    downloadPdf: (filePath: string) => `${API_BASE_URL}/api/v1/saved-rationale/download/${encodeURIComponent(filePath)}`,
+  },
   savedRationale: {
     getAll: `${API_BASE_URL}/api/v1/saved-rationale`,
     getOne: (id: number) => `${API_BASE_URL}/api/v1/saved-rationale/${id}`,

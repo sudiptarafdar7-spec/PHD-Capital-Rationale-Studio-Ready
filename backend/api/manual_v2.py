@@ -14,7 +14,9 @@ manual_v2_bp = Blueprint('manual_v2', __name__, url_prefix='/api/v1/manual-v2')
 @jwt_required()
 def autocomplete_stocks():
     try:
-        query = request.args.get('query', '').strip()
+        # Accept both 'q' and 'query' parameters for flexibility
+        query = request.args.get('q') or request.args.get('query', '')
+        query = query.strip() if query else ''
         limit = request.args.get('limit', 10, type=int)
         
         if not query:

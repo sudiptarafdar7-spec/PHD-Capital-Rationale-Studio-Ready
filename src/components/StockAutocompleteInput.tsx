@@ -20,6 +20,7 @@ interface StockAutocompleteInputProps {
   token: string;
   placeholder?: string;
   disabled?: boolean;
+  useV2Api?: boolean;
 }
 
 export function StockAutocompleteInput({
@@ -28,6 +29,7 @@ export function StockAutocompleteInput({
   token,
   placeholder = 'Type to search stocks...',
   disabled = false,
+  useV2Api = false,
 }: StockAutocompleteInputProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value);
@@ -64,7 +66,11 @@ export function StockAutocompleteInput({
       setLoading(true);
 
       try {
-        const response = await fetch(API_ENDPOINTS.uploadedFiles.masterStocks(debouncedValue), {
+        const endpoint = useV2Api 
+          ? API_ENDPOINTS.manualV2.stocks(debouncedValue)
+          : API_ENDPOINTS.uploadedFiles.masterStocks(debouncedValue);
+        
+        const response = await fetch(endpoint, {
           headers: getAuthHeaders(token),
           signal: abortControllerRef.current.signal,
         });
