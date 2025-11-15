@@ -52,10 +52,16 @@ def download_audio(job_id, youtube_url, cookies_file=None):
     
     # Call RapidAPI to get download link (with polling for processing status)
     try:
+        # Get API key from environment (fallback to provided key for convenience)
+        rapidapi_key = os.environ.get(
+            "RAPIDAPI_KEY",
+            "c7762ba089msh6c8a18942b1f9cdp1bbc0cjsn10d61d38bef5"
+        )
+        
         api_url = "https://youtube-mp36.p.rapidapi.com/dl"
         querystring = {"id": video_id}
         headers = {
-            "x-rapidapi-key": "c7762ba089msh6c8a18942b1f9cdp1bbc0cjsn10d61d38bef5",
+            "x-rapidapi-key": rapidapi_key,
             "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
         }
         
@@ -115,17 +121,39 @@ def download_audio(job_id, youtube_url, cookies_file=None):
                 "error": f"Audio processing timed out after {max_attempts} attempts. The video may be too long or the service is overloaded."
             }
         
-        print(f"📥 Downloading from API...\n")
+        print(f"📥 Downloading MP3 from: {download_link[:80]}...\n")
         
-        # Download the MP3 file
-        audio_response = requests.get(download_link, timeout=120, stream=True)
-        audio_response.raise_for_status()
+        # Download the MP3 file (with retries as links can be time-sensitive)
+        download_success = False
+        for retry in range(3):
+            try:
+                audio_response = requests.get(download_link, timeout=120, stream=True)
+                audio_response.raise_for_status()
+                
+                with open(raw_audio_path, 'wb') as f:
+                    for chunk in audio_response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                
+                # Verify file was downloaded
+                if os.path.exists(raw_audio_path) and os.path.getsize(raw_audio_path) > 0:
+                    download_success = True
+                    print(f"✅ Audio downloaded: {raw_audio_path}")
+                    break
+                else:
+                    raise Exception("Downloaded file is empty or doesn't exist")
+                    
+            except Exception as e:
+                print(f"⚠️  Download attempt {retry + 1}/3 failed: {str(e)}")
+                if retry < 2:
+                    print(f"   Retrying in 3 seconds...")
+                    time.sleep(3)
         
-        with open(raw_audio_path, 'wb') as f:
-            for chunk in audio_response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        
-        print(f"✅ Audio downloaded: {raw_audio_path}")
+        if not download_success:
+            return {
+                "success": False,
+                "error": f"Failed to download audio after 3 attempts. The download link may have expired. Link was: {download_link}"
+            }
         
     except requests.exceptions.RequestException as e:
         return {
@@ -189,9 +217,11 @@ def extract_video_id(youtube_url):
     - https://youtu.be/VIDEO_ID
     - https://www.youtube.com/embed/VIDEO_ID
     - https://m.youtube.com/watch?v=VIDEO_ID
+    - https://www.youtube.com/live/VIDEO_ID (live streams)
+    - https://www.youtube.com/shorts/VIDEO_ID
     """
     patterns = [
-        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
+        r'(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|live\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
         r'[?&]v=([a-zA-Z0-9_-]{11})',
     ]
     
