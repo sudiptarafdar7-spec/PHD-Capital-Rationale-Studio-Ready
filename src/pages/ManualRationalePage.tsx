@@ -97,6 +97,9 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       if (jobResponse.ok) {
         const jobData = await jobResponse.json();
         
+        console.log('[DEBUG] Loading job data:', jobData);
+        console.log('[DEBUG] Job steps from API:', jobData.job_steps);
+        
         // Set the job ID
         setCurrentJobId(jobId);
 
@@ -111,10 +114,14 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           started_at: step.started_at || undefined,
           ended_at: step.ended_at || undefined,
         })) || [];
+        
+        console.log('[DEBUG] Mapped steps:', mappedSteps);
         setJobSteps(mappedSteps);
 
         // Determine workflow stage based on job status
         const jobStatus = jobData.status;
+        console.log('[DEBUG] Job status:', jobStatus);
+        
         if (jobStatus === 'completed') {
           setWorkflowStage('saved');
         } else if (jobStatus === 'signed') {
@@ -130,6 +137,14 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           toast.error('Job failed', {
             description: 'This job encountered an error during processing',
           });
+        } else {
+          // For any other status (pending, etc.), show the steps but not in processing mode
+          setWorkflowStage('ready-to-save');
+        }
+        
+        // Start polling if job is still processing
+        if (jobStatus === 'processing' || jobStatus === 'pending') {
+          pollJobStatus(jobId);
         }
 
         // Load form data from job payload
