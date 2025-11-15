@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Command, CommandGroup, CommandItem, CommandList } from './ui/command';
 import { Input } from './ui/input';
 import { API_ENDPOINTS, getAuthHeaders } from '../lib/api-config';
 import { Check, Loader2 } from 'lucide-react';
-import { cn } from './ui/utils';
 
 interface Stock {
   name: string;
@@ -117,39 +115,39 @@ export function StockAutocompleteInput({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div className="relative">
-          <Input
-            value={inputValue}
-            onChange={handleInputChange}
-            onFocus={() => {
-              if (inputValue.length >= 2 && suggestions.length > 0) {
-                setOpen(true);
-              }
-            }}
-            placeholder={placeholder}
-            disabled={disabled}
-            className="bg-background border-input"
-          />
-          {loading && (
-            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground animate-spin" />
-          )}
-        </div>
-      </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0" align="start">
-        <Command>
-          <CommandList>
-            {suggestions.length === 0 && !loading && debouncedValue.length >= 2 && (
-              <CommandEmpty>No stocks found.</CommandEmpty>
-            )}
-            {suggestions.length > 0 && (
+    <div className="relative">
+      <Input
+        value={inputValue}
+        onChange={handleInputChange}
+        onFocus={() => {
+          if (inputValue.length >= 2 && suggestions.length > 0) {
+            setOpen(true);
+          }
+        }}
+        onBlur={() => {
+          // Delay closing to allow click on suggestions
+          setTimeout(() => setOpen(false), 200);
+        }}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="bg-background border-input"
+      />
+      {loading && (
+        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground animate-spin" />
+      )}
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-[300px] overflow-auto">
+          <Command>
+            <CommandList>
               <CommandGroup>
                 {suggestions.map((stock, index) => (
                   <CommandItem
                     key={`${stock.securityId}-${index}`}
                     value={stock.name}
-                    onSelect={() => handleSelect(stock)}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // Prevent blur
+                      handleSelect(stock);
+                    }}
                     className="cursor-pointer"
                   >
                     <div className="flex items-center justify-between w-full">
@@ -166,10 +164,15 @@ export function StockAutocompleteInput({
                   </CommandItem>
                 ))}
               </CommandGroup>
-            )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+            </CommandList>
+          </Command>
+        </div>
+      )}
+      {open && suggestions.length === 0 && !loading && debouncedValue.length >= 2 && (
+        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md p-2">
+          <p className="text-sm text-muted-foreground text-center">No EQUITY stocks found</p>
+        </div>
+      )}
+    </div>
   );
 }

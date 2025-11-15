@@ -77,15 +77,23 @@ def get_master_stocks():
         # Optional search query parameter
         search_query = request.args.get('q', '').strip().lower()
         
-        # Find master CSV file
-        master_csv_path = None
-        for filename in os.listdir(UPLOAD_FOLDER):
-            if filename.endswith('.csv') and 'master' in filename.lower():
-                master_csv_path = os.path.join(UPLOAD_FOLDER, filename)
-                break
+        # Get master CSV file from database
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT file_path FROM uploaded_files 
+                WHERE file_type = 'masterFile' 
+                ORDER BY uploaded_at DESC 
+                LIMIT 1
+            """)
+            result = cursor.fetchone()
+            
+            if not result:
+                return jsonify({'error': 'Master CSV file not found'}), 404
+            
+            master_csv_path = result['file_path']
         
-        if not master_csv_path or not os.path.exists(master_csv_path):
-            return jsonify({'error': 'Master CSV file not found'}), 404
+        if not os.path.exists(master_csv_path):
+            return jsonify({'error': 'Master CSV file not found on disk'}), 404
         
         # Read master CSV and filter EQUITY instruments
         stocks = []
