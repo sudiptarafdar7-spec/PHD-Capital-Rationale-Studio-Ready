@@ -127,20 +127,37 @@ def download_audio(job_id, youtube_url, cookies_file=None):
         download_success = False
         for retry in range(3):
             try:
-                # Add browser-like headers to mimic auto-download behavior
+                # Full Chrome fingerprint headers required by ytjar/tokyo.xyz CDN servers
                 download_headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': '*/*',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive'
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/122.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "*/*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Accept-Encoding": "identity",
+                    "Connection": "keep-alive",
+                    
+                    # Required for ytjar / tokyo.xyz servers
+                    "Referer": "https://www.yt1s.com/",
+                    "Origin": "https://www.yt1s.com",
+                    
+                    # Critical: browser fingerprint (fixes 403 + empty responses)
+                    "Sec-CH-UA": '"Chromium";v="122", "Not(A:Brand";v="99"',
+                    "Sec-CH-UA-Mobile": "?0",
+                    "Sec-CH-UA-Platform": '"Windows"',
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "cross-site",
+                    "Sec-Fetch-User": "?1",
                 }
                 
                 audio_response = requests.get(
                     download_link, 
                     headers=download_headers,
                     timeout=120, 
-                    stream=True,
-                    allow_redirects=True  # Follow redirects if any
+                    stream=True
                 )
                 audio_response.raise_for_status()
                 
