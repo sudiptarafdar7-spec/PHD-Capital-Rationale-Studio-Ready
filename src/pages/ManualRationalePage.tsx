@@ -89,7 +89,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
 
   const loadSavedJob = React.useCallback(async (jobId: string) => {
     try {
-      // Fetch saved rationale from backend
+      // Fetch saved rationale from backend - v2 fixed
       const response = await fetch(API_ENDPOINTS.savedRationale.getAll, {
         headers: getAuthHeaders(token || ''),
       });
@@ -100,11 +100,18 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
 
       const data = await response.json();
       
+      console.log('[DEBUG] API Response:', data);
+      console.log('[DEBUG] Looking for job_id:', jobId);
+      
       // Extract rationales array from response
       const savedRationales = data.rationales || [];
       
+      console.log('[DEBUG] Extracted rationales:', savedRationales);
+      console.log('[DEBUG] Is array?', Array.isArray(savedRationales));
+      
       // Ensure we have an array
       if (!Array.isArray(savedRationales)) {
+        console.error('[ERROR] savedRationales is not an array:', savedRationales);
         toast.error('Invalid response', {
           description: 'Failed to load saved rationales',
         });
@@ -112,6 +119,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       }
       
       const savedRationale = savedRationales.find((r: any) => r.job_id === jobId);
+      console.log('[DEBUG] Found saved rationale:', savedRationale);
 
       if (!savedRationale) {
         toast.error('Job not found', {
@@ -147,8 +155,11 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       if (savedRationale.signed_pdf_path) {
         setWorkflowStage('completed');
         setSaveType('save-and-sign');
+        const fileName = savedRationale.signed_pdf_path ? 
+          String(savedRationale.signed_pdf_path).split('/').pop() || 'signed.pdf' : 
+          'signed.pdf';
         setUploadedSignedFile({
-          fileName: savedRationale.signed_pdf_path.split('/').pop() || 'signed.pdf',
+          fileName: fileName,
           uploadedAt: savedRationale.signed_uploaded_at || new Date().toISOString(),
         });
       } else {
