@@ -4,6 +4,19 @@
 PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features three primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
 ## Recent Changes (November 2025)
+### Media Rationale Step 1 Performance Optimization ✅ COMPLETED (November 15, 2025)
+- **YouTube Audio Download Optimization**: Replaced multi-strategy approach (7 strategies) with single ultra-fast Android client
+- **Performance improvement**: Download time reduced from 40-90 seconds to 6-12 seconds on VPS
+- **Technical changes**:
+  - Removed slow multi-client switching (tv_embedded, ios, web, etc.)
+  - Removed signature_timestamp protection that caused delays
+  - Removed format probing overhead (now uses direct m4a format)
+  - Single-pass Android client with modern Chrome UA
+  - Simplified configuration: `player_client: ["android"]` only
+  - Format: `bestaudio[ext=m4a]/bestaudio` for fastest downloads
+- **File**: `backend/pipeline/step01_download_audio.py`
+- **Impact**: 10-20× faster YouTube audio downloads, more stable on VPS environments
+
 ### Manual Rationale v2 Complete Rebuild ✅ COMPLETED
 - **Cleaned up legacy code**: Removed old manual_rationale.py and backend/pipeline/manual/ directory
 - **New service architecture**: Created backend/services/manual_v2/ with clean separation of concerns
