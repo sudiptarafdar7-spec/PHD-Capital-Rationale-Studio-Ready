@@ -316,18 +316,24 @@ def download_pdf(job_id):
             # Parse payload if it's a string
             import json
             payload = job['payload']
+            print(f"[DEBUG] Raw payload: {payload}, type: {type(payload)}")
             if isinstance(payload, str):
                 payload = json.loads(payload)
+            print(f"[DEBUG] Parsed payload: {payload}")
             
             # Get PDF filename from payload
             pdf_filename = payload.get('pdf_filename') if payload else None
+            print(f"[DEBUG] PDF filename from payload: {pdf_filename}")
             
             if not pdf_filename:
+                print("[DEBUG] No PDF filename found in payload")
                 return jsonify({'error': 'Access denied'}), 403
             
             pdf_path = os.path.join(job['folder_path'], 'pdf', pdf_filename)
+            print(f"[DEBUG] PDF path: {pdf_path}, exists: {os.path.exists(pdf_path)}")
             
             if not os.path.exists(pdf_path):
+                print("[DEBUG] PDF file does not exist")
                 return jsonify({'error': 'Access denied'}), 403
             
             from flask import send_file
