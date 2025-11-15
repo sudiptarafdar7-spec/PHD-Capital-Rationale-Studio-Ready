@@ -1,12 +1,25 @@
 import os
 import pandas as pd
-import json
 import requests
+import time
 from datetime import datetime, timedelta
-from typing import List, Dict
 from backend.utils.database import get_db_cursor
 
+
 def fetch_cmp_from_dhan(api_key: str, security_id: str, exchange: str, instrument: str, call_datetime: datetime) -> float:
+    """
+    Fetch CMP from Dhan API for a specific stock at a specific time
+    
+    Args:
+        api_key: Dhan API access token
+        security_id: Security ID from master file
+        exchange: Exchange (NSE/BSE)
+        instrument: Instrument type (EQUITY)
+        call_datetime: Datetime when stock was called
+        
+    Returns:
+        float: Current Market Price or None
+    """
     url = "https://api.dhan.co/v2/charts/intraday"
     
     headers = {
@@ -16,19 +29,23 @@ def fetch_cmp_from_dhan(api_key: str, security_id: str, exchange: str, instrumen
     }
     
     try:
+        # Format datetime range (call time + 10 minutes)
         from_date = call_datetime.strftime("%Y-%m-%d %H:%M:00")
         to_date = (call_datetime + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:00")
         
+        # Exchange segment formatting
         exchange = str(exchange).upper()
         instrument = str(instrument).upper()
         
         if instrument == "EQUITY":
             exchange_segment = f"{exchange}_EQ"
         else:
-            exchange_segment = f"{exchange}_EQ"
+            exchange_segment = f"{exchange}_EQ"  # Default to EQ
         
+        # Remove .0 if security_id is float-like
         security_id_str = str(security_id).split(".")[0]
         
+        # API payload
         payload = {
             "securityId": security_id_str,
             "exchangeSegment": exchange_segment,
@@ -39,16 +56,20 @@ def fetch_cmp_from_dhan(api_key: str, security_id: str, exchange: str, instrumen
             "toDate": to_date
         }
         
+        # Make API request
         response = requests.post(url, headers=headers, json=payload, timeout=10)
         
+        # Log detailed error if request fails
         if response.status_code != 200:
             print(f"    ⚠️ API error ({response.status_code}): {response.text}")
             return None
         
         data = response.json()
         
+        # Extract CMP from response
         if "close" in data and len(data["close"]) > 0:
-            return data["close"][0]
+            cmp_value = data["close"][0]
+            return cmp_value
         else:
             return None
             
@@ -56,78 +77,142 @@ def fetch_cmp_from_dhan(api_key: str, security_id: str, exchange: str, instrumen
         print(f"    ⚠️ API error: {str(e)}")
         return None
 
-def fetch_cmp_for_stocks(job_id: str, job_folder: str) -> List[Dict]:
+
+def fetch_cmp_for_stocks(job_id: str, job_folder: str):
+    """
+    Fetch CMP for all stocks from input.csv and create stocks_with_cmp.csv
+    
+    Args:
+        job_id: Job ID
+        job_folder: Path to job directory
+        
+    Returns:
+        List of stock dictionaries with CMP data
+    """
     print("\n" + "=" * 60)
-    print("MANUAL RATIONALE STEP 1: FETCH CMP")
+    print("MANUAL RATIONALE STEP 1: FETCH CMP (CURRENT MARKET PRICE)")
     print("=" * 60 + "\n")
     
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT payload FROM jobs WHERE id = %s", (job_id,))
-        job = cursor.fetchone()
-        if not job or not job['payload']:
-            raise ValueError("Job payload not found")
+    try:
+        # Input/Output paths
+        input_csv = os.path.join(job_folder, 'input.csv')
+        output_csv = os.path.join(job_folder, 'analysis', 'stocks_with_cmp.csv')
         
-        stocks = job['payload'].get('stocks', [])
-        call_time_str = job['payload'].get('call_time', '')
+        # Verify input file exists
+        if not os.path.exists(input_csv):
+            raise ValueError(f'Input CSV file not found: {input_csv}')
         
-        cursor.execute("SELECT key_value FROM api_keys WHERE provider = 'dhan'")
-        api_key_row = cursor.fetchone()
-        dhan_api_key = api_key_row['key_value'] if api_key_row else None
-    
-    if not dhan_api_key:
-        raise ValueError("Dhan API key not found. Please add it in API Keys settings.")
-    
-    if not call_time_str:
-        call_datetime = datetime.now()
-    else:
-        try:
-            call_datetime = datetime.strptime(call_time_str, "%Y-%m-%d %H:%M")
-        except:
-            call_datetime = datetime.now()
-    
-    print(f"🔑 Dhan API key found")
-    print(f"📅 Call time: {call_datetime.strftime('%Y-%m-%d %H:%M')}")
-    print(f"📊 Fetching CMP for {len(stocks)} stocks\n")
-    
-    def safe_float(value, default=0.0):
-        """Safely convert value to float with fallback"""
-        if value is None or value == '':
-            return default
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return default
-    
-    for idx, stock in enumerate(stocks, 1):
-        symbol = stock.get('symbol', '')
-        security_id = stock.get('security_id', '')
-        exchange = stock.get('exchange', 'NSE')
-        instrument = stock.get('instrument', 'EQUITY')
+        # Get Dhan API key
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT key_value FROM api_keys WHERE provider = 'dhan'")
+            api_key_row = cursor.fetchone()
+            dhan_api_key = api_key_row['key_value'] if api_key_row else None
         
-        print(f"{idx}. {symbol}... ", end='', flush=True)
+        # Verify Dhan API key
+        if not dhan_api_key:
+            raise ValueError('Dhan API key not found in database. Please add it in API Keys settings.')
         
-        cmp = fetch_cmp_from_dhan(dhan_api_key, security_id, exchange, instrument, call_datetime)
+        print(f"🔑 Dhan API key found")
         
-        if cmp is not None:
-            stock['cmp'] = round(cmp, 2)
-            entry = safe_float(stock.get('entry'))
-            if entry > 0:
-                change = ((cmp - entry) / entry) * 100
-                stock['change_percent'] = round(change, 2)
-            else:
-                stock['change_percent'] = 0.0
-            print(f"✓ CMP: ₹{cmp:.2f}")
-        else:
-            stock['cmp'] = 0.0
-            stock['change_percent'] = 0.0
-            print("✗ Failed")
-    
-    output_csv = os.path.join(job_folder, 'analysis', 'stocks_with_cmp.csv')
-    os.makedirs(os.path.dirname(output_csv), exist_ok=True)
-    
-    df = pd.DataFrame(stocks)
-    df.to_csv(output_csv, index=False)
-    
-    print(f"\n✅ CMP data saved to: {output_csv}")
-    
-    return stocks
+        # Load input CSV
+        print(f"📖 Loading stocks from input.csv...")
+        df = pd.read_csv(input_csv)
+        print(f"✅ Loaded {len(df)} stocks\n")
+        
+        # Ensure CMP column exists
+        if "CMP" not in df.columns:
+            df["CMP"] = None
+        
+        # Fetch CMP for each stock
+        print("💹 Fetching Current Market Prices from Dhan API...")
+        print("-" * 60)
+        
+        success_count = 0
+        failed_count = 0
+        
+        for i, row in df.iterrows():
+            try:
+                # Parse datetime from DATE and TIME columns
+                date_str = str(row.get('DATE', '')).strip()
+                time_str = str(row.get('TIME', '')).strip()
+                
+                if not date_str or not time_str:
+                    stock_name = row.get("LISTED NAME", row.get("STOCK SYMBOL", f"Row {i}"))
+                    print(f"  ⚠️ {stock_name:25} | Missing DATE or TIME, skipping")
+                    failed_count += 1
+                    continue
+                
+                # Combine date and time
+                dt_str = f"{date_str} {time_str}"
+                try:
+                    # Try YYYY-MM-DD HH:MM:SS format
+                    dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    try:
+                        # Try YYYY-MM-DD HH:MM format
+                        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+                    except ValueError:
+                        # Try parsing just date and use current time
+                        dt = datetime.strptime(date_str, "%Y-%m-%d")
+                
+                stock_symbol = row.get("STOCK SYMBOL", "")
+                listed_name = row.get("LISTED NAME", "")
+                security_id = row.get("SECURITY ID", "")
+                exchange = row.get("EXCHANGE", "")
+                instrument = row.get("INSTRUMENT", "")
+                
+                display_name = listed_name if listed_name else stock_symbol
+                
+                # Skip if missing required data
+                if not security_id or pd.isna(security_id) or str(security_id).strip() == "":
+                    print(f"  ⚠️ {display_name:25} | Missing Security ID, skipping")
+                    failed_count += 1
+                    continue
+                
+                # Fetch CMP from Dhan API
+                cmp_value = fetch_cmp_from_dhan(dhan_api_key, security_id, exchange, instrument, dt)
+                
+                if cmp_value is not None:
+                    df.at[i, "CMP"] = cmp_value
+                    print(f"  ✅ {display_name:25} | CMP: ₹{cmp_value:,.2f} @ {dt_str}")
+                    success_count += 1
+                else:
+                    print(f"  ⚠️ {display_name:25} | No data available @ {dt_str}")
+                    df.at[i, "CMP"] = None
+                    failed_count += 1
+                
+                # Add delay to avoid API rate limiting (429 errors)
+                time.sleep(1.5)
+                
+            except Exception as e:
+                display_name = row.get("LISTED NAME", row.get("STOCK SYMBOL", f"Row {i}"))
+                print(f"  ❌ {display_name:25} | Error: {str(e)}")
+                failed_count += 1
+        
+        print("-" * 60)
+        print(f"\n📊 CMP Fetch Summary:")
+        print(f"   Total stocks: {len(df)}")
+        print(f"   Successfully fetched: {success_count}")
+        print(f"   Failed/No data: {failed_count}\n")
+        
+        # Save output
+        print(f"💾 Saving CMP data to: {output_csv}")
+        
+        # Ensure analysis directory exists
+        os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+        
+        df.to_csv(output_csv, index=False)
+        
+        print(f"✅ Saved {len(df)} records")
+        print(f"✅ Output: analysis/stocks_with_cmp.csv\n")
+        
+        # Convert to list of dicts for return
+        stocks_with_cmp = df.to_dict('records')
+        
+        return stocks_with_cmp
+        
+    except Exception as e:
+        print(f"\n❌ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise e
