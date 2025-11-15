@@ -13,7 +13,7 @@ class ManualRationaleOrchestrator:
     
     def __init__(self, job_id: str):
         self.job_id = job_id
-        self.folder_path = os.path.join('job_files', job_id)
+        self.folder_path = os.path.join('backend', 'job_files', job_id)
         os.makedirs(self.folder_path, exist_ok=True)
         os.makedirs(os.path.join(self.folder_path, 'analysis'), exist_ok=True)
         os.makedirs(os.path.join(self.folder_path, 'charts'), exist_ok=True)

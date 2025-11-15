@@ -55,7 +55,7 @@ def create_job():
         enriched_stocks = enrich_stocks_with_master_data(stocks)
         
         job_id = f"manual-{uuid.uuid4().hex[:8]}"
-        folder_path = os.path.join('job_files', job_id)
+        folder_path = os.path.join('backend', 'job_files', job_id)
         
         payload = {
             'stocks': enriched_stocks,
