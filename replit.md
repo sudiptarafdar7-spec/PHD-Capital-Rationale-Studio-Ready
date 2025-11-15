@@ -11,17 +11,31 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **Code reuse**: Leverages existing premium pipeline functions for charts and PDF generation (avoiding duplication)
 - **Database enhancements**: Added `payload` JSONB column to jobs table, `metadata` JSONB column to saved_rationale table
 - **Robust error handling**: Safe numeric parsing in CMP step to handle empty/invalid user inputs
-- **New API endpoints**: 8 REST endpoints under /api/v1/manual-v2/ for complete job lifecycle management
+- **New API endpoints**: 9 REST endpoints under /api/v1/manual-v2/ for complete job lifecycle management
+  - `/jobs` (POST) - Create new job
+  - `/jobs/<id>` (GET) - Get job details
+  - `/jobs/<id>/run` (POST) - Execute pipeline
+  - `/jobs/<id>/steps` (GET) - Get job steps
+  - `/jobs/<id>/save` (POST) - Save to saved_rationale
+  - `/jobs/<id>/upload-signed` (POST) - Upload signed PDF
+  - `/jobs/<id>/download` (GET) - Download PDF with JWT authentication
+  - `/stocks` (GET) - Stock autocomplete
 - **Frontend updates**: 
   - Stock autocomplete displays symbols (e.g., "RELIANCE") instead of company names
   - Job loading fixed: Now correctly loads from jobs table (for unsaved jobs) with fallback to saved_rationale
   - Contract mismatches resolved: Stock autocomplete accepts both 'q' and 'query' parameters, job creation sends correct payload structure
   - Workflow stage management: Proper step display visibility based on job status
   - Polling for in-progress jobs: Continues polling when loading jobs from dashboard
+  - **PDF Preview & Download**: ✅ Implemented with auth-aware blob URLs for secure viewing and downloading
 - **Input CSV Generation**: Automated creation of input.csv before pipeline execution with columns: DATE, TIME, STOCK SYMBOL, CHART TYPE, LISTED NAME, SHORT NAME, SECURITY ID, EXCHANGE, INSTRUMENT, ANALYSIS
   - Master data automatically enriched from uploaded master CSV at job creation
   - Chart type uses user's direct input (Daily/Weekly/Monthly)
   - Analysis column populated with user's detailed analysis text
+- **PDF Handling**: Secure PDF viewing and download with JWT authentication
+  - Backend serves PDFs via `/jobs/<id>/download` endpoint using Flask's send_file
+  - Frontend fetches PDF with Authorization headers, creates blob URL for iframe preview
+  - Download button fetches blob and triggers browser download with proper filename
+  - Blob URLs automatically revoked after download to free memory
 - **Status**: ✅ Fully implemented, tested, and production-ready
 
 ## User Preferences

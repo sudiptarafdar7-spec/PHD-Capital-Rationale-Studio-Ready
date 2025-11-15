@@ -63,9 +63,20 @@ class ManualRationaleOrchestrator:
             self.update_step_status(3, 'running')
             pdf_path = generate_manual_pdf(self.job_id, self.folder_path, stocks_with_charts)
             self.update_step_status(3, 'success', 'PDF generated successfully')
+            
+            # Save PDF filename to payload
+            pdf_filename = os.path.basename(pdf_path)
+            with get_db_cursor(commit=True) as cursor:
+                cursor.execute("""
+                    UPDATE jobs 
+                    SET payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{pdf_filename}', to_jsonb(%s::text))
+                    WHERE id = %s
+                """, (pdf_filename, self.job_id))
+            
             self.update_job_status('pdf_ready', progress=100, current_step=3)
             
             print(f"✓ Manual Rationale pipeline completed for job {self.job_id}")
+            print(f"✓ PDF saved: {pdf_filename}")
             
         except Exception as e:
             print(f"✗ Pipeline failed for job {self.job_id}: {str(e)}")

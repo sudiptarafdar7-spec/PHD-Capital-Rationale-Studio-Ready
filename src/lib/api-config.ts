@@ -83,7 +83,7 @@ export const API_ENDPOINTS = {
     getSteps: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/steps`,
     save: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/save`,
     uploadSigned: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/upload-signed`,
-    downloadPdf: (filePath: string) => `${API_BASE_URL}/api/v1/saved-rationale/download/${encodeURIComponent(filePath)}`,
+    downloadPdf: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/download`,
   },
   savedRationale: {
     getAll: `${API_BASE_URL}/api/v1/saved-rationale`,

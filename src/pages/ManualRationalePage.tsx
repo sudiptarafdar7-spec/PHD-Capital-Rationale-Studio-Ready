@@ -65,6 +65,8 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedSignedFile, setUploadedSignedFile] = useState<{ fileName: string; uploadedAt: string } | null>(null);
   const [saveType, setSaveType] = useState<'save' | 'save-and-sign' | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pdfFilename, setPdfFilename] = useState<string>('rationale_report.pdf');
 
   // Load channels on mount
   useEffect(() => {
@@ -130,7 +132,9 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           setWorkflowStage('completed');
           setSaveType('save-and-sign');
         } else if (jobStatus === 'pdf_ready') {
-          setWorkflowStage('ready-to-save');
+          setWorkflowStage('pdf-preview');
+          // Fetch PDF with auth headers and create blob URL
+          loadPdfBlob(jobId);
         } else if (jobStatus === 'processing') {
           setWorkflowStage('processing');
           setIsProcessing(true);
@@ -141,7 +145,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           });
         } else {
           // For any other status (pending, etc.), show the steps but not in processing mode
-          setWorkflowStage('ready-to-save');
+          setWorkflowStage('input');
         }
         
         // Start polling if job is still processing
@@ -370,6 +374,58 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     }
   };
 
+  const loadPdfBlob = async (jobId: string) => {
+    try {
+      // Revoke previous blob URL to prevent memory leaks
+      if (pdfUrl && pdfUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+
+      const response = await fetch(API_ENDPOINTS.manualV2.downloadPdf(jobId), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch PDF' }));
+        toast.error('Failed to load PDF', {
+          description: errorData.error || 'Please try again',
+        });
+        return;
+      }
+
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'rationale_report.pdf';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      setPdfFilename(filename);
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      setPdfUrl(blobUrl);
+    } catch (error) {
+      console.error('Error loading PDF blob:', error);
+      toast.error('Failed to load PDF', {
+        description: 'An error occurred while loading the PDF',
+      });
+    }
+  };
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (pdfUrl && pdfUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
+  }, [pdfUrl]);
+
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
@@ -403,6 +459,9 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           clearInterval(pollInterval);
           setIsProcessing(false);
           setWorkflowStage('pdf-preview');
+          // Fetch PDF with auth headers and create blob URL for iframe
+          // Use jobId parameter instead of currentJobId to avoid stale closure
+          loadPdfBlob(jobId);
           playCompletionBell();
           toast.success('PDF Generated Successfully!', {
             description: 'Your rationale report is ready',
@@ -421,10 +480,73 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
     }, 2000); // Poll every 2 seconds
   };
 
-  const handleDownloadPDF = () => {
-    toast.success('Downloading PDF', {
-      description: 'final_rationale_report.pdf',
-    });
+  const handleDownloadPDF = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      // Reuse existing blob URL if available, otherwise fetch
+      if (pdfUrl && pdfUrl.startsWith('blob:')) {
+        const link = document.createElement('a');
+        link.href = pdfUrl;
+        link.download = pdfFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success('Downloading PDF', {
+          description: pdfFilename,
+        });
+        return;
+      }
+
+      // Fetch PDF with auth headers if no blob URL available
+      const response = await fetch(API_ENDPOINTS.manualV2.downloadPdf(currentJobId), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to download PDF' }));
+        toast.error('Failed to download PDF', {
+          description: errorData.error || 'Please try again',
+        });
+        return;
+      }
+
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = pdfFilename;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+?)"?$/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Create temporary anchor and trigger download
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up blob URL
+      URL.revokeObjectURL(blobUrl);
+      
+      toast.success('Downloading PDF', {
+        description: filename,
+      });
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      toast.error('Failed to download PDF', {
+        description: 'An error occurred while downloading',
+      });
+    }
   };
 
   const handleSave = async () => {
@@ -645,7 +767,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           {/* PDF Viewer */}
           <div className="bg-background border border-border rounded-lg overflow-hidden">
             <iframe
-              src="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+              src={pdfUrl || "about:blank"}
               className="w-full h-[500px]"
               title="PDF Report Preview"
             />
@@ -716,7 +838,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           {/* PDF Viewer */}
           <div className="bg-background border border-border rounded-lg overflow-hidden">
             <iframe
-              src="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+              src={pdfUrl || "about:blank"}
               className="w-full h-[500px]"
               title="PDF Report Preview"
             />

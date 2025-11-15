@@ -284,3 +284,47 @@ def upload_signed_pdf(job_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@manual_v2_bp.route('/jobs/<job_id>/download', methods=['GET'])
+@jwt_required()
+def download_pdf(job_id):
+    try:
+        current_user = get_jwt_identity()
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT folder_path, payload, user_id FROM jobs WHERE id = %s
+            """, (job_id,))
+            job = cursor.fetchone()
+            
+            # Return 403 for any unauthorized access (prevents ID enumeration)
+            if not job or str(job['user_id']) != str(current_user):
+                return jsonify({'error': 'Access denied'}), 403
+            
+            # Parse payload if it's a string
+            import json
+            payload = job['payload']
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            
+            # Get PDF filename from payload
+            pdf_filename = payload.get('pdf_filename') if payload else None
+            
+            if not pdf_filename:
+                return jsonify({'error': 'Access denied'}), 403
+            
+            pdf_path = os.path.join(job['folder_path'], 'pdf', pdf_filename)
+            
+            if not os.path.exists(pdf_path):
+                return jsonify({'error': 'Access denied'}), 403
+            
+            from flask import send_file
+            return send_file(
+                pdf_path,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=pdf_filename
+            )
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
