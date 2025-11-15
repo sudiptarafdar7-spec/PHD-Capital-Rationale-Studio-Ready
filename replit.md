@@ -16,6 +16,12 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
   - Stock autocomplete displays symbols (e.g., "RELIANCE") instead of company names
   - Job loading fixed: Now correctly loads from jobs table (for unsaved jobs) with fallback to saved_rationale
   - Contract mismatches resolved: Stock autocomplete accepts both 'q' and 'query' parameters, job creation sends correct payload structure
+  - Workflow stage management: Proper step display visibility based on job status
+  - Polling for in-progress jobs: Continues polling when loading jobs from dashboard
+- **Input CSV Generation**: Automated creation of input.csv before pipeline execution with columns: DATE, TIME, STOCK SYMBOL, CHART TYPE, LISTED NAME, SHORT NAME, SECURITY ID, EXCHANGE, INSTRUMENT, ANALYSIS
+  - Master data automatically enriched from uploaded master CSV at job creation
+  - Chart type intelligently determined from call field (BUY/LONG → BULLISH, SELL/SHORT → BEARISH)
+  - Analysis column populated with entry, target, and stop loss data
 - **Status**: ✅ Fully implemented, tested, and production-ready
 
 ## User Preferences

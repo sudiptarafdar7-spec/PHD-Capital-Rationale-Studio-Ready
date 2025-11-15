@@ -4,6 +4,7 @@ import threading
 from datetime import datetime
 from typing import Dict, List
 from backend.utils.database import get_db_cursor
+from .utils import create_input_csv
 from .step01_fetch_cmp import fetch_cmp_for_stocks
 from .step02_generate_charts import generate_charts_for_stocks
 from .step03_generate_pdf import generate_manual_pdf
@@ -25,7 +26,7 @@ class ManualRationaleOrchestrator:
                 (status, progress, current_step, datetime.now(), self.job_id)
             )
     
-    def update_step_status(self, step_number: int, status: str, message: str = None):
+    def update_step_status(self, step_number: int, status: str, message: str = ''):
         with get_db_cursor(commit=True) as cursor:
             if status == 'running':
                 cursor.execute(
@@ -35,13 +36,20 @@ class ManualRationaleOrchestrator:
             elif status in ['success', 'failed']:
                 cursor.execute(
                     "UPDATE job_steps SET status = %s, message = %s, ended_at = %s WHERE job_id = %s AND step_number = %s",
-                    (status, message, datetime.now(), self.job_id, step_number)
+                    (status, message or '', datetime.now(), self.job_id, step_number)
                 )
     
     def run_pipeline(self):
         try:
+            # Create input.csv with all master data enrichment
+            print(f"📄 Creating input.csv for job {self.job_id}...")
+            input_csv_path = create_input_csv(self.job_id, self.folder_path)
+            print(f"✓ input.csv created: {input_csv_path}")
+            
+            # Start the 3-step pipeline
             self.update_job_status('processing', progress=0, current_step=1)
             
+            # Step 1: Fetch CMP
             self.update_step_status(1, 'running')
             stocks_with_cmp = fetch_cmp_for_stocks(self.job_id, self.folder_path)
             self.update_step_status(1, 'success', 'CMP fetched successfully')

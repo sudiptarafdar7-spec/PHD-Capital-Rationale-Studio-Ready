@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 import uuid
 import os
+import json
 from backend.api import Blueprint
 from backend.utils.database import get_db_cursor
 from backend.services.manual_v2.utils import enrich_stocks_with_master_data, get_stock_autocomplete
@@ -68,7 +69,7 @@ def create_job():
                 INSERT INTO jobs (id, channel_id, title, date, user_id, tool_used, status, folder_path, payload, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (job_id, channel_id, title, date, user_id, 'Manual Rationale', 'pending', folder_path, 
-                  jsonify(payload).get_data(as_text=True), datetime.now(), datetime.now()))
+                  json.dumps(payload), datetime.now(), datetime.now()))
             
             steps = [
                 (1, 'Fetch CMP', 'pending'),

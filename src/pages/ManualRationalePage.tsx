@@ -95,16 +95,18 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       });
 
       if (jobResponse.ok) {
-        const jobData = await jobResponse.json();
+        const responseData = await jobResponse.json();
+        const jobData = responseData.job || responseData;  // Handle both nested and flat responses
+        const jobStepsData = responseData.job_steps || [];
         
         console.log('[DEBUG] Loading job data:', jobData);
-        console.log('[DEBUG] Job steps from API:', jobData.job_steps);
+        console.log('[DEBUG] Job steps from API:', jobStepsData);
         
         // Set the job ID
         setCurrentJobId(jobId);
 
         // Map job steps
-        const mappedSteps = jobData.job_steps?.map((step: any) => ({
+        const mappedSteps = jobStepsData.map((step: any) => ({
           id: String(step.id),
           job_id: step.job_id,
           step_number: step.step_number,
@@ -113,7 +115,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           message: step.message || undefined,
           started_at: step.started_at || undefined,
           ended_at: step.ended_at || undefined,
-        })) || [];
+        }));
         
         console.log('[DEBUG] Mapped steps:', mappedSteps);
         setJobSteps(mappedSteps);
@@ -377,10 +379,12 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
 
         if (!response.ok) return;
 
-        const data = await response.json();
+        const responseData = await response.json();
+        const jobData = responseData.job || responseData;
+        const jobStepsData = responseData.job_steps || [];
         
         // Update job steps
-        const mappedSteps = data.job_steps.map((step: any) => ({
+        const mappedSteps = jobStepsData.map((step: any) => ({
           id: String(step.id),
           job_id: step.job_id,
           step_number: step.step_number,
@@ -395,7 +399,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
         setJobSteps(mappedSteps);
 
         // Check if job is complete
-        if (data.status === 'pdf_ready') {
+        if (jobData.status === 'pdf_ready') {
           clearInterval(pollInterval);
           setIsProcessing(false);
           setWorkflowStage('pdf-preview');
@@ -403,7 +407,7 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
           toast.success('PDF Generated Successfully!', {
             description: 'Your rationale report is ready',
           });
-        } else if (data.status === 'failed') {
+        } else if (jobData.status === 'failed') {
           clearInterval(pollInterval);
           setIsProcessing(false);
           toast.error('Job Failed', {

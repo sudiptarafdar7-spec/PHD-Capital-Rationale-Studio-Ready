@@ -1,7 +1,9 @@
 import os
 import csv
+import json
 import pandas as pd
 from typing import Dict, List, Optional
+from datetime import datetime
 
 def get_master_csv_path() -> Optional[str]:
     from backend.utils.database import get_db_cursor
@@ -97,3 +99,78 @@ def get_stock_autocomplete(query: str, limit: int = 10) -> List[Dict]:
     except Exception as e:
         print(f"Error in autocomplete: {str(e)}")
         return []
+
+def create_input_csv(job_id: str, folder_path: str) -> str:
+    """
+    Create input.csv file with all stock data and master data enrichment.
+    
+    Columns: DATE, TIME, STOCK SYMBOL, CHART TYPE, LISTED NAME, SHORT NAME, 
+             SECURITY ID, EXCHANGE, INSTRUMENT, ANALYSIS
+    
+    Returns the path to the created CSV file.
+    """
+    from backend.utils.database import get_db_cursor
+    
+    # Fetch job data
+    with get_db_cursor() as cursor:
+        cursor.execute("""
+            SELECT date, payload FROM jobs WHERE id = %s
+        """, (job_id,))
+        job = cursor.fetchone()
+        
+        if not job:
+            raise ValueError(f"Job {job_id} not found")
+    
+    # Parse payload
+    payload = json.loads(job['payload']) if isinstance(job['payload'], str) else job['payload']
+    stocks = payload.get('stocks', [])
+    call_time = payload.get('call_time', '')
+    job_date = payload.get('date', job['date'])
+    
+    # Create CSV file
+    csv_path = os.path.join(folder_path, 'input.csv')
+    
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = [
+            'DATE', 'TIME', 'STOCK SYMBOL', 'CHART TYPE', 'LISTED NAME', 
+            'SHORT NAME', 'SECURITY ID', 'EXCHANGE', 'INSTRUMENT', 'ANALYSIS'
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for stock in stocks:
+            # Determine chart type based on call
+            call = stock.get('call', '').upper()
+            if call in ['BUY', 'LONG']:
+                chart_type = 'BULLISH'
+            elif call in ['SELL', 'SHORT']:
+                chart_type = 'BEARISH'
+            else:
+                chart_type = 'NEUTRAL'
+            
+            # Build analysis text
+            analysis_parts = []
+            if stock.get('entry'):
+                analysis_parts.append(f"Entry: {stock['entry']}")
+            if stock.get('target'):
+                analysis_parts.append(f"Target: {stock['target']}")
+            if stock.get('stop_loss'):
+                analysis_parts.append(f"Stop Loss: {stock['stop_loss']}")
+            
+            analysis_text = ' | '.join(analysis_parts) if analysis_parts else ''
+            
+            writer.writerow({
+                'DATE': job_date,
+                'TIME': call_time,
+                'STOCK SYMBOL': stock.get('symbol', ''),
+                'CHART TYPE': chart_type,
+                'LISTED NAME': stock.get('listed_name', ''),
+                'SHORT NAME': stock.get('short_name', ''),
+                'SECURITY ID': stock.get('security_id', ''),
+                'EXCHANGE': stock.get('exchange', ''),
+                'INSTRUMENT': stock.get('instrument', ''),
+                'ANALYSIS': analysis_text
+            })
+    
+    print(f"✓ Created input.csv at {csv_path}")
+    return csv_path
