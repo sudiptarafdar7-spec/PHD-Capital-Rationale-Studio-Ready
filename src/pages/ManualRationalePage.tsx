@@ -162,15 +162,21 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
       setDate(savedRationale.date || '');
 
       // Parse stock names into stock details (basic reconstruction)
-      const stockNames = savedRationale.title ? savedRationale.title.split(',').map((s: string) => s.trim()) : [];
-      const loadedStocks = stockNames.map((name: string, index: number) => ({
-        id: `loaded-${index}`,
-        stockName: name,
-        time: '10:00',
-        chartType: 'Daily' as const,
-        analysis: '',
-      }));
-      setStockDetails(loadedStocks.length > 0 ? loadedStocks : [{ id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }]);
+      const stockNames = savedRationale.title ? 
+        String(savedRationale.title).split(',').map((s: string) => s.trim()).filter(Boolean) : 
+        [];
+      
+      const loadedStocks = stockNames.length > 0 ? 
+        stockNames.map((name: string, index: number) => ({
+          id: `loaded-${index}`,
+          stockName: name,
+          time: '10:00',
+          chartType: 'Daily' as const,
+          analysis: '',
+        })) : 
+        [{ id: '1', stockName: '', time: '', chartType: 'Daily', analysis: '' }];
+      
+      setStockDetails(loadedStocks);
 
       toast.success('Loaded saved job', {
         description: `Job ID: ${jobId}`,
@@ -178,8 +184,13 @@ export default function ManualRationalePage({ selectedJobId }: ManualRationalePa
 
     } catch (error: any) {
       console.error('Error loading saved job:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        jobId: jobId
+      });
       toast.error('Failed to load saved job', {
-        description: error.message || 'Please try again',
+        description: error?.message || 'Please try again',
       });
     }
   }, [token]);
