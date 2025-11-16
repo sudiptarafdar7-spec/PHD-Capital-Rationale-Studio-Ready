@@ -10,6 +10,7 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
   - Uses innertube API through RapidAPI for fast, reliable downloads
   - Proper streaming download with corruption prevention
   - Browser-like headers for maximum compatibility
+  - **Security**: Fetches RapidAPI key from database (provider: 'rapidapi_video_transcript'), no hardcoded keys
 - **Fallback Method**: yt-dlp with advanced features
   - Uploaded youtube_cookies.txt support from backend/uploaded_files
   - Rotating clients: tv_html5, ios, android (bypasses YouTube restrictions)
@@ -18,6 +19,7 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **Universal URL support**: Handles all YouTube URL formats (regular, live, shorts, embed, etc.)
 - **Video ID extraction**: Reuses existing extract_video_id() from fetch_video_data.py
 - **FFmpeg conversion**: Maintains 16kHz mono WAV output for transcription
+- **Database integration**: Same RapidAPI key works for both Step 1 (audio) and Step 2 (captions)
 - **Module location**: `backend/pipeline/step01_download_audio.py`
 
 ### Media Rationale Step 2 Caption Download - RapidAPI Complete Rewrite ✅ COMPLETED (Nov 16, 2025)
