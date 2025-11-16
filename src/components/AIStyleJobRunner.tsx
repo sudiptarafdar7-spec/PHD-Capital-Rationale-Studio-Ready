@@ -166,9 +166,10 @@ export default function AIStyleJobRunner({
           </div>
 
           {/* Current Step Message Box */}
-          <div className="bg-slate-800/60 backdrop-blur-sm px-10 py-7 rounded-3xl border border-slate-600/40">
-            <h3 className="text-3xl font-semibold text-white">
-              {currentStepConfig?.publicMessage || 'Processing...'}
+          <div className="bg-slate-800/60 backdrop-blur-sm px-6 py-4 rounded-full border border-slate-600/40">
+            <h3 className="text-2xl font-medium text-white">
+              {currentStepConfig?.publicMessage || 'Processing'}
+              <span className="animate-pulse-dots">...</span>
             </h3>
           </div>
 
@@ -226,6 +227,20 @@ export default function AIStyleJobRunner({
         }
         .animate-shimmer {
           animation: shimmer 3s infinite;
+        }
+        @keyframes pulse-dots {
+          0%, 20% {
+            opacity: 0.2;
+          }
+          40% {
+            opacity: 1;
+          }
+          60%, 100% {
+            opacity: 0.2;
+          }
+        }
+        .animate-pulse-dots {
+          animation: pulse-dots 1.5s ease-in-out infinite;
         }
       `}</style>
     </Card>
