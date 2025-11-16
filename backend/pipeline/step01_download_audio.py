@@ -9,7 +9,6 @@ import requests
 import random
 from yt_dlp import YoutubeDL
 from backend.pipeline.fetch_video_data import extract_video_id
-from backend.utils.api_keys import get_rapidapi_key
 
 
 def download_audio_rapidapi(video_id, audio_folder):
@@ -31,19 +30,12 @@ def download_audio_rapidapi(video_id, audio_folder):
     print("="*60)
     
     try:
-        # Fetch RapidAPI key from database
-        try:
-            rapidapi_key = get_rapidapi_key()
-        except ValueError as e:
-            print(f"❌ {str(e)}")
-            return None
-        
         # Step 1: Get MP3 download link from RapidAPI
         api_url = "https://youtube-mp36.p.rapidapi.com/dl"
         querystring = {"id": video_id}
         
         headers = {
-            "x-rapidapi-key": rapidapi_key,
+            "x-rapidapi-key": "c7762ba089msh6c8a18942b1f9cdp1bbc0cjsn10d61d38bef5",
             "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
         }
         

@@ -26,19 +26,10 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **API provider**: RapidAPI Video Transcript Scraper (video-transcript-scraper.p.rapidapi.com)
 - **JSON3 format**: Converts API response to JSON3 format with events array structure (tStartMs, dDurationMs, segs)
 - **Language detection**: Automatic language detection from API response
-- **Database integration**: Fetches RapidAPI key from api_keys table via shared utility
+- **Database integration**: Fetches RAPIDAPI_VIDEO_TRANSCRIPT_KEY from api_keys table (provider: 'rapidapi_video_transcript')
 - **Error handling**: Comprehensive error messages for missing keys, API failures, and unavailable captions
 - **Backward compatibility**: Maintains same function signature and return format as yt-dlp version
 - **Module location**: `backend/pipeline/step02_download_captions.py`
-
-### Unified RapidAPI Key Management ✅ COMPLETED (Nov 16, 2025)
-- **Shared credential**: One RapidAPI account key works for all subscribed APIs (youtube-mp36, video-transcript-scraper)
-- **Centralized utility**: Created `backend/utils/api_keys.py` with `get_rapidapi_key()` function
-- **Backward compatibility**: Supports both `rapidapi` and `rapidapi_video_transcript` provider names during transition
-- **Step 1 update**: Removed hardcoded API key, now fetches from database via shared utility
-- **Step 2 update**: Refactored to use same shared utility for consistency
-- **Frontend update**: API Keys page shows "RapidAPI" with description explaining dual usage (audio + captions)
-- **Security improvement**: No more hardcoded secrets in source code
 
 ### Deployment Scripts - Git Safe Directory Fix ✅ COMPLETED (Nov 16, 2025)
 - **Fixed update.sh**: Added git safe.directory configuration before git operations
