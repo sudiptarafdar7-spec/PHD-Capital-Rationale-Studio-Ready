@@ -266,7 +266,17 @@ export default function ApiKeysPage() {
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-base sm:text-lg text-foreground">{provider.name}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground">{provider.description}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mb-1.5">{provider.description}</p>
+                    {provider.id === 'youtubedata' && (
+                      <a
+                        href="https://developers.google.com/youtube/v3/getting-started"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
+                      >
+                        Setup Youtube Data API v3 Now
+                      </a>
+                    )}
                   </div>
                 </div>
                 <Badge className={
