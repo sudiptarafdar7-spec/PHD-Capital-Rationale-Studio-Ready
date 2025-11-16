@@ -52,7 +52,7 @@ def download_captions(job_id, youtube_url, cookies_file=None):
             "--skip-download",
             "--write-auto-subs",  # Download auto-generated captions
             "--write-subs",  # Download manual captions
-            "--sub-langs", "all",  # Download ALL languages (supported yt-dlp selector)
+            "--sub-langs", "*",  # WILDCARD: Download ALL languages (correct yt-dlp selector)
             "--convert-subs", "json3",  # Force JSON3 format (stable & reliable)
             "-o", os.path.join(captions_folder, "youtube.%(lang)s.%(ext)s"),  # Include language in filename
             youtube_url
