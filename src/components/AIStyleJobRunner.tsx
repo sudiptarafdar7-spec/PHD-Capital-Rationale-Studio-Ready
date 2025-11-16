@@ -65,7 +65,6 @@ export default function AIStyleJobRunner({
   const currentStepConfig = getStepConfig(displayStepNumber);
   const currentJobStep = jobSteps.find(step => step.step_number === displayStepNumber);
   
-  const isFailed = jobStatus === 'failed' || currentJobStep?.status === 'failed';
   const isCompleted = displayStepNumber >= totalSteps && jobStatus !== 'failed';
 
   // Sync selected step with current display step
@@ -98,6 +97,15 @@ export default function AIStyleJobRunner({
   const metricValue = getMetricValue();
   const StepIcon = currentStepConfig?.icon || Sparkles;
 
+  // Determine pill state and message
+  const pillState = currentJobStep?.status === 'failed' ? 'failed' : 
+                    currentJobStep?.status === 'running' ? 'running' : 
+                    isCompleted ? 'success' : 'running';
+  
+  const pillMessage = pillState === 'failed'
+    ? (currentJobStep?.message || 'An error occurred during processing')
+    : (currentStepConfig?.publicMessage || 'Processing');
+
   return (
     <Card className="relative overflow-hidden border border-slate-300 dark:border-slate-700/50 shadow-2xl bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 rounded-[40px]">
       {/* Prominent grid background - 70% coverage */}
@@ -107,21 +115,6 @@ export default function AIStyleJobRunner({
           backgroundSize: '50px 50px'
         }}></div>
       </div>
-
-      {/* Step Failed Message Bar */}
-      {isFailed && (
-        <div className="relative z-20 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 rounded-t-[40px]">
-          <div className="flex items-center gap-3 justify-center">
-            <XCircle className="w-5 h-5 flex-shrink-0" />
-            <div className="text-center">
-              <h3 className="font-semibold text-lg">Step {displayStepNumber} Failed</h3>
-              <p className="text-sm text-red-100 mt-1">
-                {currentJobStep?.message || 'An error occurred during processing'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
       
       <div className="relative z-10 p-8 space-y-6">
         {/* AI Loader Icon */}
@@ -256,9 +249,21 @@ export default function AIStyleJobRunner({
           </div>
         </div>
 
-        {/* Processing indicator */}
-        <div className="flex items-center justify-center gap-3 text-slate-900 dark:text-slate-200 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm px-6 py-3 rounded-full border border-slate-300 dark:border-slate-500/50">
-          <span className="text-sm">*AI is working hard to process your audio...</span>
+        {/* Dynamic Status Pill - Shows progress message or error */}
+        <div 
+          className={`flex items-center justify-center gap-3 backdrop-blur-sm px-6 py-3 rounded-full border transition-all duration-300 ${
+            pillState === 'failed'
+              ? 'bg-red-50/90 dark:bg-red-950/30 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300'
+              : 'bg-white/90 dark:bg-slate-700/90 border-slate-300 dark:border-slate-500/50 text-slate-900 dark:text-slate-200'
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          {pillState === 'failed' && <XCircle className="w-4 h-4 flex-shrink-0" />}
+          <span className="text-sm font-medium">
+            {pillMessage}
+            {pillState !== 'failed' && <span className="animate-pulse-dots">...</span>}
+          </span>
         </div>
       </div>
 
