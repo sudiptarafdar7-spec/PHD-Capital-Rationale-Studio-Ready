@@ -277,6 +277,16 @@ export default function ApiKeysPage() {
                         Setup Youtube Data API v3 Now
                       </a>
                     )}
+                    {provider.id === 'openai' && (
+                      <a
+                        href="https://platform.openai.com/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
+                      >
+                        Setup your OpenAI API Key here. Make sure you have setup your billing account properly
+                      </a>
+                    )}
                   </div>
                 </div>
                 <Badge className={
