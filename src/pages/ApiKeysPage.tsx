@@ -216,7 +216,7 @@ export default function ApiKeysPage() {
     {
       id: 'dhan',
       name: 'Dhan API',
-      description: 'Required for fetching stock prices and charts',
+      description: '',
       type: 'key',
       placeholder: 'eyJhbGciOiJIUzI1NiIsInR5cCI6...',
     },
@@ -305,6 +305,16 @@ export default function ApiKeysPage() {
                         className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
                       >
                         Setup your Google Cloud Service Account here
+                      </a>
+                    )}
+                    {provider.id === 'dhan' && (
+                      <a
+                        href="https://web.dhan.co/index/profile"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
+                      >
+                        setup your dhan Data API here
                       </a>
                     )}
                   </div>
