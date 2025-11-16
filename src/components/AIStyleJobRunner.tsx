@@ -1,6 +1,5 @@
 import { RotateCcw, Loader2, CheckCircle2, XCircle, Sparkles } from 'lucide-react';
 import { Button } from './ui/button';
-import { Progress } from './ui/progress';
 import { Card } from './ui/card';
 import { getStepConfig, getTotalSteps } from '../lib/ai-steps-config';
 
@@ -113,43 +112,43 @@ export default function AIStyleJobRunner({
   }
 
   return (
-    <Card className="relative overflow-hidden bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-blue-950 dark:to-purple-950 border-2 border-transparent">
-      {/* Breathing neon border effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-20 animate-pulse"></div>
-      <div className="absolute inset-[2px] bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-blue-950 dark:to-purple-950 rounded-lg"></div>
+    <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 border-2 border-transparent shadow-2xl">
+      {/* Animated neon border effect */}
+      <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 opacity-50 animate-pulse"></div>
+      <div className="absolute inset-[2px] bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 rounded-lg"></div>
       
       {/* Animated grid background */}
-      <div className="absolute inset-0 opacity-10">
+      <div className="absolute inset-0 opacity-20">
         <div className="absolute inset-0" style={{
-          backgroundImage: 'linear-gradient(rgba(99, 102, 241, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(99, 102, 241, 0.3) 1px, transparent 1px)',
+          backgroundImage: 'linear-gradient(rgba(96, 165, 250, 0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(96, 165, 250, 0.4) 1px, transparent 1px)',
           backgroundSize: '50px 50px',
           animation: 'grid-flow 20s linear infinite'
         }}></div>
       </div>
       
       {/* Animated background shimmer */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-blue-400/10 animate-shimmer"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent animate-shimmer"></div>
       
       <div className="relative z-10 p-8 space-y-6">
         {/* AI Loader Icon */}
         <div className="flex justify-center">
           <div className="relative">
-            {/* Pulsing background circles */}
+            {/* Pulsing background circles with vibrant colors */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-32 h-32 bg-blue-400/30 rounded-full animate-ping"></div>
+              <div className="w-32 h-32 bg-cyan-500/40 rounded-full animate-ping"></div>
             </div>
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-24 h-24 bg-purple-400/40 rounded-full animate-pulse"></div>
+              <div className="w-24 h-24 bg-blue-500/50 rounded-full animate-pulse"></div>
             </div>
             
-            {/* Main loader */}
-            <div className="relative bg-gradient-to-br from-blue-500 to-purple-600 rounded-full p-6 shadow-2xl flex items-center justify-center">
+            {/* Main loader with enhanced gradient */}
+            <div className="relative bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-600 rounded-full p-6 shadow-2xl shadow-blue-500/50 flex items-center justify-center ring-4 ring-blue-400/30">
               {isCompleted ? (
-                <CheckCircle2 className="w-16 h-16 text-white" />
+                <CheckCircle2 className="w-16 h-16 text-white drop-shadow-lg" />
               ) : (
                 <div className="relative w-16 h-16 flex items-center justify-center">
-                  <Loader2 className="w-16 h-16 text-white animate-spin absolute" />
-                  <StepIcon className="w-8 h-8 text-white/90 relative z-10" />
+                  <Loader2 className="w-16 h-16 text-white animate-spin absolute drop-shadow-lg" />
+                  <StepIcon className="w-8 h-8 text-white relative z-10 drop-shadow-md" />
                 </div>
               )}
             </div>
@@ -159,9 +158,9 @@ export default function AIStyleJobRunner({
         {/* Job ID Header */}
         {jobId && (
           <div className="text-center space-y-1">
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 dark:from-blue-400/20 dark:to-purple-400/20 px-4 py-2 rounded-full border border-blue-300/30 dark:border-blue-500/30 backdrop-blur-sm">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
+            <div className="inline-flex items-center gap-2 bg-blue-500/20 px-4 py-2 rounded-full border border-cyan-400/40 backdrop-blur-md shadow-lg shadow-blue-500/20">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse shadow-lg shadow-green-400/50"></div>
+              <span className="text-xs font-mono text-cyan-100 font-semibold tracking-wider">
                 JOB ID: {jobId}
               </span>
             </div>
@@ -171,39 +170,61 @@ export default function AIStyleJobRunner({
         {/* Progress Information */}
         <div className="space-y-5 text-center">
           {/* Step Counter */}
-          <div className="inline-flex items-center gap-2 bg-white/90 dark:bg-gray-800/90 px-5 py-2.5 rounded-full shadow-lg backdrop-blur-sm border border-purple-200 dark:border-purple-500/30">
-            <Sparkles className="w-5 h-5 text-purple-500 animate-pulse" />
-            <span className="text-sm font-bold text-gray-700 dark:text-gray-200 tracking-wide">
+          <div className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-3 rounded-full shadow-xl shadow-purple-500/50 backdrop-blur-md border border-purple-400/50">
+            <Sparkles className="w-5 h-5 text-yellow-300 animate-pulse drop-shadow-lg" />
+            <span className="text-sm font-bold text-white tracking-widest drop-shadow-md">
               STEP {displayStepNumber}/{totalSteps}
             </span>
           </div>
 
           {/* Current Step Message */}
-          <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100 px-4">
+          <h3 className="text-3xl font-bold text-white px-4 drop-shadow-lg">
             {currentStepConfig?.publicMessage || 'Processing...'}
           </h3>
 
           {/* Metric Display (for steps 8, 9, 11, 13) */}
           {metricValue !== null && (
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-3 rounded-full shadow-lg">
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-              <span className="font-bold text-lg">
+            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-6 py-3 rounded-full shadow-xl shadow-emerald-500/50 border border-emerald-400/50">
+              <div className="w-2 h-2 bg-yellow-300 rounded-full animate-pulse shadow-lg shadow-yellow-300/80"></div>
+              <span className="font-bold text-lg drop-shadow-md">
                 {metricValue} {currentStepConfig?.showMetrics === 'charts_fetched' ? 'charts' : 'stocks'} {currentStepConfig?.showMetrics === 'stocks_extracted' ? 'extracted' : currentStepConfig?.showMetrics === 'stocks_mapped' ? 'mapped' : currentStepConfig?.showMetrics === 'stocks_cmp' ? 'fetched' : 'generated'}
               </span>
             </div>
           )}
         </div>
 
-        {/* Progress Bar */}
-        <div className="space-y-4 mt-8">
-          <div className="space-y-3">
-            <Progress 
-              value={progressPercent} 
-              className="h-4 bg-white/60 dark:bg-gray-700/60 backdrop-blur-sm shadow-inner border border-purple-200/30 dark:border-purple-500/20"
-            />
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-600 dark:text-gray-400 font-medium">PROGRESS</span>
-              <span className="font-bold text-gray-700 dark:text-gray-200 bg-gradient-to-r from-blue-500/10 to-purple-500/10 dark:from-blue-400/20 dark:to-purple-400/20 px-4 py-1.5 rounded-full backdrop-blur-sm border border-purple-200/40 dark:border-purple-500/30">
+        {/* Progress Bar - Enhanced Visibility */}
+        <div className="space-y-4 mt-8 bg-slate-800/60 backdrop-blur-md rounded-2xl p-6 border border-cyan-500/30 shadow-xl shadow-blue-500/20">
+          <div className="space-y-4">
+            {/* Progress Bar Container with Vibrant Colors */}
+            <div className="relative h-6 bg-slate-700/80 rounded-full overflow-hidden shadow-inner border-2 border-slate-600/50">
+              {/* Animated background pattern */}
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-700 via-slate-600 to-slate-700 animate-pulse opacity-50"></div>
+              
+              {/* Progress Fill with Gradient */}
+              <div 
+                className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-600 transition-all duration-500 ease-out shadow-lg"
+                style={{ 
+                  width: `${progressPercent}%`,
+                  boxShadow: '0 0 20px rgba(6, 182, 212, 0.6), 0 0 40px rgba(59, 130, 246, 0.4)'
+                }}
+              >
+                {/* Shimmer effect on progress bar */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
+              </div>
+              
+              {/* Progress percentage text on bar */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xs font-bold text-white drop-shadow-lg z-10">
+                  {Math.round(progressPercent)}%
+                </span>
+              </div>
+            </div>
+            
+            {/* Progress Labels */}
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-bold text-cyan-300 tracking-wider drop-shadow-md">PROGRESS</span>
+              <span className="text-lg font-bold text-white bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-1.5 rounded-full shadow-lg shadow-cyan-500/30 border border-cyan-400/50">
                 {Math.round(progressPercent)}%
               </span>
             </div>
@@ -211,13 +232,13 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Processing indicator */}
-        <div className="flex items-center justify-center gap-2 text-gray-600 dark:text-gray-400">
-          <div className="flex gap-1">
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        <div className="flex items-center justify-center gap-3 text-cyan-200 bg-slate-800/40 backdrop-blur-sm px-6 py-3 rounded-full border border-cyan-500/20">
+          <div className="flex gap-1.5">
+            <div className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce shadow-lg shadow-cyan-400/50" style={{ animationDelay: '0ms' }}></div>
+            <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-bounce shadow-lg shadow-blue-400/50" style={{ animationDelay: '150ms' }}></div>
+            <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce shadow-lg shadow-purple-400/50" style={{ animationDelay: '300ms' }}></div>
           </div>
-          <span className="text-sm">AI is working...</span>
+          <span className="text-sm font-medium drop-shadow-md">AI is working...</span>
         </div>
       </div>
 
