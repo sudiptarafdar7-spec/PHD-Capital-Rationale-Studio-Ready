@@ -13,38 +13,35 @@ Output:
 
 import os
 import pandas as pd
-import psycopg2
 import requests
 import time
 from datetime import datetime, timedelta
+from backend.utils.database import get_db_cursor
 
 
 def get_dhan_api_key():
-    """Fetch Dhan API key from database"""
+    """Fetch Dhan API key from database (decrypts automatically)"""
     try:
-        conn = psycopg2.connect(os.environ['DATABASE_URL'])
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT key_value 
-            FROM api_keys 
-            WHERE LOWER(provider) = 'dhan'
-            LIMIT 1
-        """)
-
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        if result:
-            return result[0]
-        else:
-            raise ValueError(
-                "Dhan API key not found in database. Please add it in API Keys settings."
-            )
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT key_value 
+                FROM api_keys 
+                WHERE LOWER(provider) = 'dhan'
+                LIMIT 1
+            """)
+            
+            result = cursor.fetchone()
+            
+            if result and result['key_value']:
+                return result['key_value']
+            else:
+                raise ValueError(
+                    "❌ Dhan API key not found in database.\n"
+                    "   Please add it in Settings → API Keys → Dhan (provider: 'dhan')"
+                )
 
     except Exception as e:
-        raise Exception(f"Failed to fetch Dhan API key: {str(e)}")
+        raise Exception(f"Failed to fetch Dhan API key from database: {str(e)}")
 
 
 def fetch_cmp_from_dhan(api_key, security_id, exchange, segment, instrument,
@@ -71,6 +68,7 @@ def fetch_cmp_from_dhan(api_key, security_id, exchange, segment, instrument,
         "access-token": api_key
     }
 
+    response = None
     try:
         # Format datetime range (mentioned time + 10 minutes) - HH:MM:00 format
         from_date = dt.strftime("%Y-%m-%d %H:%M:00")
@@ -105,6 +103,15 @@ def fetch_cmp_from_dhan(api_key, security_id, exchange, segment, instrument,
                                  headers=headers,
                                  json=payload,
                                  timeout=10)
+        
+        # Check for authentication errors
+        if response.status_code == 401:
+            raise RuntimeError(
+                "❌ Dhan API authentication failed (401 Unauthorized).\n"
+                "   Your Dhan API key is invalid or expired.\n"
+                "   Please update it in Settings → API Keys → Dhan"
+            )
+        
         response.raise_for_status()
 
         data = response.json()
@@ -116,6 +123,15 @@ def fetch_cmp_from_dhan(api_key, security_id, exchange, segment, instrument,
         else:
             return None
 
+    except requests.HTTPError as e:
+        if response and response.status_code == 401:
+            raise RuntimeError(
+                "❌ Dhan API authentication failed (401 Unauthorized).\n"
+                "   Your Dhan API key is invalid or expired.\n"
+                "   Please update it in Settings → API Keys → Dhan"
+            )
+        print(f"    ⚠️ API error: {str(e)}")
+        return None
     except Exception as e:
         print(f"    ⚠️ API error: {str(e)}")
         return None
@@ -152,6 +168,13 @@ def run(job_folder):
         # Get Dhan API key from database
         print("🔑 Retrieving Dhan API key from database...")
         api_key = get_dhan_api_key()
+        
+        if not api_key:
+            return {
+                'status': 'failed',
+                'message': 'Dhan API key is empty or missing. Please add it in Settings → API Keys'
+            }
+        
         print(f"✅ Dhan API key found\n")
 
         # Load stocks file

@@ -59,6 +59,14 @@ def fetch_cmp_from_dhan(api_key: str, security_id: str, exchange: str, instrumen
         # Make API request
         response = requests.post(url, headers=headers, json=payload, timeout=10)
         
+        # Check for authentication errors
+        if response.status_code == 401:
+            raise RuntimeError(
+                "❌ Dhan API authentication failed (401 Unauthorized).\n"
+                "   Your Dhan API key is invalid or expired.\n"
+                "   Please update it in Settings → API Keys → Dhan"
+            )
+        
         # Log detailed error if request fails
         if response.status_code != 200:
             print(f"    ⚠️ API error ({response.status_code}): {response.text}")
@@ -73,6 +81,8 @@ def fetch_cmp_from_dhan(api_key: str, security_id: str, exchange: str, instrumen
         else:
             return None
             
+    except RuntimeError:
+        raise  # Re-raise authentication errors
     except Exception as e:
         print(f"    ⚠️ API error: {str(e)}")
         return None
