@@ -294,7 +294,7 @@ export default function ApiKeysPage() {
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-base sm:text-lg text-foreground">{provider.name}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground mb-1.5">{provider.description}</p>
+                    {provider.description && <p className="text-xs sm:text-sm text-muted-foreground mb-1.5">{provider.description}</p>}
                     {provider.id === 'youtubedata' && (
                       <a
                         href="https://developers.google.com/youtube/v3/getting-started"
