@@ -29,6 +29,46 @@ from dateutil.relativedelta import relativedelta
 # Constants
 IST = pytz.timezone("Asia/Kolkata")
 BASE_URL = "https://api.dhan.co/v2"
+MARKET_OPEN_TIME = (9, 15)  # 9:15 AM
+MARKET_CLOSE_TIME = (15, 30)  # 3:30 PM
+
+
+def adjust_to_market_hours(dt_local: datetime) -> datetime:
+    """
+    Adjust datetime to market hours if outside trading time.
+    If after 3:30 PM, cap to 3:30 PM same day.
+    If before 9:15 AM, use previous day's 3:30 PM.
+    
+    Args:
+        dt_local: IST-localized datetime
+        
+    Returns:
+        Adjusted datetime within market hours
+    """
+    # Extract time components
+    hour = dt_local.hour
+    minute = dt_local.minute
+    
+    # Market hours: 9:15 AM to 3:30 PM
+    market_open_minutes = MARKET_OPEN_TIME[0] * 60 + MARKET_OPEN_TIME[1]  # 555
+    market_close_minutes = MARKET_CLOSE_TIME[0] * 60 + MARKET_CLOSE_TIME[1]  # 930
+    current_minutes = hour * 60 + minute
+    
+    # If after market close (3:30 PM), cap to 3:30 PM same day
+    if current_minutes > market_close_minutes:
+        adjusted = dt_local.replace(hour=MARKET_CLOSE_TIME[0], minute=MARKET_CLOSE_TIME[1], second=0, microsecond=0)
+        print(f"    ℹ️ Time {hour:02d}:{minute:02d} is after market close, capped to 3:30 PM")
+        return adjusted
+    
+    # If before market open (9:15 AM), use previous day's 3:30 PM
+    if current_minutes < market_open_minutes:
+        prev_day = dt_local - timedelta(days=1)
+        adjusted = prev_day.replace(hour=MARKET_CLOSE_TIME[0], minute=MARKET_CLOSE_TIME[1], second=0, microsecond=0)
+        print(f"    ℹ️ Time {hour:02d}:{minute:02d} is before market open, using previous day 3:30 PM")
+        return adjusted
+    
+    # Within market hours, no adjustment needed
+    return dt_local
 
 
 def parse_date(s: str) -> datetime.date:
@@ -431,23 +471,27 @@ def run(job_folder, dhan_api_key):
                 time_str = str(row.get("TIME", "")).strip()
                 h, m, s = parse_time(time_str)
                 end_dt_local = IST.localize(datetime(date_obj.year, date_obj.month, date_obj.day, h, m, s))
+                
+                # Adjust to market hours if outside trading time
+                end_dt_adjusted = adjust_to_market_hours(end_dt_local)
 
-                # Historical window: last 8 months
-                start_hist = date_obj - relativedelta(months=8)
-                end_hist_non_inclusive = date_obj + timedelta(days=1)
+                # Historical window: last 8 months (use adjusted date for end)
+                start_hist = end_dt_adjusted.date() - relativedelta(months=8)
+                end_hist_non_inclusive = end_dt_adjusted.date() + timedelta(days=1)
 
                 # Fetch historical daily data
                 daily = get_daily_history(security_id, start_hist,
                                          end_hist_non_inclusive, headers,
                                          exchange_segment)
 
-                # Fetch intraday data
-                market_open = IST.localize(datetime(date_obj.year, date_obj.month, date_obj.day, 9, 15, 0))
-                if end_dt_local <= market_open:
+                # Fetch intraday data (use adjusted datetime)
+                market_open = IST.localize(datetime(end_dt_adjusted.year, end_dt_adjusted.month, 
+                                                   end_dt_adjusted.day, 9, 15, 0))
+                if end_dt_adjusted <= market_open:
                     intraday = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
                 else:
                     intraday = get_intraday_1m(security_id, market_open,
-                                              end_dt_local, headers,
+                                              end_dt_adjusted, headers,
                                               exchange_segment)
 
                 # Resample to timeframe
