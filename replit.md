@@ -4,6 +4,33 @@
 PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features three primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
 ## Recent Changes (November 2025)
+### Media Rationale Step 1 Audio Download - Complete Rewrite ✅ COMPLETED (Nov 16, 2025)
+- **Dual-method fallback architecture**: Primary RapidAPI + Fallback yt-dlp
+- **Primary Method**: RapidAPI youtube-mp36 (100% tested in Google Colab)
+  - Uses innertube API through RapidAPI for fast, reliable downloads
+  - Proper streaming download with corruption prevention
+  - Browser-like headers for maximum compatibility
+- **Fallback Method**: yt-dlp with advanced features
+  - Uploaded youtube_cookies.txt support from backend/uploaded_files
+  - Rotating clients: tv_html5, ios, android (bypasses YouTube restrictions)
+  - Randomized user agents for anti-fingerprinting
+  - 20 retries with fragment recovery
+- **Universal URL support**: Handles all YouTube URL formats (regular, live, shorts, embed, etc.)
+- **Video ID extraction**: Reuses existing extract_video_id() from fetch_video_data.py
+- **FFmpeg conversion**: Maintains 16kHz mono WAV output for transcription
+- **Module location**: `backend/pipeline/step01_download_audio.py`
+
+### Deployment Scripts - Git Safe Directory Fix ✅ COMPLETED (Nov 16, 2025)
+- **Fixed update.sh**: Added git safe.directory configuration before git operations
+- **Fixed deploy.sh**: Added git safe.directory configuration in both clone and update paths
+- **Issue resolved**: Prevents "unsafe directory" errors when running as root
+- **Configuration**: `git config --global --add safe.directory /var/www/rationale-studio`
+
+### Frontend Navigation - Cleanup ✅ COMPLETED (Nov 16, 2025)
+- **Removed Activity Log**: Deleted Activity Log menu item from sidebar navigation
+- **Updated imports**: Removed unused Activity icon from lucide-react
+- **File**: `src/components/Sidebar.tsx`
+
 ### Manual Rationale v2 Complete Rebuild ✅ COMPLETED
 - **Cleaned up legacy code**: Removed old manual_rationale.py and backend/pipeline/manual/ directory
 - **New service architecture**: Created backend/services/manual_v2/ with clean separation of concerns
