@@ -36,7 +36,6 @@ export default function AIStyleJobRunner({
   progressPercent,
   jobStatus,
   jobId,
-  onRestart,
   onStepRestart,
   isRestarting = false
 }: AIStyleJobRunnerProps) {
@@ -99,43 +98,6 @@ export default function AIStyleJobRunner({
   const metricValue = getMetricValue();
   const StepIcon = currentStepConfig?.icon || Sparkles;
 
-  if (isFailed) {
-    return (
-      <Card className="relative overflow-hidden bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/20 dark:to-red-900/20 border-red-200 dark:border-red-800">
-        <div className="p-12 space-y-6">
-          <div className="flex flex-col items-center justify-center text-center space-y-4">
-            <div className="relative">
-              <div className="absolute inset-0 bg-red-500/20 rounded-full animate-pulse"></div>
-              <XCircle className="w-20 h-20 text-red-500 relative z-10" />
-            </div>
-            
-            <div className="space-y-2">
-              <h3 className="text-2xl font-semibold text-red-700 dark:text-red-300">
-                Processing Failed
-              </h3>
-              <p className="text-red-600 dark:text-red-400 max-w-md">
-                {currentJobStep?.message || 'An error occurred during processing'}
-              </p>
-            </div>
-
-            <div className="pt-4">
-              {onRestart && (
-                <Button
-                  onClick={onRestart}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                  size="lg"
-                >
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  Restart Job
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      </Card>
-    );
-  }
-
   return (
     <Card className="relative overflow-hidden border border-slate-300 dark:border-slate-700/50 shadow-2xl bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50 dark:from-slate-900 dark:via-blue-950 dark:to-slate-900 rounded-[40px]">
       {/* Prominent grid background - 70% coverage */}
@@ -145,6 +107,21 @@ export default function AIStyleJobRunner({
           backgroundSize: '50px 50px'
         }}></div>
       </div>
+
+      {/* Step Failed Message Bar */}
+      {isFailed && (
+        <div className="relative z-20 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 rounded-t-[40px]">
+          <div className="flex items-center gap-3 justify-center">
+            <XCircle className="w-5 h-5 flex-shrink-0" />
+            <div className="text-center">
+              <h3 className="font-semibold text-lg">Step {displayStepNumber} Failed</h3>
+              <p className="text-sm text-red-100 mt-1">
+                {currentJobStep?.message || 'An error occurred during processing'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="relative z-10 p-8 space-y-6">
         {/* AI Loader Icon */}
@@ -244,14 +221,14 @@ export default function AIStyleJobRunner({
                 {/* Step Selector Dropdown */}
                 <Select
                   value={selectedStep.toString()}
-                  onValueChange={(value) => setSelectedStep(parseInt(value, 10))}
+                  onValueChange={(value: string) => setSelectedStep(parseInt(value, 10))}
                   disabled={isRestarting}
                 >
                   <SelectTrigger className="w-[100px] h-9 bg-white dark:bg-slate-600 border-slate-300 dark:border-slate-500 text-slate-900 dark:text-white">
                     <SelectValue placeholder="Step" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
+                    {Array.from({ length: displayStepNumber }, (_, i) => i + 1).map((step) => (
                       <SelectItem key={step} value={step.toString()}>
                         Step {step}
                       </SelectItem>

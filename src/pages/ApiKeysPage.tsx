@@ -37,6 +37,12 @@ export default function ApiKeysPage() {
       });
 
       if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          console.warn('Non-JSON response received during HMR, skipping API key load');
+          return;
+        }
+        
         const data = await response.json();
         
         // Data is now an array of { id, provider, value, created_at, updated_at }
@@ -65,12 +71,24 @@ export default function ApiKeysPage() {
         setKeys(keyMap);
         setConfiguredProviders(configMap);
       } else {
-        const error = await response.json();
-        toast.error(error.error || 'Failed to load API keys');
+        // Backend returned an error response
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const error = await response.json();
+          toast.error(error.error || 'Failed to load API keys');
+        } else {
+          // Non-JSON error from backend (500 HTML page, etc.)
+          toast.error('Failed to load API keys', {
+            description: 'Server error occurred',
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading API keys:', error);
-      toast.error('Error loading API keys');
+      // Show toast for any fetch/network error
+      toast.error('Failed to load API keys', {
+        description: 'Please check your connection and try again',
+      });
     }
   };
 
