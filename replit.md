@@ -51,6 +51,22 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **Updated imports**: Removed unused Activity icon from lucide-react
 - **File**: `src/components/Sidebar.tsx`
 
+### Media Rationale Step 11 & Manual v2 Step 1 - API Key Decryption Fix ✅ COMPLETED (Nov 16, 2025)
+- **Root Cause**: Both CMP fetch implementations were bypassing project's database helper functions, causing encrypted API keys to be returned as ciphertext instead of decrypted plaintext
+- **Consequence**: 401 authentication errors from Dhan API due to invalid (encrypted) API tokens
+- **Solution**: Replaced direct `psycopg2.connect()` usage with `backend.utils.database.get_db_cursor()`
+- **Benefits**:
+  - ✅ Automatic API key decryption (matches Steps 1 & 2 pattern)
+  - ✅ RealDictCursor support (access results by column name)
+  - ✅ Connection pooling
+  - ✅ Consistent security pattern across all API key retrievals
+- **Enhanced Error Handling**:
+  - 401 errors now raise clear `RuntimeError` with actionable guidance
+  - Empty/missing keys abort immediately with specific instructions
+  - Users directed to "Settings → API Keys → Dhan" for fixes
+- **Files Updated**: `backend/pipeline/step11_fetch_cmp.py`, `backend/services/manual_v2/step01_fetch_cmp.py`
+- **Database Verified**: Dhan API key exists (ID=6, provider='dhan')
+
 ### Manual Rationale v2 Complete Rebuild ✅ COMPLETED
 - **Cleaned up legacy code**: Removed old manual_rationale.py and backend/pipeline/manual/ directory
 - **New service architecture**: Created backend/services/manual_v2/ with clean separation of concerns
