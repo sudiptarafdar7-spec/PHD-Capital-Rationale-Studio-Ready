@@ -9,6 +9,7 @@ import requests
 import random
 from yt_dlp import YoutubeDL
 from backend.pipeline.fetch_video_data import extract_video_id
+from backend.utils.database import get_db_cursor
 
 
 def download_audio_rapidapi(video_id, audio_folder):
@@ -30,12 +31,28 @@ def download_audio_rapidapi(video_id, audio_folder):
     print("="*60)
     
     try:
+        # Fetch RapidAPI key from database
+        rapidapi_key = None
+        try:
+            with get_db_cursor() as cursor:
+                cursor.execute("SELECT key_value FROM api_keys WHERE provider = %s", ('rapidapi_video_transcript',))
+                result = cursor.fetchone()
+                if result:
+                    rapidapi_key = result['key_value']
+        except Exception as db_error:
+            print(f"⚠️ Database error fetching API key: {db_error}")
+        
+        if not rapidapi_key:
+            print("❌ RapidAPI key not configured in database (provider: rapidapi_video_transcript)")
+            print("   Please add it in Settings → API Keys page")
+            return None
+        
         # Step 1: Get MP3 download link from RapidAPI
         api_url = "https://youtube-mp36.p.rapidapi.com/dl"
         querystring = {"id": video_id}
         
         headers = {
-            "x-rapidapi-key": "c7762ba089msh6c8a18942b1f9cdp1bbc0cjsn10d61d38bef5",
+            "x-rapidapi-key": rapidapi_key,
             "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
         }
         
