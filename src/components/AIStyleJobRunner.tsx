@@ -147,7 +147,7 @@ export default function AIStyleJobRunner({
         {/* Job ID Header */}
         {jobId && (
           <div className="text-center space-y-1">
-            <div className="inline-flex items-center gap-2 bg-slate-800/80 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-600/50">
+            <div className="inline-flex items-center gap-2 bg-slate-700/90 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-500/50">
               <span className="text-sm font-mono text-slate-200 tracking-wider">
                 JOB ID: {jobId}
               </span>
@@ -158,7 +158,7 @@ export default function AIStyleJobRunner({
         {/* Progress Information */}
         <div className="space-y-4 text-center">
           {/* Step Counter */}
-          <div className="inline-flex items-center gap-2.5 bg-slate-800/80 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-600/50">
+          <div className="inline-flex items-center gap-2.5 bg-slate-700/90 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-500/50">
             <Sparkles className="w-5 h-5 text-blue-400" />
             <span className="text-base font-semibold text-white tracking-wide">
               STEP {displayStepNumber}/{totalSteps}
@@ -166,7 +166,7 @@ export default function AIStyleJobRunner({
           </div>
 
           {/* Current Step Message Box */}
-          <div className="bg-slate-800/60 backdrop-blur-sm px-6 py-4 rounded-full border border-slate-600/40">
+          <div className="bg-slate-700/90 backdrop-blur-sm px-6 py-4 rounded-full border border-slate-500/50">
             <h3 className="text-2xl font-medium text-white">
               {currentStepConfig?.publicMessage || 'Processing'}
               <span className="animate-pulse-dots">...</span>
@@ -175,7 +175,7 @@ export default function AIStyleJobRunner({
 
           {/* Metric Display (for steps 8, 9, 11, 13) */}
           {metricValue !== null && (
-            <div className="inline-flex items-center gap-2.5 bg-slate-800/80 backdrop-blur-sm text-slate-200 px-6 py-3 rounded-2xl border border-slate-600/50">
+            <div className="inline-flex items-center gap-2.5 bg-slate-700/90 backdrop-blur-sm text-slate-200 px-6 py-3 rounded-2xl border border-slate-500/50">
               <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
               <span className="font-medium text-sm">
                 {metricValue} {currentStepConfig?.showMetrics === 'charts_fetched' ? 'charts' : 'stocks'} {currentStepConfig?.showMetrics === 'stocks_extracted' ? 'extracted' : currentStepConfig?.showMetrics === 'stocks_mapped' ? 'mapped' : currentStepConfig?.showMetrics === 'stocks_cmp' ? 'fetched' : 'generated'}
@@ -185,10 +185,10 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Progress Bar - Clean Design */}
-        <div className="space-y-3 mt-6 bg-slate-800/60 backdrop-blur-sm rounded-full p-4 border border-slate-600/40">
+        <div className="space-y-3 mt-6 bg-slate-700/90 backdrop-blur-sm rounded-full p-4 border border-slate-500/50">
           <div className="flex items-center gap-4">
             {/* Progress Bar */}
-            <div className="flex-1 relative h-3 bg-slate-700/60 rounded-full overflow-hidden border border-slate-600/40">
+            <div className="flex-1 relative h-3 bg-slate-600/70 rounded-full overflow-hidden border border-slate-500/50">
               {/* Progress Fill */}
               <div 
                 className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 ease-out"
@@ -202,7 +202,7 @@ export default function AIStyleJobRunner({
             </div>
             
             {/* Percentage Badge */}
-            <div className="bg-slate-700/80 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-600/50 min-w-[70px] text-center">
+            <div className="bg-slate-600/90 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-500/60 min-w-[70px] text-center">
               <span className="text-base font-semibold text-white">
                 {Math.round(progressPercent)}%
               </span>
@@ -211,7 +211,7 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Processing indicator */}
-        <div className="flex items-center justify-center gap-3 text-slate-300 bg-slate-800/60 backdrop-blur-sm px-6 py-3 rounded-full border border-slate-600/40">
+        <div className="flex items-center justify-center gap-3 text-slate-200 bg-slate-700/90 backdrop-blur-sm px-6 py-3 rounded-full border border-slate-500/50">
           <span className="text-sm">*AI is working hard to process your audio...</span>
         </div>
       </div>
