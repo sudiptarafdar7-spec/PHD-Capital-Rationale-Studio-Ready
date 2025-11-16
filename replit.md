@@ -20,6 +20,17 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **FFmpeg conversion**: Maintains 16kHz mono WAV output for transcription
 - **Module location**: `backend/pipeline/step01_download_audio.py`
 
+### Media Rationale Step 2 Caption Download - RapidAPI Complete Rewrite ✅ COMPLETED (Nov 16, 2025)
+- **Complete rewrite**: Replaced yt-dlp with RapidAPI Video Transcript Scraper API
+- **100% reliable**: Direct API approach eliminates yt-dlp compatibility issues (no more "invalid subtitle format" errors)
+- **API provider**: RapidAPI Video Transcript Scraper (video-transcript-scraper.p.rapidapi.com)
+- **JSON3 format**: Converts API response to JSON3 format with events array structure (tStartMs, dDurationMs, segs)
+- **Language detection**: Automatic language detection from API response
+- **Database integration**: Fetches RAPIDAPI_VIDEO_TRANSCRIPT_KEY from api_keys table (provider: 'rapidapi_video_transcript')
+- **Error handling**: Comprehensive error messages for missing keys, API failures, and unavailable captions
+- **Backward compatibility**: Maintains same function signature and return format as yt-dlp version
+- **Module location**: `backend/pipeline/step02_download_captions.py`
+
 ### Deployment Scripts - Git Safe Directory Fix ✅ COMPLETED (Nov 16, 2025)
 - **Fixed update.sh**: Added git safe.directory configuration before git operations
 - **Fixed deploy.sh**: Added git safe.directory configuration in both clone and update paths

@@ -5,6 +5,7 @@ Step 2: Download Auto-Generated Captions from YouTube Video
 import requests
 import json
 import os
+from backend.utils.database import get_db_cursor
 
 
 def download_captions(job_id, youtube_url, cookies_file=None):
@@ -38,12 +39,21 @@ def download_captions(job_id, youtube_url, cookies_file=None):
         os.makedirs(captions_folder, exist_ok=True)
         captions_json_path = os.path.join(captions_folder, 'captions.json')
 
-        # Get RapidAPI key from environment
-        rapidapi_key = os.getenv('RAPIDAPI_VIDEO_TRANSCRIPT_KEY')
+        # Get RapidAPI key from database
+        rapidapi_key = None
+        try:
+            with get_db_cursor() as cursor:
+                cursor.execute("SELECT key_value FROM api_keys WHERE provider = %s", ('rapidapi_video_transcript',))
+                result = cursor.fetchone()
+                if result:
+                    rapidapi_key = result['key_value']
+        except Exception as db_error:
+            print(f"⚠️ Database error fetching API key: {db_error}")
+        
         if not rapidapi_key:
             return {
                 'success': False,
-                'error': 'RAPIDAPI_VIDEO_TRANSCRIPT_KEY not configured. Please add it in API Keys settings.'
+                'error': 'RapidAPI Video Transcript key not configured. Please add it in API Keys page (provider: rapidapi_video_transcript).'
             }
 
         # RapidAPI request
