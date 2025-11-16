@@ -368,14 +368,24 @@ def restart_step(job_id, step_number):
                 WHERE job_id = %s AND step_number >= %s
             """, (job_id, step_number))
             
+            # Mark previous steps as success if they exist
+            if step_number > 1:
+                cursor.execute("""
+                    UPDATE job_steps
+                    SET status = 'success'
+                    WHERE job_id = %s AND step_number < %s AND status != 'success'
+                """, (job_id, step_number))
+            
             # Update job status to processing and reset progress
             # Pipeline has 14 steps (Step 15 is API-only)
+            # Progress should reflect that we're starting from step_number
+            # If restarting from step 2, we've completed step 1, so progress = 1/14 = 7%
             progress = int(((step_number - 1) / 14) * 100)
             cursor.execute("""
                 UPDATE jobs
                 SET status = 'processing', current_step = %s, progress = %s, updated_at = %s
                 WHERE id = %s
-            """, (step_number - 1, progress, datetime.now(), job_id))
+            """, (step_number, progress, datetime.now(), job_id))
         
         # Restart pipeline execution from the specified step in background thread
         def run_pipeline_from_step():
