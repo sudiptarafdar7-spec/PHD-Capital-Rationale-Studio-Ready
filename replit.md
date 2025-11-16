@@ -3,104 +3,6 @@
 ## Overview
 PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features three primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
-## Recent Changes (November 2025)
-### Media Rationale Step 1 Audio Download - Complete Rewrite ✅ COMPLETED (Nov 16, 2025)
-- **Dual-method fallback architecture**: Primary RapidAPI + Fallback yt-dlp
-- **Primary Method**: RapidAPI youtube-mp36 (100% tested in Google Colab)
-  - Uses innertube API through RapidAPI for fast, reliable downloads
-  - **Intelligent polling**: Waits up to 60 seconds for video processing (12 retries × 5s intervals)
-  - **Progress tracking**: Displays conversion progress percentage in real-time
-  - **Three status handling**: success (ok + link), processing (wait & retry), error (immediate fail)
-  - Proper streaming download with corruption prevention
-  - Browser-like headers for maximum compatibility
-  - **Security**: Fetches RapidAPI key from database (provider: 'rapidapi_video_transcript'), no hardcoded keys
-- **Fallback Method**: yt-dlp with advanced features
-  - Uploaded youtube_cookies.txt support from backend/uploaded_files
-  - Rotating clients: tv_html5, ios, android (bypasses YouTube restrictions)
-  - Randomized user agents for anti-fingerprinting
-  - 20 retries with fragment recovery
-- **Universal URL support**: Handles all YouTube URL formats (regular, live, shorts, embed, etc.)
-- **Video ID extraction**: Reuses existing extract_video_id() from fetch_video_data.py
-- **FFmpeg conversion**: Maintains 16kHz mono WAV output for transcription
-- **Database integration**: Same RapidAPI key works for both Step 1 (audio) and Step 2 (captions)
-- **Module location**: `backend/pipeline/step01_download_audio.py`
-
-### Media Rationale Step 2 Caption Download - RapidAPI Complete Rewrite ✅ COMPLETED (Nov 16, 2025)
-- **Complete rewrite**: Replaced yt-dlp with RapidAPI Video Transcript Scraper API
-- **100% reliable**: Direct API approach eliminates yt-dlp compatibility issues (no more "invalid subtitle format" errors)
-- **API provider**: RapidAPI Video Transcript Scraper (video-transcript-scraper.p.rapidapi.com)
-- **JSON3 format**: Converts API response to JSON3 format with events array structure (tStartMs, dDurationMs, segs)
-- **URL normalization**: Converts all YouTube URL formats (live/shorts/embed/youtu.be) to standard watch?v= format
-  - Regex patterns for video ID extraction from any YouTube URL variant
-  - Debug logging for URL conversions
-  - Graceful fallback to original URL if no pattern matches
-- **Language detection**: Automatic language detection from API response
-- **Database integration**: Fetches RAPIDAPI_VIDEO_TRANSCRIPT_KEY from api_keys table (provider: 'rapidapi_video_transcript')
-- **Error handling**: Comprehensive error messages for missing keys, API failures, and unavailable captions
-- **Backward compatibility**: Maintains same function signature and return format as yt-dlp version
-- **Module location**: `backend/pipeline/step02_download_captions.py`
-
-### Deployment Scripts - Git Safe Directory Fix ✅ COMPLETED (Nov 16, 2025)
-- **Fixed update.sh**: Added git safe.directory configuration before git operations
-- **Fixed deploy.sh**: Added git safe.directory configuration in both clone and update paths
-- **Issue resolved**: Prevents "unsafe directory" errors when running as root
-- **Configuration**: `git config --global --add safe.directory /var/www/rationale-studio`
-
-### Frontend Navigation - Cleanup ✅ COMPLETED (Nov 16, 2025)
-- **Removed Activity Log**: Deleted Activity Log menu item from sidebar navigation
-- **Updated imports**: Removed unused Activity icon from lucide-react
-- **File**: `src/components/Sidebar.tsx`
-
-### Media Rationale Step 11 & Manual v2 Step 1 - API Key Decryption Fix ✅ COMPLETED (Nov 16, 2025)
-- **Root Cause**: Both CMP fetch implementations were bypassing project's database helper functions, causing encrypted API keys to be returned as ciphertext instead of decrypted plaintext
-- **Consequence**: 401 authentication errors from Dhan API due to invalid (encrypted) API tokens
-- **Solution**: Replaced direct `psycopg2.connect()` usage with `backend.utils.database.get_db_cursor()`
-- **Benefits**:
-  - ✅ Automatic API key decryption (matches Steps 1 & 2 pattern)
-  - ✅ RealDictCursor support (access results by column name)
-  - ✅ Connection pooling
-  - ✅ Consistent security pattern across all API key retrievals
-- **Enhanced Error Handling**:
-  - 401 errors now raise clear `RuntimeError` with actionable guidance
-  - Empty/missing keys abort immediately with specific instructions
-  - Users directed to "Settings → API Keys → Dhan" for fixes
-- **Files Updated**: `backend/pipeline/step11_fetch_cmp.py`, `backend/services/manual_v2/step01_fetch_cmp.py`
-- **Database Verified**: Dhan API key exists (ID=6, provider='dhan')
-
-### Manual Rationale v2 Complete Rebuild ✅ COMPLETED
-- **Cleaned up legacy code**: Removed old manual_rationale.py and backend/pipeline/manual/ directory
-- **New service architecture**: Created backend/services/manual_v2/ with clean separation of concerns
-- **Improved pipeline orchestration**: Thread-based async execution with proper status tracking
-- **Code reuse**: Leverages existing premium pipeline functions for charts and PDF generation (avoiding duplication)
-- **Database enhancements**: Added `payload` JSONB column to jobs table, `metadata` JSONB column to saved_rationale table
-- **Robust error handling**: Safe numeric parsing in CMP step to handle empty/invalid user inputs
-- **New API endpoints**: 9 REST endpoints under /api/v1/manual-v2/ for complete job lifecycle management
-  - `/jobs` (POST) - Create new job
-  - `/jobs/<id>` (GET) - Get job details
-  - `/jobs/<id>/run` (POST) - Execute pipeline
-  - `/jobs/<id>/steps` (GET) - Get job steps
-  - `/jobs/<id>/save` (POST) - Save to saved_rationale
-  - `/jobs/<id>/upload-signed` (POST) - Upload signed PDF
-  - `/jobs/<id>/download` (GET) - Download PDF with JWT authentication
-  - `/stocks` (GET) - Stock autocomplete
-- **Frontend updates**: 
-  - Stock autocomplete displays symbols (e.g., "RELIANCE") instead of company names
-  - Job loading fixed: Now correctly loads from jobs table (for unsaved jobs) with fallback to saved_rationale
-  - Contract mismatches resolved: Stock autocomplete accepts both 'q' and 'query' parameters, job creation sends correct payload structure
-  - Workflow stage management: Proper step display visibility based on job status
-  - Polling for in-progress jobs: Continues polling when loading jobs from dashboard
-  - **PDF Preview & Download**: ✅ Implemented with auth-aware blob URLs for secure viewing and downloading
-- **Input CSV Generation**: Automated creation of input.csv before pipeline execution with columns: DATE, TIME, STOCK SYMBOL, CHART TYPE, LISTED NAME, SHORT NAME, SECURITY ID, EXCHANGE, INSTRUMENT, ANALYSIS
-  - Master data automatically enriched from uploaded master CSV at job creation
-  - Chart type uses user's direct input (Daily/Weekly/Monthly)
-  - Analysis column populated with user's detailed analysis text
-- **PDF Handling**: Secure PDF viewing and download with JWT authentication
-  - Backend serves PDFs via `/jobs/<id>/download` endpoint using Flask's send_file
-  - Frontend fetches PDF with Authorization headers, creates blob URL for iframe preview
-  - Download button fetches blob and triggers browser download with proper filename
-  - Blob URLs automatically revoked after download to free memory
-- **Status**: ✅ Fully implemented, tested, and production-ready
-
 ## User Preferences
 - Keep frontend design unchanged (layout, forms, fields, animations, effects, flow)
 - Use Flask for backend REST API
@@ -127,38 +29,33 @@ The application maintains a clear separation between a React-based frontend and 
     - **PDF Template Management**: Configuration for standardized PDF reports.
     - **File Management**: Handling of master CSVs, logos, custom fonts, and YouTube cookies.
     - **Channel/Platform Management**: CRUD operations for various platforms, including logo uploads.
-    - **Media Rationale Pipeline**: A 14-step process for YouTube videos (extraction, transcription, translation, analysis, report generation).
+    - **Media Rationale Pipeline**: A 14-step process for YouTube videos (extraction, transcription, translation, analysis, report generation). Includes a dual-method fallback architecture for audio download (RapidAPI + yt-dlp) and a RapidAPI-based caption download, both handling universal YouTube URL formats.
     - **Premium Rationale Pipeline**: An 8-step process for generating reports from text input (stock data fetching, technical/fundamental analysis, PDF generation).
-    - **Manual Rationale v2 Pipeline**: Redesigned 3-step process (Fetch CMP → Generate Charts → Generate PDF) with clean architecture:
-        - **Module location**: `backend/services/manual_v2/` (replaces old `backend/pipeline/manual/`)
-        - **Orchestration**: Thread-based async pipeline with ManualRationaleOrchestrator
-        - **Step 1**: ✅ COMPLETE - Fetches Current Market Price (CMP) from Dhan API with safe numeric parsing. Reads `input.csv`, outputs `stocks_with_cmp.csv` with CMP column added.
-        - **Step 2**: ✅ COMPLETE - Standalone chart generation with Dhan API integration. Reads `stocks_with_cmp.csv`, generates premium charts (candlestick + MA20/50/100/200 + RSI + volume), outputs `stocks_with_charts.csv` with CHART PATH column. Chart naming: `{SECURITY_ID}_{CHART_TYPE}_{YYYYMMDD}_{HHMMSS}.png`. Rate limited at 1.5s per stock.
-        - **Step 3**: ✅ COMPLETE - Professional PDF generation with premium blue theme. Reads `stocks_with_charts.csv`, generates A4 PDF with company letterhead, platform branding, full-width charts, rationale sections, and disclaimer/disclosure pages. Features: circular platform logos, crisp headings, responsive layout, date/time stamps for each stock.
-        - **Master data enrichment**: Server-side enrichment at job creation via `/manual-v2/jobs` endpoint
-        - **API endpoints**: `/manual-v2/jobs` (create), `/manual-v2/jobs/<id>/run` (execute pipeline), `/manual-v2/jobs/<id>/save` (save to saved_rationale), `/manual-v2/jobs/<id>/upload-signed` (signed PDF upload), `/manual-v2/stocks` (autocomplete)
-        - **Job restart**: Jobs in any completion state (pdf_ready, completed, signed, failed) can be restarted via `/jobs/<id>/run`, which resets all steps to pending and re-runs the complete 3-step pipeline
-    - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data, filtering EQUITY stocks from SEM_TRADING_SYMBOL column where SEM_INSTRUMENT_NAME='EQUITY' AND SEM_EXCH_INSTRUMENT_TYPE='ES'. Frontend provides autocomplete suggestions; backend performs master data lookup server-side for validation and enrichment. Uses 300ms debounced API calls.
-    - **Master Data Enrichment**: Backend automatically fetches master data (SECURITY ID, LISTED NAME, SHORT NAME, EXCHANGE, INSTRUMENT) from uploaded master CSV when creating Manual Rationale jobs. Column mapping: SEM_SMST_SECURITY_ID→SECURITY ID, SM_SYMBOL_NAME→LISTED NAME, SEM_CUSTOM_SYMBOL→SHORT NAME, SEM_EXM_EXCH_ID→EXCHANGE, SEM_INSTRUMENT_NAME→INSTRUMENT. Validates all stock symbols exist in master CSV; returns 400 error for missing stocks.
-    - **Date Format Normalization**: Backend accepts both DD/MM/YYYY and YYYY-MM-DD date formats from frontend, normalizes to ISO format (YYYY-MM-DD) before storing in database and CSV files.
+    - **Manual Rationale v2 Pipeline**: Redesigned 3-step process (Fetch CMP → Generate Charts → Generate PDF) with thread-based async orchestration.
+        - **Fetch CMP**: Fetches Current Market Price from Dhan API with intelligent market hours handling (intraday price during market hours, historical closing price otherwise). Includes automatic API key decryption.
+        - **Generate Charts**: Standalone chart generation with Dhan API for candlestick, moving averages, RSI, and volume.
+        - **Generate PDF**: Professional PDF generation with premium blue theme, company letterhead, platform branding, charts, rationale sections, and disclaimer. Secure PDF viewing and download with JWT authentication.
+        - **Master Data Enrichment**: Server-side enrichment from uploaded master CSV for stock data.
+    - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data.
+    - **Date Format Normalization**: Handles DD/MM/YYYY and YYYY-MM-DD formats, normalizing to ISO.
 - **System Design Choices**:
     - **Modular API**: Endpoints are organized by feature.
     - **Pipeline-driven Processing**: Sequential analysis for both video and text.
     - **Database Schema**: Unified `jobs` and `saved_rationale` tables for multi-tool compatibility, alongside tables for `users`, `api_keys`, `pdf_template`, `uploaded_files`, `channels`, `job_steps`, and `activity_logs`.
-    - **Status System**: Comprehensive status tracking for jobs (`pending`, `processing`, `awaiting_csv_review`, `pdf_ready`, `completed`, `failed`, `signed`) and job steps (`pending`, `running`, `success`, `failed`).
+    - **Status System**: Comprehensive status tracking for jobs and job steps.
     - **File Storage**: Secure server-side storage using UUID-based filenames.
-    - **Deployment**: Optimized for VPS environments with automated setup.
+    - **Deployment**: Optimized for VPS environments with automated setup, including git safe directory configurations.
 
 ## External Dependencies
 - **Database**: PostgreSQL (via Neon)
 - **Authentication**: Flask-JWT-Extended, bcrypt
 - **CORS Management**: Flask-CORS
-- **Video Processing**: `yt-dlp`, `ffmpeg-python`
+- **Video Processing**: `yt-dlp`, `ffmpeg-python`, RapidAPI (youtube-mp36, Video Transcript Scraper)
 - **Transcription**: AssemblyAI API
 - **Data Processing**: pandas, numpy, rapidfuzz
 - **Translation**: Google Cloud Translation API
 - **UI Icons**: Lucide React
 - **AI Analysis**: OpenAI API (GPT-4o)
-- **Financial Data**: Dhan API (for CMP, charts, technical indicators), Yahoo Finance (for fundamental data)
+- **Financial Data**: Dhan API, Yahoo Finance
 - **PDF Generation**: ReportLab
 - **Image Processing**: Pillow (PIL)
