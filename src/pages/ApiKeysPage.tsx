@@ -195,7 +195,7 @@ export default function ApiKeysPage() {
     {
       id: 'openai',
       name: 'OpenAI',
-      description: 'Required for GPT-4 based analysis and extraction',
+      description: '',
       type: 'key',
       placeholder: 'sk-...',
     },
