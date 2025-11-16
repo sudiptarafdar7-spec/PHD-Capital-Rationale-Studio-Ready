@@ -8,6 +8,9 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **Dual-method fallback architecture**: Primary RapidAPI + Fallback yt-dlp
 - **Primary Method**: RapidAPI youtube-mp36 (100% tested in Google Colab)
   - Uses innertube API through RapidAPI for fast, reliable downloads
+  - **Intelligent polling**: Waits up to 60 seconds for video processing (12 retries × 5s intervals)
+  - **Progress tracking**: Displays conversion progress percentage in real-time
+  - **Three status handling**: success (ok + link), processing (wait & retry), error (immediate fail)
   - Proper streaming download with corruption prevention
   - Browser-like headers for maximum compatibility
   - **Security**: Fetches RapidAPI key from database (provider: 'rapidapi_video_transcript'), no hardcoded keys
