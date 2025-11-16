@@ -1,6 +1,14 @@
+import { useState, useEffect } from 'react';
 import { RotateCcw, Loader2, CheckCircle2, XCircle, Sparkles } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { getStepConfig, getTotalSteps } from '../lib/ai-steps-config';
 
 interface JobStep {
@@ -18,6 +26,8 @@ interface AIStyleJobRunnerProps {
   jobStatus: string;
   jobId?: string;
   onRestart?: () => void;
+  onStepRestart?: (jobId: string, stepNumber: number) => void;
+  isRestarting?: boolean;
 }
 
 export default function AIStyleJobRunner({
@@ -26,9 +36,12 @@ export default function AIStyleJobRunner({
   progressPercent,
   jobStatus,
   jobId,
-  onRestart
+  onRestart,
+  onStepRestart,
+  isRestarting = false
 }: AIStyleJobRunnerProps) {
   const totalSteps = getTotalSteps();
+  const [selectedStep, setSelectedStep] = useState<number>(1);
   
   // Calculate the actual display step number from jobSteps array
   // Prefer: running → failed → next pending → default to 1
@@ -55,6 +68,18 @@ export default function AIStyleJobRunner({
   
   const isFailed = jobStatus === 'failed' || currentJobStep?.status === 'failed';
   const isCompleted = displayStepNumber >= totalSteps && jobStatus !== 'failed';
+
+  // Sync selected step with current display step
+  useEffect(() => {
+    setSelectedStep(displayStepNumber);
+  }, [displayStepNumber]);
+
+  // Handle restart button click
+  const handleRestart = () => {
+    if (jobId && onStepRestart) {
+      onStepRestart(jobId, selectedStep);
+    }
+  };
 
   // Extract metric from step message if available (lightweight parsing, no backend changes)
   const getMetricValue = (): number | null => {
@@ -189,11 +214,11 @@ export default function AIStyleJobRunner({
           )}
         </div>
 
-        {/* Progress Bar - Clean Design */}
+        {/* Progress Bar - Clean Design with Restart Controls */}
         <div className="space-y-3 mt-6 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-full p-4 border border-slate-300 dark:border-slate-500/50">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
             {/* Progress Bar */}
-            <div className="flex-1 relative h-3 bg-slate-200 dark:bg-slate-600/70 rounded-full overflow-hidden border border-slate-300 dark:border-slate-500/50">
+            <div className="flex-1 w-full relative h-3 bg-slate-200 dark:bg-slate-600/70 rounded-full overflow-hidden border border-slate-300 dark:border-slate-500/50">
               {/* Progress Fill */}
               <div 
                 className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 ease-out"
@@ -212,6 +237,45 @@ export default function AIStyleJobRunner({
                 {Math.round(progressPercent)}%
               </span>
             </div>
+
+            {/* Restart Controls */}
+            {jobId && onStepRestart && (
+              <div className="flex items-center gap-2">
+                {/* Step Selector Dropdown */}
+                <Select
+                  value={selectedStep.toString()}
+                  onValueChange={(value) => setSelectedStep(parseInt(value, 10))}
+                  disabled={isRestarting}
+                >
+                  <SelectTrigger className="w-[100px] h-9 bg-white dark:bg-slate-600 border-slate-300 dark:border-slate-500 text-slate-900 dark:text-white">
+                    <SelectValue placeholder="Step" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
+                      <SelectItem key={step} value={step.toString()}>
+                        Step {step}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Restart Button */}
+                <Button
+                  onClick={handleRestart}
+                  disabled={isRestarting}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-3 bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-600"
+                  title={`Restart from step ${selectedStep}`}
+                >
+                  {isRestarting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 

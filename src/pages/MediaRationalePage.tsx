@@ -81,6 +81,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   const [csvData, setCsvData] = useState<any[]>([]);
   const [csvColumns, setCsvColumns] = useState<string[]>([]);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   // Mock channel data
@@ -528,6 +529,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
     if (!currentJobId) return;
 
     try {
+      setIsRestarting(true);
       const response = await fetch(API_ENDPOINTS.mediaRationale.restartStep(currentJobId, stepNumber), {
         method: 'POST',
         headers: getAuthHeaders(token),
@@ -539,7 +541,7 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
         throw new Error(data.error || 'Failed to restart step');
       }
 
-      toast.info(`Restarting from Step ${stepNumber}`, {
+      toast.success(`Restarting from Step ${stepNumber}`, {
         description: 'All subsequent steps will be re-executed',
       });
 
@@ -554,6 +556,8 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
       toast.error('Failed to restart step', {
         description: error.message || 'Please try again',
       });
+    } finally {
+      setIsRestarting(false);
     }
   };
 
@@ -1400,6 +1404,8 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
                   jobStatus={actualJobStatus}
                   jobId={currentJobId || undefined}
                   onRestart={handleRestart}
+                  onStepRestart={(jobId, stepNumber) => handleRestartFromStep(stepNumber)}
+                  isRestarting={isRestarting}
                 />
               ) : (
                 <StepProgressTracker 
