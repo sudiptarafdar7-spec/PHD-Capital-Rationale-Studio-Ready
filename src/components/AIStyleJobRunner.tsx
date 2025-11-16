@@ -112,7 +112,7 @@ export default function AIStyleJobRunner({
   }
 
   return (
-    <Card className="relative overflow-hidden border border-slate-700/50 shadow-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-3xl">
+    <Card className="relative overflow-hidden border border-slate-700/50 shadow-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-[40px]">
       {/* Prominent grid background - 70% coverage */}
       <div className="absolute inset-0 opacity-70">
         <div className="absolute inset-0" style={{
