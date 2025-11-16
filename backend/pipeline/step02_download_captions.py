@@ -1,6 +1,6 @@
 """
 Step 2: Download Auto-Generated Captions from YouTube Video
-100% Reliable - Downloads ALL captions (auto + manual) using wildcard pattern
+100% Reliable - Targeted Hindi/English download with web client for maximum compatibility
 """
 import os
 import subprocess
@@ -12,13 +12,13 @@ import re
 def download_captions(job_id, youtube_url, cookies_file=None):
     """
     100% Reliable Auto-Generated Caption Downloader
-    Downloads ALL available captions (auto-generated + manual) and selects preferred language
+    Targeted Hindi/English download with web client for maximum compatibility
     
     Strategy:
-    1. Use --sub-langs "*" to download ALL captions (wildcard pattern)
-    2. Use both --write-auto-subs and --write-subs to get all caption types
-    3. Use --convert-subs json3 to force JSON3 format (most reliable)
-    4. Select preferred language: Hindi > English > Others
+    1. Use --sub-langs "hi,en" for targeted Hindi + English download
+    2. Use --sub-format "json3" to get JSON3 format directly (NOT --convert-subs)
+    3. Use --extractor-args "youtube:player_client=web" to force web client (bypasses restrictions)
+    4. Select preferred language: Hindi > English
     5. Improved regex and fallback handling for unexpected filenames
     
     Args:
@@ -44,23 +44,24 @@ def download_captions(job_id, youtube_url, cookies_file=None):
         captions_json_path = os.path.join(captions_folder, 'captions.json')
         cookies_file_path = os.path.join("backend", "uploaded_files", "youtube_cookies.txt")
 
-        print("⏳ Downloading ALL available captions (auto-generated + manual)...")
+        print("⏳ Downloading captions (Hindi + English)...")
 
-        # ROBUST yt-dlp command - download ALL captions
+        # ROBUST yt-dlp command - targeted caption download with web client
         cmd = [
             "python3.11", "-m", "yt_dlp",
             "--skip-download",
             "--write-auto-subs",  # Download auto-generated captions
-            "--write-subs",  # Download manual captions
-            "--sub-langs", "*",  # WILDCARD: Download ALL languages (correct yt-dlp selector)
-            "--convert-subs", "json3",  # Force JSON3 format (stable & reliable)
-            "-o", os.path.join(captions_folder, "youtube.%(lang)s.%(ext)s"),  # Include language in filename
+            "--sub-format", "json3",  # Get JSON3 format directly (NOT --convert-subs)
+            "--sub-langs", "hi,en",  # Hindi + English (targeted approach)
+            "--extractor-args", "youtube:player_client=web",  # Force web client for maximum compatibility
+            "-o", os.path.join(captions_folder, "%(id)s.%(ext)s"),  # Output template
             youtube_url
         ]
 
         # Add cookies if available
         if os.path.exists(cookies_file_path):
-            cmd.extend(["--cookies", cookies_file_path])
+            cmd.insert(-1, "--cookies")  # Insert before URL
+            cmd.insert(-1, cookies_file_path)
             print(f"✓ Using cookies file for authentication")
 
         # Run yt-dlp with 90s timeout
