@@ -209,7 +209,7 @@ export default function ApiKeysPage() {
     {
       id: 'google_cloud',
       name: 'Google Cloud',
-      description: 'Required for translation services',
+      description: '',
       type: 'file',
       placeholder: 'Upload service account JSON',
     },
@@ -295,6 +295,16 @@ export default function ApiKeysPage() {
                         className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
                       >
                         Setup your AssemblyAI API Key here.
+                      </a>
+                    )}
+                    {provider.id === 'google_cloud' && (
+                      <a
+                        href="https://console.cloud.google.com/apis/credentials"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
+                      >
+                        Setup your Google Cloud Service Account here
                       </a>
                     )}
                   </div>
