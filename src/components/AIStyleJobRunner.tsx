@@ -184,30 +184,27 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Progress Bar - Clean Design */}
-        <div className="space-y-3 mt-6 bg-slate-800/60 backdrop-blur-sm rounded-3xl p-8 border border-slate-600/40">
-          <div className="space-y-4">
-            {/* Progress Bar with Percentage Badge */}
-            <div className="flex items-center gap-5">
-              {/* Progress Bar */}
-              <div className="flex-1 relative h-3 bg-slate-700/60 rounded-full overflow-hidden border border-slate-600/40">
-                {/* Progress Fill */}
-                <div 
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 ease-out"
-                  style={{ 
-                    width: `${progressPercent}%`
-                  }}
-                >
-                  {/* Subtle shimmer */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
-                </div>
+        <div className="space-y-3 mt-6 bg-slate-800/60 backdrop-blur-sm rounded-full p-4 border border-slate-600/40">
+          <div className="flex items-center gap-4">
+            {/* Progress Bar */}
+            <div className="flex-1 relative h-3 bg-slate-700/60 rounded-full overflow-hidden border border-slate-600/40">
+              {/* Progress Fill */}
+              <div 
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 ease-out"
+                style={{ 
+                  width: `${progressPercent}%`
+                }}
+              >
+                {/* Subtle shimmer */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
               </div>
-              
-              {/* Percentage Badge */}
-              <div className="bg-slate-700/80 backdrop-blur-sm px-5 py-2 rounded-2xl border border-slate-600/50 min-w-[80px] text-center">
-                <span className="text-lg font-semibold text-white">
-                  {Math.round(progressPercent)}%
-                </span>
-              </div>
+            </div>
+            
+            {/* Percentage Badge */}
+            <div className="bg-slate-700/80 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-600/50 min-w-[70px] text-center">
+              <span className="text-base font-semibold text-white">
+                {Math.round(progressPercent)}%
+              </span>
             </div>
           </div>
         </div>
