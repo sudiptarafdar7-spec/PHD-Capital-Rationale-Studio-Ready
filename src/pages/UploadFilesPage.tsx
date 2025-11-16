@@ -446,6 +446,7 @@ export default function UploadFilesPage() {
       icon: Cookie,
       iconColor: 'text-orange-500',
       iconBg: 'bg-orange-500/20',
+      showChromeLink: true,
     },
   ];
 
@@ -514,6 +515,21 @@ export default function UploadFilesPage() {
                       >
                         <Download className="w-3.5 h-3.5" />
                         Download Latest Master File
+                      </a>
+                    </div>
+                  )}
+                  
+                  {/* Chrome Extension Link - Only for youtubeCookies */}
+                  {config.showChromeLink && (
+                    <div className="mb-3 sm:mb-4">
+                      <a
+                        href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 transition-colors underline-offset-4 hover:underline font-medium"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Install Get cookies on your chrome
                       </a>
                     </div>
                   )}
