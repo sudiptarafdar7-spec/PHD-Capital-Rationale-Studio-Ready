@@ -215,7 +215,7 @@ export default function ApiKeysPage() {
     },
     {
       id: 'rapidapi_video_transcript',
-      name: 'RapidAPI Video Transcript',
+      name: 'RapidAPI',
       description: 'Required for downloading YouTube captions reliably via RapidAPI',
       type: 'key',
       placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...',
