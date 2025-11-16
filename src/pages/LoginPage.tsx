@@ -116,9 +116,19 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-muted-foreground text-sm mt-6">
-          © 2025 PHD Capital. All rights reserved.
-        </p>
+        <div className="text-center mt-6 space-y-3">
+          <a
+            href="https://images.dhan.co/api-data/api-scrip-master.csv"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline"
+          >
+            Download Latest Master File
+          </a>
+          <p className="text-muted-foreground text-sm">
+            © 2025 PHD Capital. All rights reserved.
+          </p>
+        </div>
       </div>
     </div>
   );
