@@ -98,11 +98,11 @@ def download_captions(job_id, youtube_url, cookies_file=None):
         for entry in transcript:
             text = entry.get("text", "").strip()
             start = float(entry.get("start", 0.0))
-            end = float(entry.get("end", start))
+            duration = float(entry.get("duration", 0.0))  # RapidAPI provides duration, not end
 
             event = {
                 "tStartMs": int(start * 1000),
-                "dDurationMs": int((end - start) * 1000),
+                "dDurationMs": int(duration * 1000),  # Use duration directly
                 "segs": [
                     {"utf8": text}
                 ]
