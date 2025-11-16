@@ -27,6 +27,10 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
 - **100% reliable**: Direct API approach eliminates yt-dlp compatibility issues (no more "invalid subtitle format" errors)
 - **API provider**: RapidAPI Video Transcript Scraper (video-transcript-scraper.p.rapidapi.com)
 - **JSON3 format**: Converts API response to JSON3 format with events array structure (tStartMs, dDurationMs, segs)
+- **URL normalization**: Converts all YouTube URL formats (live/shorts/embed/youtu.be) to standard watch?v= format
+  - Regex patterns for video ID extraction from any YouTube URL variant
+  - Debug logging for URL conversions
+  - Graceful fallback to original URL if no pattern matches
 - **Language detection**: Automatic language detection from API response
 - **Database integration**: Fetches RAPIDAPI_VIDEO_TRANSCRIPT_KEY from api_keys table (provider: 'rapidapi_video_transcript')
 - **Error handling**: Comprehensive error messages for missing keys, API failures, and unavailable captions
