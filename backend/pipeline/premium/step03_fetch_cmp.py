@@ -18,9 +18,85 @@ import time
 from datetime import datetime, timedelta
 
 
+def fetch_last_closing_price(api_key, security_id, exchange, instrument, dt):
+    """
+    Fetch last closing price from Dhan historical API (fallback for outside market hours)
+    
+    Args:
+        api_key: Dhan API access token
+        security_id: Security ID from master file
+        exchange: Exchange (NSE/BSE)
+        instrument: Instrument type (EQUITY)
+        dt: Reference datetime
+        
+    Returns:
+        float: Last closing price or None
+    """
+    url = "https://api.dhan.co/v2/charts/historical"
+    
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "access-token": api_key
+    }
+    
+    try:
+        # Exchange segment formatting
+        exchange = str(exchange).upper()
+        instrument = str(instrument).upper()
+        
+        if instrument == "EQUITY":
+            exchange_segment = f"{exchange}_EQ"
+        else:
+            exchange_segment = f"{exchange}_EQ"  # Default to EQ
+        
+        # Remove .0 if security_id is float-like
+        security_id_str = str(security_id).split(".")[0]
+        
+        # Fetch last 7 days to ensure we get closing price
+        to_date = dt.strftime("%Y-%m-%d")
+        from_date = (dt - timedelta(days=7)).strftime("%Y-%m-%d")
+        
+        payload = {
+            "securityId": security_id_str,
+            "exchangeSegment": exchange_segment,
+            "instrument": "EQUITY",
+            "expiryCode": 0,
+            "oi": False,
+            "fromDate": from_date,
+            "toDate": to_date
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        
+        # Check for authentication errors
+        if response.status_code == 401:
+            raise RuntimeError(
+                "❌ Dhan API authentication failed (401 Unauthorized).\n"
+                "   Your Dhan API key is invalid or expired.\n"
+                "   Please update it in Settings → API Keys → Dhan"
+            )
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        # Extract last available closing price
+        if "close" in data and len(data["close"]) > 0:
+            # Get the most recent closing price (last element)
+            closing_price = data["close"][-1]
+            return closing_price
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"    ⚠️ Historical API error: {str(e)}")
+        return None
+
+
 def fetch_cmp_from_dhan(api_key, security_id, exchange, instrument, dt):
     """
-    Fetch CMP from Dhan API for a specific stock at a specific time
+    Fetch CMP from Dhan API for a specific stock at a specific time.
+    Falls back to last closing price if outside market hours.
     
     Args:
         api_key: Dhan API access token
@@ -30,7 +106,7 @@ def fetch_cmp_from_dhan(api_key, security_id, exchange, instrument, dt):
         dt: Datetime when stock was called
         
     Returns:
-        float: Current Market Price or None
+        tuple: (price, source) where source is 'intraday' or 'closing'
     """
     url = "https://api.dhan.co/v2/charts/intraday"
 
@@ -71,23 +147,48 @@ def fetch_cmp_from_dhan(api_key, security_id, exchange, instrument, dt):
         # Make API request
         response = requests.post(url, headers=headers, json=payload, timeout=10)
         
+        # Check for authentication errors
+        if response.status_code == 401:
+            raise RuntimeError(
+                "❌ Dhan API authentication failed (401 Unauthorized).\n"
+                "   Your Dhan API key is invalid or expired.\n"
+                "   Please update it in Settings → API Keys → Dhan"
+            )
+        
         # Log detailed error if request fails
         if response.status_code != 200:
             print(f"    ⚠️ API error ({response.status_code}): {response.text}")
-            response.raise_for_status()
+            # Try fallback to closing price
+            print(f"    ℹ️ Trying last closing price...")
+            closing_price = fetch_last_closing_price(api_key, security_id, exchange, instrument, dt)
+            if closing_price:
+                return (closing_price, "closing")
+            return (None, None)
 
         data = response.json()
 
         # Extract CMP from response
         if "close" in data and len(data["close"]) > 0:
             cmp_value = data["close"][0]
-            return cmp_value
+            return (cmp_value, "intraday")
         else:
-            return None
+            # No intraday data - try fetching last closing price
+            print(f"    ℹ️ No intraday data (market closed), fetching last closing price...")
+            closing_price = fetch_last_closing_price(api_key, security_id, exchange, instrument, dt)
+            if closing_price:
+                return (closing_price, "closing")
+            else:
+                return (None, None)
 
+    except RuntimeError:
+        raise  # Re-raise authentication errors
     except Exception as e:
         print(f"    ⚠️ API error: {str(e)}")
-        return None
+        # Try fallback to closing price
+        closing_price = fetch_last_closing_price(api_key, security_id, exchange, instrument, dt)
+        if closing_price:
+            return (closing_price, "closing")
+        return (None, None)
 
 
 def run(job_folder, dhan_api_key):
@@ -179,12 +280,15 @@ def run(job_folder, dhan_api_key):
                     failed_count += 1
                     continue
 
-                # Fetch CMP from Dhan API
-                cmp_value = fetch_cmp_from_dhan(dhan_api_key, security_id, exchange, instrument, dt)
+                # Fetch CMP from Dhan API (with fallback to closing price)
+                result = fetch_cmp_from_dhan(dhan_api_key, security_id, exchange, instrument, dt)
+                cmp_value, source = result
 
                 if cmp_value is not None:
                     df.at[i, "CMP"] = cmp_value
-                    print(f"  ✅ {stock_name:25} | CMP: ₹{cmp_value:,.2f} @ {dt_str}")
+                    source_label = "💰" if source == "intraday" else "📊"  # intraday vs closing
+                    source_text = "" if source == "intraday" else " (Last Close)"
+                    print(f"  ✅ {stock_name:25} | {source_label} ₹{cmp_value:,.2f}{source_text} @ {dt_str}")
                     success_count += 1
                 else:
                     print(f"  ⚠️ {stock_name:25} | No data available @ {dt_str}")
