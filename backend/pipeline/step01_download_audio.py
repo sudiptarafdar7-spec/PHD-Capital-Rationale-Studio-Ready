@@ -7,6 +7,7 @@ import os
 import subprocess
 import requests
 import random
+import time
 from yt_dlp import YoutubeDL
 from backend.pipeline.fetch_video_data import extract_video_id
 from backend.utils.database import get_db_cursor
@@ -57,18 +58,52 @@ def download_audio_rapidapi(video_id, audio_folder):
         }
         
         print(f"📡 Requesting MP3 link for video ID: {video_id}")
-        response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
-        response.raise_for_status()
         
-        data = response.json()
-        print(f"✅ API Response: {data}")
+        # Poll RapidAPI with retry logic (video processing can take time)
+        max_retries = 12  # 12 retries × 5 seconds = 1 minute max wait
+        retry_delay = 5   # Wait 5 seconds between retries
+        data = None
         
-        # Validate response
-        if data.get("status") != "ok" or "link" not in data:
-            raise Exception(f"API did not return a valid link. Response: {data}")
+        for attempt in range(1, max_retries + 1):
+            response = requests.get(api_url, headers=headers, params=querystring, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            status = data.get("status")
+            progress = data.get("progress", 0)
+            
+            # Success case: conversion complete
+            if status == "ok" and data.get("link"):
+                print(f"✅ API Response: {data}")
+                break
+            
+            # Processing case: video is being converted
+            elif status == "processing":
+                if attempt == 1:
+                    print(f"⏳ Video is being processed by RapidAPI (progress: {progress}%)")
+                    print(f"   Polling every {retry_delay} seconds (max {max_retries} attempts)...")
+                else:
+                    print(f"   Attempt {attempt}/{max_retries} - Progress: {progress}%")
+                
+                if attempt < max_retries:
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    raise Exception(f"Timeout: Video still processing after {max_retries * retry_delay} seconds. Progress: {progress}%. Try again in a few minutes.")
+            
+            # Error case: API returned error status
+            else:
+                raise Exception(f"API returned unexpected status. Response: {data}")
+        
+        # Final validation
+        if not data:
+            raise Exception("No response received from RapidAPI")
+        
+        if data.get("status") != "ok" or not data.get("link"):
+            raise Exception(f"API did not return a valid link after {max_retries} attempts. Response: {data}")
         
         mp3_url = data["link"]
-        title = data["title"].replace("/", "_").replace("\\", "_").replace(":", "_")
+        title = data.get("title", "audio").replace("/", "_").replace("\\", "_").replace(":", "_")
         
         # Step 2: Download the MP3 file with proper headers
         print(f"⏬ Downloading audio: {title}")
