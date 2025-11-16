@@ -33,42 +33,35 @@ MARKET_OPEN_TIME = (9, 15)  # 9:15 AM
 MARKET_CLOSE_TIME = (15, 30)  # 3:30 PM
 
 
-def adjust_to_market_hours(dt_local: datetime) -> datetime:
+def get_last_trading_day_close(dt_local: datetime) -> datetime:
     """
-    Adjust datetime to market hours if outside trading time.
-    If after 3:30 PM, cap to 3:30 PM same day.
-    If before 9:15 AM, use previous day's 3:30 PM.
+    Find the last trading day's closing time (3:30 PM).
+    Walks backwards from given date to find a weekday, then sets time to 3:30 PM.
     
     Args:
-        dt_local: IST-localized datetime
+        dt_local: IST-localized datetime to start search from
         
     Returns:
-        Adjusted datetime within market hours
+        IST-localized datetime of last trading day at 3:30 PM
     """
-    # Extract time components
-    hour = dt_local.hour
-    minute = dt_local.minute
+    # Start from the given date
+    search_date = dt_local.date()
     
-    # Market hours: 9:15 AM to 3:30 PM
-    market_open_minutes = MARKET_OPEN_TIME[0] * 60 + MARKET_OPEN_TIME[1]  # 555
-    market_close_minutes = MARKET_CLOSE_TIME[0] * 60 + MARKET_CLOSE_TIME[1]  # 930
-    current_minutes = hour * 60 + minute
+    # Walk backwards until we find a weekday (Mon-Fri)
+    while search_date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+        search_date = search_date - timedelta(days=1)
     
-    # If after market close (3:30 PM), cap to 3:30 PM same day
-    if current_minutes > market_close_minutes:
-        adjusted = dt_local.replace(hour=MARKET_CLOSE_TIME[0], minute=MARKET_CLOSE_TIME[1], second=0, microsecond=0)
-        print(f"    ℹ️ Time {hour:02d}:{minute:02d} is after market close, capped to 3:30 PM")
-        return adjusted
+    # Set time to market close (3:30 PM)
+    last_close = IST.localize(datetime(
+        search_date.year, 
+        search_date.month, 
+        search_date.day,
+        MARKET_CLOSE_TIME[0],  # 15 (3 PM)
+        MARKET_CLOSE_TIME[1],  # 30 minutes
+        0  # 0 seconds
+    ))
     
-    # If before market open (9:15 AM), use previous day's 3:30 PM
-    if current_minutes < market_open_minutes:
-        prev_day = dt_local - timedelta(days=1)
-        adjusted = prev_day.replace(hour=MARKET_CLOSE_TIME[0], minute=MARKET_CLOSE_TIME[1], second=0, microsecond=0)
-        print(f"    ℹ️ Time {hour:02d}:{minute:02d} is before market open, using previous day 3:30 PM")
-        return adjusted
-    
-    # Within market hours, no adjustment needed
-    return dt_local
+    return last_close
 
 
 def parse_date(s: str) -> datetime.date:
@@ -471,34 +464,60 @@ def run(job_folder, dhan_api_key):
                 time_str = str(row.get("TIME", "")).strip()
                 h, m, s = parse_time(time_str)
                 end_dt_local = IST.localize(datetime(date_obj.year, date_obj.month, date_obj.day, h, m, s))
-                
-                # Adjust to market hours if outside trading time
-                end_dt_adjusted = adjust_to_market_hours(end_dt_local)
 
-                # Historical window: last 8 months (use adjusted date for end)
-                start_hist = end_dt_adjusted.date() - relativedelta(months=8)
-                end_hist_non_inclusive = end_dt_adjusted.date() + timedelta(days=1)
+                # Try exact date/time first
+                try:
+                    # Historical window: last 8 months
+                    start_hist = date_obj - relativedelta(months=8)
+                    end_hist_non_inclusive = date_obj + timedelta(days=1)
 
-                # Fetch historical daily data
-                daily = get_daily_history(security_id, start_hist,
-                                         end_hist_non_inclusive, headers,
-                                         exchange_segment)
+                    # Fetch historical daily data
+                    daily = get_daily_history(security_id, start_hist,
+                                             end_hist_non_inclusive, headers,
+                                             exchange_segment)
 
-                # Fetch intraday data (use adjusted datetime)
-                market_open = IST.localize(datetime(end_dt_adjusted.year, end_dt_adjusted.month, 
-                                                   end_dt_adjusted.day, 9, 15, 0))
-                if end_dt_adjusted <= market_open:
-                    intraday = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
-                else:
+                    # Fetch intraday data
+                    market_open = IST.localize(datetime(date_obj.year, date_obj.month, date_obj.day, 9, 15, 0))
+                    if end_dt_local <= market_open:
+                        intraday = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+                    else:
+                        intraday = get_intraday_1m(security_id, market_open,
+                                                  end_dt_local, headers,
+                                                  exchange_segment)
+
+                    # Resample to timeframe
+                    df_tf = resample_to(daily, chart_type, intraday)
+
+                    # If no data available (weekend/holiday), fall back to last trading day
+                    if df_tf.empty or len(df_tf) == 0:
+                        raise ValueError("No data for requested date/time")
+                    
+                except Exception as primary_error:
+                    # Fall back to last trading day's closing time
+                    print(f"    ℹ️ No data for {date_obj} {h:02d}:{m:02d}, fetching last trading day...")
+                    
+                    last_close = get_last_trading_day_close(end_dt_local)
+                    last_date = last_close.date()
+                    
+                    print(f"    ℹ️ Using last trading day: {last_date.strftime('%Y-%m-%d')} 3:30 PM")
+                    
+                    # Fetch data up to last trading day close
+                    start_hist = last_date - relativedelta(months=8)
+                    end_hist_non_inclusive = last_date + timedelta(days=1)
+                    
+                    daily = get_daily_history(security_id, start_hist,
+                                             end_hist_non_inclusive, headers,
+                                             exchange_segment)
+                    
+                    market_open = IST.localize(datetime(last_date.year, last_date.month, last_date.day, 9, 15, 0))
                     intraday = get_intraday_1m(security_id, market_open,
-                                              end_dt_adjusted, headers,
+                                              last_close, headers,
                                               exchange_segment)
-
-                # Resample to timeframe
-                df_tf = resample_to(daily, chart_type, intraday)
-
-                if df_tf.empty:
-                    raise ValueError("API returned no candles for this SECURITY ID / time window.")
+                    
+                    df_tf = resample_to(daily, chart_type, intraday)
+                    
+                    if df_tf.empty:
+                        raise ValueError("No data available even for last trading day")
 
                 # Add indicators
                 df_tf = add_indicators(df_tf)
