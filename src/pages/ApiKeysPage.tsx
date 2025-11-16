@@ -15,6 +15,7 @@ export default function ApiKeysPage() {
     assemblyai: '',
     dhan: '',
     youtubedata: '',
+    rapidapi_video_transcript: '',
   });
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [configuredProviders, setConfiguredProviders] = useState<Record<string, boolean>>({
@@ -23,6 +24,7 @@ export default function ApiKeysPage() {
     google_cloud: false,
     dhan: false,
     youtubedata: false,
+    rapidapi_video_transcript: false,
   });
 
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function ApiKeysPage() {
           google_cloud: false,
           dhan: false,
           youtubedata: false,
+          rapidapi_video_transcript: false,
         };
         
         data.forEach((item: any) => {
@@ -211,6 +214,13 @@ export default function ApiKeysPage() {
       placeholder: 'AIzaSy...',
     },
     {
+      id: 'rapidapi_video_transcript',
+      name: 'RapidAPI Video Transcript',
+      description: 'Required for downloading YouTube captions reliably via RapidAPI',
+      type: 'key',
+      placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...',
+    },
+    {
       id: 'openai',
       name: 'OpenAI',
       description: '',
@@ -313,6 +323,16 @@ export default function ApiKeysPage() {
                         className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
                       >
                         Setup your AssemblyAI API Key here.
+                      </a>
+                    )}
+                    {provider.id === 'rapidapi_video_transcript' && (
+                      <a
+                        href="https://rapidapi.com/herosAPI/api/video-transcript-scraper"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
+                      >
+                        Get your RapidAPI Video Transcript key here. Subscribe to access the API.
                       </a>
                     )}
                     {provider.id === 'google_cloud' && (
