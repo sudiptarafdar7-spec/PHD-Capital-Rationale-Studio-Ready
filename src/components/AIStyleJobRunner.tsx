@@ -125,13 +125,18 @@ export default function AIStyleJobRunner({
         {/* AI Loader Icon */}
         <div className="flex justify-center">
           <div className="relative">
-            {/* Subtle glowing background */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-28 h-28 bg-blue-500/20 rounded-full blur-2xl"></div>
+            {/* Outer glowing ring - animated pulse */}
+            <div className="absolute inset-0 flex items-center justify-center animate-pulse-ring">
+              <div className="w-32 h-32 rounded-full bg-blue-500/20 blur-xl"></div>
             </div>
             
-            {/* Main loader icon */}
-            <div className="relative bg-white dark:bg-slate-800/50 border border-blue-500/30 rounded-full p-5 shadow-lg shadow-blue-500/20 flex items-center justify-center">
+            {/* Middle glow layer */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-28 h-28 rounded-full bg-gradient-to-r from-blue-500/30 via-cyan-500/30 to-blue-500/30 blur-lg animate-spin-slow"></div>
+            </div>
+            
+            {/* Main loader icon with glowing border */}
+            <div className="relative bg-white dark:bg-slate-800/50 border-2 border-blue-500/50 rounded-full p-5 shadow-2xl shadow-blue-500/50 flex items-center justify-center ring-4 ring-blue-500/20 ring-offset-2 ring-offset-transparent">
               {isCompleted ? (
                 <CheckCircle2 className="w-14 h-14 text-blue-600 dark:text-blue-400" />
               ) : (
@@ -241,6 +246,30 @@ export default function AIStyleJobRunner({
         }
         .animate-pulse-dots {
           animation: pulse-dots 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse-ring {
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.5;
+            transform: scale(1.1);
+          }
+        }
+        .animate-pulse-ring {
+          animation: pulse-ring 2s ease-in-out infinite;
+        }
+        @keyframes spin-slow {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        .animate-spin-slow {
+          animation: spin-slow 8s linear infinite;
         }
       `}</style>
     </Card>
