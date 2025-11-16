@@ -16,6 +16,10 @@ PHD Capital Rationale Studio is a full-stack web application designed to automat
   - Rotating clients: tv_html5, ios, android (bypasses YouTube restrictions)
   - Randomized user agents for anti-fingerprinting
   - 20 retries with fragment recovery
+- **URL normalization**: Converts all YouTube URL formats (live/shorts/embed/youtu.be) to standard watch?v= format
+  - Same regex patterns as Step 2 for consistency
+  - Debug logging for URL conversions
+  - Graceful fallback to original URL if no pattern matches
 - **Universal URL support**: Handles all YouTube URL formats (regular, live, shorts, embed, etc.)
 - **Video ID extraction**: Reuses existing extract_video_id() from fetch_video_data.py
 - **FFmpeg conversion**: Maintains 16kHz mono WAV output for transcription
