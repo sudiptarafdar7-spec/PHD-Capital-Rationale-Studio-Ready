@@ -38,14 +38,24 @@ def get_last_trading_day_close(dt_local: datetime) -> datetime:
     Find the last trading day's closing time (3:30 PM).
     Walks backwards from given date to find a weekday, then sets time to 3:30 PM.
     
+    IMPORTANT: If requested time is before market close (3:30 PM), we start search
+    from previous day to ensure we return a past timestamp, not a future one.
+    
     Args:
         dt_local: IST-localized datetime to start search from
         
     Returns:
-        IST-localized datetime of last trading day at 3:30 PM
+        IST-localized datetime of last trading day at 3:30 PM (always in the past)
     """
-    # Start from the given date
-    search_date = dt_local.date()
+    # Check if requested time is before market close
+    market_close_minutes = MARKET_CLOSE_TIME[0] * 60 + MARKET_CLOSE_TIME[1]  # 930
+    requested_minutes = dt_local.hour * 60 + dt_local.minute
+    
+    # If before 3:30 PM, start search from previous day to avoid future timestamp
+    if requested_minutes < market_close_minutes:
+        search_date = dt_local.date() - timedelta(days=1)
+    else:
+        search_date = dt_local.date()
     
     # Walk backwards until we find a weekday (Mon-Fri)
     while search_date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
