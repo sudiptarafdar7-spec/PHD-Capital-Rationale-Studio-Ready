@@ -112,12 +112,12 @@ export default function AIStyleJobRunner({
   }
 
   return (
-    <Card className="relative overflow-hidden border border-slate-700/50 shadow-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
-      {/* Subtle grid background */}
-      <div className="absolute inset-0 opacity-5">
+    <Card className="relative overflow-hidden border border-slate-700/50 shadow-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-3xl">
+      {/* Prominent grid background - 70% coverage */}
+      <div className="absolute inset-0 opacity-70">
         <div className="absolute inset-0" style={{
-          backgroundImage: 'linear-gradient(rgba(100, 149, 237, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(100, 149, 237, 0.3) 1px, transparent 1px)',
-          backgroundSize: '40px 40px'
+          backgroundImage: 'linear-gradient(rgba(59, 130, 246, 0.15) 1.5px, transparent 1.5px), linear-gradient(90deg, rgba(59, 130, 246, 0.15) 1.5px, transparent 1.5px)',
+          backgroundSize: '50px 50px'
         }}></div>
       </div>
       
@@ -147,8 +147,8 @@ export default function AIStyleJobRunner({
         {/* Job ID Header */}
         {jobId && (
           <div className="text-center space-y-1">
-            <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm px-5 py-2.5 rounded-full border border-slate-600/40">
-              <span className="text-xs font-mono text-slate-300 tracking-wider">
+            <div className="inline-flex items-center gap-2 bg-slate-800/80 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-600/50">
+              <span className="text-sm font-mono text-slate-200 tracking-wider">
                 JOB ID: {jobId}
               </span>
             </div>
@@ -158,15 +158,15 @@ export default function AIStyleJobRunner({
         {/* Progress Information */}
         <div className="space-y-4 text-center">
           {/* Step Counter */}
-          <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm px-5 py-2.5 rounded-full border border-slate-600/40">
-            <Sparkles className="w-4 h-4 text-blue-400" />
-            <span className="text-sm font-semibold text-slate-200 tracking-wide">
+          <div className="inline-flex items-center gap-2.5 bg-slate-800/80 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-600/50">
+            <Sparkles className="w-5 h-5 text-blue-400" />
+            <span className="text-base font-semibold text-white tracking-wide">
               STEP {displayStepNumber}/{totalSteps}
             </span>
           </div>
 
           {/* Current Step Message Box */}
-          <div className="bg-slate-800/40 backdrop-blur-sm px-8 py-6 rounded-3xl border border-slate-600/30">
+          <div className="bg-slate-800/60 backdrop-blur-sm px-10 py-7 rounded-3xl border border-slate-600/40">
             <h3 className="text-3xl font-semibold text-white">
               {currentStepConfig?.publicMessage || 'Processing...'}
             </h3>
@@ -174,7 +174,7 @@ export default function AIStyleJobRunner({
 
           {/* Metric Display (for steps 8, 9, 11, 13) */}
           {metricValue !== null && (
-            <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm text-slate-200 px-5 py-2.5 rounded-full border border-slate-600/40">
+            <div className="inline-flex items-center gap-2.5 bg-slate-800/80 backdrop-blur-sm text-slate-200 px-6 py-3 rounded-2xl border border-slate-600/50">
               <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
               <span className="font-medium text-sm">
                 {metricValue} {currentStepConfig?.showMetrics === 'charts_fetched' ? 'charts' : 'stocks'} {currentStepConfig?.showMetrics === 'stocks_extracted' ? 'extracted' : currentStepConfig?.showMetrics === 'stocks_mapped' ? 'mapped' : currentStepConfig?.showMetrics === 'stocks_cmp' ? 'fetched' : 'generated'}
@@ -184,12 +184,12 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Progress Bar - Clean Design */}
-        <div className="space-y-3 mt-6 bg-slate-800/40 backdrop-blur-sm rounded-3xl p-6 border border-slate-600/30">
+        <div className="space-y-3 mt-6 bg-slate-800/60 backdrop-blur-sm rounded-3xl p-8 border border-slate-600/40">
           <div className="space-y-4">
             {/* Progress Bar with Percentage Badge */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-5">
               {/* Progress Bar */}
-              <div className="flex-1 relative h-3 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
+              <div className="flex-1 relative h-3 bg-slate-700/60 rounded-full overflow-hidden border border-slate-600/40">
                 {/* Progress Fill */}
                 <div 
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 ease-out"
@@ -203,8 +203,8 @@ export default function AIStyleJobRunner({
               </div>
               
               {/* Percentage Badge */}
-              <div className="bg-slate-700/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-600/40 min-w-[70px] text-center">
-                <span className="text-lg font-semibold text-slate-200">
+              <div className="bg-slate-700/80 backdrop-blur-sm px-5 py-2 rounded-2xl border border-slate-600/50 min-w-[80px] text-center">
+                <span className="text-lg font-semibold text-white">
                   {Math.round(progressPercent)}%
                 </span>
               </div>
@@ -213,7 +213,7 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Processing indicator */}
-        <div className="flex items-center justify-center gap-3 text-slate-300 bg-slate-800/40 backdrop-blur-sm px-6 py-4 rounded-3xl border border-slate-600/30">
+        <div className="flex items-center justify-center gap-3 text-slate-300 bg-slate-800/60 backdrop-blur-sm px-8 py-5 rounded-3xl border border-slate-600/40">
           <span className="text-sm">*AI is working hard to process your audio...</span>
         </div>
       </div>
