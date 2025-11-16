@@ -202,7 +202,7 @@ export default function ApiKeysPage() {
     {
       id: 'assemblyai',
       name: 'AssemblyAI',
-      description: 'Required for audio transcription with speaker labels',
+      description: '',
       type: 'key',
       placeholder: 'xxxxxxxxxxxxxxxxxxxx',
     },
@@ -285,6 +285,16 @@ export default function ApiKeysPage() {
                         className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
                       >
                         Setup your OpenAI API Key here. Make sure you have setup your billing account properly
+                      </a>
+                    )}
+                    {provider.id === 'assemblyai' && (
+                      <a
+                        href="https://www.assemblyai.com/dashboard/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
+                      >
+                        Setup your AssemblyAI API Key here.
                       </a>
                     )}
                   </div>
