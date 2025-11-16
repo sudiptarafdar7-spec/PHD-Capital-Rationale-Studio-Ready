@@ -502,22 +502,7 @@ export default function UploadFilesPage() {
 
                 <div className="flex-1 min-w-0">
                   <h3 className="text-base sm:text-lg text-foreground mb-1">{config.title}</h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-2">{config.description}</p>
-                  
-                  {/* Setup YouTube Data API Link - Only for masterFile */}
-                  {config.id === 'masterFile' && (
-                    <div className="mb-3 sm:mb-4">
-                      <a
-                        href="https://developers.google.com/youtube/v3/getting-started"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Setup Youtube Data API v3 Now
-                      </a>
-                    </div>
-                  )}
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">{config.description}</p>
                   
                   {/* Chrome Extension Link - Only for youtubeCookies */}
                   {config.showChromeLink && (
