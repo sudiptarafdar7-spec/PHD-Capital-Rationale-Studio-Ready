@@ -1,6 +1,7 @@
 """
 Step 2: Download Auto-Generated Captions from YouTube Video
-100% Reliable - Downloads ANY auto-generated caption language YouTube provides
+100% Reliable - Downloads ALL auto-generated captions at once using --sub-langs ".*"
+No dependency on --list-subs (which can randomly fail)
 """
 import os
 import subprocess
@@ -9,125 +10,16 @@ import glob
 import re
 
 
-def time_to_ms(timestr):
-    """Convert VTT timestamp to milliseconds"""
-    parts = timestr.split(":")
-    try:
-        parts = [float(p) for p in parts]
-    except:
-        return 0
-    if len(parts) == 3:
-        h, m, s = parts
-    elif len(parts) == 2:
-        h = 0
-        m, s = parts
-    else:
-        return int(parts[0] * 1000)
-    return int((h * 3600 + m * 60 + s) * 1000)
-
-
-def parse_vtt(vtt_text):
-    """Parse VTT subtitle format to JSON structure"""
-    events = []
-    lines = vtt_text.splitlines()
-    cur_start, cur_end, cur_text_lines = None, None, []
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            if cur_start and cur_text_lines:
-                text = " ".join(cur_text_lines).strip()
-                events.append({
-                    'tStartMs': time_to_ms(cur_start),
-                    'dDurationMs': time_to_ms(cur_end) - time_to_ms(cur_start),
-                    'segs': [{'utf8': text}]
-                })
-            cur_start, cur_end, cur_text_lines = None, None, []
-            continue
-        if "-->" in line:
-            parts = line.split("-->")
-            cur_start = parts[0].strip()
-            cur_end = parts[1].strip()
-        else:
-            cur_text_lines.append(line)
-
-    return {'events': events}
-
-
-def get_available_auto_subs(youtube_url, cookies_file_path=None):
-    """
-    List all available auto-generated subtitles for a YouTube video
-    
-    Returns:
-        list: List of auto-generated language codes (e.g., ['en', 'hi', 'es'])
-    """
-    try:
-        cmd = [
-            "python3.11", "-m", "yt_dlp",
-            "--list-subs",
-            "--skip-download",
-            youtube_url
-        ]
-        
-        if cookies_file_path and os.path.exists(cookies_file_path):
-            cmd.extend(["--cookies", cookies_file_path])
-        
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=30
-        )
-        
-        if result.returncode != 0:
-            return []
-        
-        # Parse output to find auto-generated subtitles
-        auto_langs = []
-        in_auto_section = False
-        
-        for line in result.stdout.splitlines():
-            # Look for "automatic captions" section
-            if "automatic" in line.lower():
-                in_auto_section = True
-                continue
-            
-            # Stop at manual subtitles section
-            if "available subtitles" in line.lower() and in_auto_section:
-                break
-            
-            # Extract language codes from auto-generated section
-            if in_auto_section:
-                # Match lines like: "en          vtt, ttml, srv3, srv2, srv1, json3"
-                # OR: "zh-Hans     vtt, ttml, srv3", "es-419      vtt", "sr-Latn     vtt", etc.
-                # Extract first token (language code) before whitespace
-                stripped = line.strip()
-                if stripped and not stripped.startswith('['):
-                    # Split on whitespace and take first token as language code
-                    parts = stripped.split()
-                    if parts and len(parts) > 1:
-                        # Verify it looks like a language code (contains letters/numbers/hyphens)
-                        lang_candidate = parts[0]
-                        if re.match(r'^[a-zA-Z]{2,3}(-[a-zA-Z0-9]+)*$', lang_candidate):
-                            auto_langs.append(lang_candidate)
-        
-        return auto_langs
-        
-    except Exception as e:
-        print(f"⚠️ Warning: Could not list subtitles: {str(e)}")
-        return []
-
-
 def download_captions(job_id, youtube_url, cookies_file=None):
     """
-    Download auto-generated captions from YouTube video using yt-dlp
-    100% RELIABLE - Downloads ANY auto-generated caption language
+    100% Reliable Auto-Generated Caption Downloader
+    Downloads ALL available auto-generated captions and selects preferred language
     
     Strategy:
-    1. List available auto-generated subtitles
-    2. Download the first available one (prefer en > hi > others)
-    3. Fallback: Try without language restriction (YouTube's default)
+    1. Use --sub-langs ".*" to download ALL auto-generated captions at once
+    2. Use --convert-subs json3 to force JSON3 format (most reliable)
+    3. Select preferred language: Hindi > English > Others
+    4. No dependency on --list-subs (which can randomly fail)
     
     Args:
         job_id: Job identifier
@@ -138,7 +30,7 @@ def download_captions(job_id, youtube_url, cookies_file=None):
         dict: {
             'success': bool,
             'captions_path': str,  # Path to captions.json file
-            'format': str,  # Source format (json3, vtt, or srt)
+            'format': str,  # Always 'json3'
             'language': str,  # Detected language code
             'file_size_kb': float,
             'error': str or None
@@ -150,167 +42,96 @@ def download_captions(job_id, youtube_url, cookies_file=None):
         os.makedirs(captions_folder, exist_ok=True)
 
         captions_json_path = os.path.join(captions_folder, 'captions.json')
-
-        # Use cookies from uploaded_files folder
         cookies_file_path = os.path.join("backend", "uploaded_files", "youtube_cookies.txt")
 
-        print(f"⏳ Listing available auto-generated captions...")
-        
-        # Step 1: Get list of available auto-generated subtitles
-        auto_langs = get_available_auto_subs(youtube_url, cookies_file_path)
-        
-        if auto_langs:
-            # Prioritize English, then Hindi, then any other language
-            priority_order = ['en', 'en-US', 'hi', 'hi-IN']
-            selected_lang = None
-            
-            for lang in priority_order:
-                if lang in auto_langs:
-                    selected_lang = lang
-                    break
-            
-            # If no priority language found, use the first available
-            if not selected_lang:
-                selected_lang = auto_langs[0]
-            
-            print(f"✓ Found {len(auto_langs)} auto-generated caption(s): {', '.join(auto_langs)}")
-            print(f"⏳ Downloading auto-generated captions in '{selected_lang}'...")
-            
-            # Step 2: Download the selected language
-            cmd = [
-                "python3.11", "-m", "yt_dlp",
-                "--skip-download",
-                "--write-auto-subs",
-                "--sub-langs", selected_lang,
-                "--sub-format", "json3/vtt/srt",
-                "-o", os.path.join(captions_folder, "youtube.%(ext)s"),
-                youtube_url
-            ]
-        else:
-            # Step 3: Fallback - No language restriction (download YouTube's default)
-            print(f"⚠️ Could not list subtitles, trying default auto-generated captions...")
-            cmd = [
-                "python3.11", "-m", "yt_dlp",
-                "--skip-download",
-                "--write-auto-subs",
-                "--sub-format", "json3/vtt/srt",
-                "-o", os.path.join(captions_folder, "youtube.%(ext)s"),
-                youtube_url
-            ]
+        print("⏳ Downloading ALL available auto-generated captions...")
+
+        # ROBUST yt-dlp command - download ALL auto-generated captions
+        cmd = [
+            "python3.11", "-m", "yt_dlp",
+            "--skip-download",
+            "--write-auto-subs",
+            "--sub-langs", "all",  # Download ALL languages (Hindi, English, Spanish, etc.)
+            "--convert-subs", "json3",  # Force JSON3 format (stable & reliable)
+            "-o", os.path.join(captions_folder, "youtube.%(lang)s.%(ext)s"),
+            youtube_url
+        ]
 
         # Add cookies if available
         if os.path.exists(cookies_file_path):
             cmd.extend(["--cookies", cookies_file_path])
             print(f"✓ Using cookies file for authentication")
 
-        # Run yt-dlp
+        # Run yt-dlp with 90s timeout
         result = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=60
+            timeout=90
         )
 
         if result.returncode != 0:
             print("⚠️ yt-dlp stderr:", result.stderr)
 
-        # Find downloaded subtitle files
-        subs_found = glob.glob(os.path.join(captions_folder, "youtube.*"))
-        subs_found = [p for p in subs_found if p.lower().endswith(('.json3', '.vtt', '.srt'))]
+        # Look for JSON3 auto subtitles
+        json3_files = glob.glob(os.path.join(captions_folder, "*.json3"))
 
-        if not subs_found:
+        if not json3_files:
             return {
                 'success': False,
                 'error': 'No auto-generated captions found. Captions may be disabled for this video.'
             }
 
-        source_format = None
-        language = None
+        print(f"✓ Found {len(json3_files)} auto-generated caption file(s)")
 
-        # Prefer json3 (best format with timestamps)
-        json3_files = [f for f in subs_found if f.endswith(".json3")]
-        if json3_files:
-            src = json3_files[0]
-            source_format = 'json3'
+        # Prefer Hindi > English > Others
+        preferred_langs = ["hi", "hi-IN", "en", "en-US"]
+        selected_file = None
 
-            # Detect language from filename (e.g., youtube.en.json3, youtube.zh-Hans.json3, youtube.es-419.json3)
-            filename = os.path.basename(src)
-            # Flexible pattern: 2-3 letter code + optional hyphen-separated segments
-            lang_match = re.search(r'youtube\.([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)*)\.', filename)
-            if lang_match:
-                language = lang_match.group(1)
+        for lang_code in preferred_langs:
+            for caption_file in json3_files:
+                # Match language in filename (e.g., youtube.hi.json3, youtube.en.json3)
+                if f".{lang_code}." in caption_file:
+                    selected_file = caption_file
+                    print(f"✓ Selected preferred language: {lang_code}")
+                    break
+            if selected_file:
+                break
 
-            with open(src, "r", encoding="utf-8") as f:
-                data = json.load(f)
+        # If no preferred language found, use first available
+        if not selected_file:
+            selected_file = json3_files[0]
+            print(f"✓ No preferred language found, using first available")
 
-            with open(captions_json_path, "w", encoding="utf-8") as outj:
-                json.dump(data, outj, ensure_ascii=False, indent=2)
+        # Extract language from filename
+        lang_match = re.search(r"\.(.+?)\.json3$", os.path.basename(selected_file))
+        detected_language = lang_match.group(1) if lang_match else "unknown"
 
-            print(f"✅ Captions saved from JSON3 format (Language: {language or 'unknown'})")
+        # Load JSON3 data
+        with open(selected_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-        # Fallback to VTT
-        elif any(f.endswith(".vtt") for f in subs_found):
-            src = [f for f in subs_found if f.endswith(".vtt")][0]
-            source_format = 'vtt'
+        # Save as captions.json
+        with open(captions_json_path, "w", encoding="utf-8") as outj:
+            json.dump(data, outj, ensure_ascii=False, indent=2)
 
-            filename = os.path.basename(src)
-            # Flexible pattern: 2-3 letter code + optional hyphen-separated segments
-            lang_match = re.search(r'youtube\.([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)*)\.', filename)
-            if lang_match:
-                language = lang_match.group(1)
-
-            with open(src, "r", encoding="utf-8", errors="ignore") as f:
-                vtt_text = f.read()
-
-            data = parse_vtt(vtt_text)
-
-            with open(captions_json_path, "w", encoding="utf-8") as outj:
-                json.dump(data, outj, ensure_ascii=False, indent=2)
-
-            print(f"✅ Captions saved from VTT format (Language: {language or 'unknown'})")
-
-        # Fallback to SRT
-        else:
-            src = [f for f in subs_found if f.endswith(".srt")][0]
-            source_format = 'srt'
-
-            filename = os.path.basename(src)
-            # Flexible pattern: 2-3 letter code + optional hyphen-separated segments
-            lang_match = re.search(r'youtube\.([a-zA-Z]{2,3}(?:-[a-zA-Z0-9]+)*)\.', filename)
-            if lang_match:
-                language = lang_match.group(1)
-
-            with open(src, "r", encoding="utf-8", errors="ignore") as f:
-                srt_text = f.read()
-
-            data = parse_vtt(srt_text)
-
-            with open(captions_json_path, "w", encoding="utf-8") as outj:
-                json.dump(data, outj, ensure_ascii=False, indent=2)
-
-            print(f"✅ Captions saved from SRT format (Language: {language or 'unknown'})")
-
-        # Cleanup intermediate files
-        for sub_file in subs_found:
+        # Cleanup - remove intermediate files
+        for caption_file in json3_files:
             try:
-                os.remove(sub_file)
+                os.remove(caption_file)
             except:
                 pass
 
-        if not os.path.exists(captions_json_path):
-            return {
-                'success': False,
-                'error': 'Failed to create captions.json file'
-            }
-
         file_size = os.path.getsize(captions_json_path) / 1024
+
+        print(f"✅ Captions saved successfully (Language: {detected_language})")
 
         return {
             'success': True,
             'captions_path': captions_json_path,
-            'format': source_format,
-            'language': language or 'unknown',
+            'format': 'json3',
+            'language': detected_language,
             'file_size_kb': round(file_size, 2),
             'error': None
         }
