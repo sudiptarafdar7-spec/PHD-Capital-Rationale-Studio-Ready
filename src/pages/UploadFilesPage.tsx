@@ -504,17 +504,17 @@ export default function UploadFilesPage() {
                   <h3 className="text-base sm:text-lg text-foreground mb-1">{config.title}</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground mb-2">{config.description}</p>
                   
-                  {/* Download Latest Master File Link - Only for masterFile */}
+                  {/* Setup YouTube Data API Link - Only for masterFile */}
                   {config.id === 'masterFile' && (
                     <div className="mb-3 sm:mb-4">
                       <a
-                        href="https://images.dhan.co/api-data/api-scrip-master.csv"
+                        href="https://developers.google.com/youtube/v3/getting-started"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors underline-offset-4 hover:underline font-medium"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        Download Latest Master File
+                        Setup Youtube Data API v3 Now
                       </a>
                     </div>
                   )}
