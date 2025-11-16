@@ -112,51 +112,32 @@ export default function AIStyleJobRunner({
   }
 
   return (
-    <Card className="relative overflow-hidden border-4 border-transparent shadow-2xl">
-      {/* Vibrant Animated Moving Gradient Background - VISIBLE */}
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 animate-gradient-move"></div>
-      
-      {/* Secondary Animated Layer for depth */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-blue-500 via-cyan-500 to-teal-500 opacity-50 animate-gradient-slow"></div>
-      
-      {/* Animated neon border effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 opacity-70 animate-pulse rounded-lg"></div>
-      
-      {/* Dark overlay for contrast - LIGHTER so background shows */}
-      <div className="absolute inset-[4px] bg-gradient-to-br from-slate-900/70 via-slate-800/60 to-slate-900/70 backdrop-blur-sm rounded-lg"></div>
-      
-      {/* Animated grid background */}
-      <div className="absolute inset-0 opacity-20 z-[5]">
+    <Card className="relative overflow-hidden border border-slate-700/50 shadow-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+      {/* Subtle grid background */}
+      <div className="absolute inset-0 opacity-5">
         <div className="absolute inset-0" style={{
-          backgroundImage: 'linear-gradient(rgba(139, 92, 246, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(139, 92, 246, 0.3) 1px, transparent 1px)',
-          backgroundSize: '50px 50px',
-          animation: 'grid-flow 20s linear infinite'
+          backgroundImage: 'linear-gradient(rgba(100, 149, 237, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(100, 149, 237, 0.3) 1px, transparent 1px)',
+          backgroundSize: '40px 40px'
         }}></div>
       </div>
-      
-      {/* Animated background shimmer */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent animate-shimmer z-[6]"></div>
       
       <div className="relative z-10 p-8 space-y-6">
         {/* AI Loader Icon */}
         <div className="flex justify-center">
           <div className="relative">
-            {/* Pulsing background circles with vibrant colors */}
+            {/* Subtle glowing background */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-32 h-32 bg-cyan-500/40 rounded-full animate-ping"></div>
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-24 h-24 bg-blue-500/50 rounded-full animate-pulse"></div>
+              <div className="w-28 h-28 bg-blue-500/20 rounded-full blur-2xl"></div>
             </div>
             
-            {/* Main loader with enhanced gradient */}
-            <div className="relative bg-gradient-to-br from-cyan-500 via-blue-500 to-purple-600 rounded-full p-6 shadow-2xl shadow-blue-500/50 flex items-center justify-center ring-4 ring-blue-400/30">
+            {/* Main loader icon */}
+            <div className="relative bg-slate-800/50 border border-blue-500/30 rounded-full p-5 shadow-lg shadow-blue-500/20 flex items-center justify-center">
               {isCompleted ? (
-                <CheckCircle2 className="w-16 h-16 text-white drop-shadow-lg" />
+                <CheckCircle2 className="w-14 h-14 text-blue-400" />
               ) : (
-                <div className="relative w-16 h-16 flex items-center justify-center">
-                  <Loader2 className="w-16 h-16 text-white animate-spin absolute drop-shadow-lg" />
-                  <StepIcon className="w-8 h-8 text-white relative z-10 drop-shadow-md" />
+                <div className="relative w-14 h-14 flex items-center justify-center">
+                  <Loader2 className="w-14 h-14 text-blue-400 animate-spin absolute" />
+                  <StepIcon className="w-7 h-7 text-blue-300 relative z-10" />
                 </div>
               )}
             </div>
@@ -166,9 +147,8 @@ export default function AIStyleJobRunner({
         {/* Job ID Header */}
         {jobId && (
           <div className="text-center space-y-1">
-            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-600 to-cyan-600 px-6 py-3 rounded-xl border-2 border-cyan-300 shadow-2xl shadow-cyan-500/50">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse shadow-lg shadow-green-400/80"></div>
-              <span className="text-sm font-mono text-white font-extrabold tracking-widest drop-shadow-lg">
+            <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm px-5 py-2.5 rounded-full border border-slate-600/40">
+              <span className="text-xs font-mono text-slate-300 tracking-wider">
                 JOB ID: {jobId}
               </span>
             </div>
@@ -176,82 +156,65 @@ export default function AIStyleJobRunner({
         )}
 
         {/* Progress Information */}
-        <div className="space-y-5 text-center">
+        <div className="space-y-4 text-center">
           {/* Step Counter */}
-          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 px-8 py-4 rounded-2xl shadow-2xl shadow-purple-500/70 border-3 border-pink-300">
-            <Sparkles className="w-7 h-7 text-yellow-300 animate-pulse drop-shadow-2xl" />
-            <span className="text-lg font-extrabold text-white tracking-widest drop-shadow-lg">
+          <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm px-5 py-2.5 rounded-full border border-slate-600/40">
+            <Sparkles className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-semibold text-slate-200 tracking-wide">
               STEP {displayStepNumber}/{totalSteps}
             </span>
           </div>
 
           {/* Current Step Message Box */}
-          <div className="bg-gradient-to-br from-blue-700 to-indigo-700 px-10 py-8 rounded-3xl border-3 border-blue-300 shadow-2xl shadow-blue-500/50">
-            <h3 className="text-4xl font-bold text-white drop-shadow-2xl">
+          <div className="bg-slate-800/40 backdrop-blur-sm px-8 py-6 rounded-3xl border border-slate-600/30">
+            <h3 className="text-3xl font-semibold text-white">
               {currentStepConfig?.publicMessage || 'Processing...'}
             </h3>
           </div>
 
           {/* Metric Display (for steps 8, 9, 11, 13) */}
           {metricValue !== null && (
-            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-8 py-4 rounded-2xl shadow-2xl shadow-emerald-500/70 border-3 border-emerald-300">
-              <div className="w-3 h-3 bg-yellow-300 rounded-full animate-pulse shadow-xl shadow-yellow-300/90"></div>
-              <span className="font-extrabold text-xl drop-shadow-lg">
+            <div className="inline-flex items-center gap-2 bg-slate-800/60 backdrop-blur-sm text-slate-200 px-5 py-2.5 rounded-full border border-slate-600/40">
+              <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+              <span className="font-medium text-sm">
                 {metricValue} {currentStepConfig?.showMetrics === 'charts_fetched' ? 'charts' : 'stocks'} {currentStepConfig?.showMetrics === 'stocks_extracted' ? 'extracted' : currentStepConfig?.showMetrics === 'stocks_mapped' ? 'mapped' : currentStepConfig?.showMetrics === 'stocks_cmp' ? 'fetched' : 'generated'}
               </span>
             </div>
           )}
         </div>
 
-        {/* Progress Bar - Enhanced Visibility */}
-        <div className="space-y-4 mt-8 bg-gradient-to-br from-slate-700 to-slate-800 rounded-3xl p-8 border-3 border-cyan-400 shadow-2xl shadow-cyan-500/50">
-          <div className="space-y-5">
-            {/* Progress Bar Container with Vibrant Colors */}
-            <div className="relative h-8 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-full overflow-hidden shadow-2xl border-2 border-slate-500">
-              {/* Animated background pattern */}
-              <div className="absolute inset-0 bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 animate-pulse"></div>
-              
-              {/* Progress Fill with Vibrant Gradient */}
-              <div 
-                className="absolute inset-0 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 transition-all duration-500 ease-out"
-                style={{ 
-                  width: `${progressPercent}%`,
-                  boxShadow: '0 0 30px rgba(6, 182, 212, 1), 0 0 60px rgba(59, 130, 246, 0.7), 0 0 90px rgba(168, 85, 247, 0.5)'
-                }}
-              >
-                {/* Shimmer effect on progress bar */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-shimmer"></div>
-                
-                {/* Glow effect */}
-                <div className="absolute inset-0 bg-gradient-to-t from-white/30 to-transparent"></div>
+        {/* Progress Bar - Clean Design */}
+        <div className="space-y-3 mt-6 bg-slate-800/40 backdrop-blur-sm rounded-3xl p-6 border border-slate-600/30">
+          <div className="space-y-4">
+            {/* Progress Bar with Percentage Badge */}
+            <div className="flex items-center gap-4">
+              {/* Progress Bar */}
+              <div className="flex-1 relative h-3 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
+                {/* Progress Fill */}
+                <div 
+                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500 ease-out"
+                  style={{ 
+                    width: `${progressPercent}%`
+                  }}
+                >
+                  {/* Subtle shimmer */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
+                </div>
               </div>
               
-              {/* Progress percentage text on bar */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-base font-extrabold text-white drop-shadow-2xl z-10">
+              {/* Percentage Badge */}
+              <div className="bg-slate-700/60 backdrop-blur-sm px-4 py-1.5 rounded-full border border-slate-600/40 min-w-[70px] text-center">
+                <span className="text-lg font-semibold text-slate-200">
                   {Math.round(progressPercent)}%
                 </span>
               </div>
-            </div>
-            
-            {/* Progress Labels */}
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-extrabold text-cyan-200 tracking-widest drop-shadow-lg">PROGRESS</span>
-              <span className="text-2xl font-extrabold text-white bg-gradient-to-r from-cyan-600 via-blue-600 to-purple-600 px-6 py-2.5 rounded-xl shadow-2xl shadow-cyan-500/50 border-2 border-cyan-300">
-                {Math.round(progressPercent)}%
-              </span>
             </div>
           </div>
         </div>
 
         {/* Processing indicator */}
-        <div className="flex items-center justify-center gap-4 text-white bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-5 rounded-2xl border-3 border-purple-300 shadow-2xl shadow-purple-500/50">
-          <div className="flex gap-2.5">
-            <div className="w-3.5 h-3.5 bg-cyan-300 rounded-full animate-bounce shadow-xl shadow-cyan-400/80" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-3.5 h-3.5 bg-blue-300 rounded-full animate-bounce shadow-xl shadow-blue-400/80" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-3.5 h-3.5 bg-purple-300 rounded-full animate-bounce shadow-xl shadow-purple-400/80" style={{ animationDelay: '300ms' }}></div>
-          </div>
-          <span className="text-lg font-extrabold drop-shadow-lg">AI is working...</span>
+        <div className="flex items-center justify-center gap-3 text-slate-300 bg-slate-800/40 backdrop-blur-sm px-6 py-4 rounded-3xl border border-slate-600/30">
+          <span className="text-sm">*AI is working hard to process your audio...</span>
         </div>
       </div>
 
@@ -266,44 +229,6 @@ export default function AIStyleJobRunner({
         }
         .animate-shimmer {
           animation: shimmer 3s infinite;
-        }
-        @keyframes grid-flow {
-          0% {
-            transform: translateY(0);
-          }
-          100% {
-            transform: translateY(50px);
-          }
-        }
-        @keyframes gradient-move {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
-        }
-        .animate-gradient-move {
-          background-size: 200% 200%;
-          animation: gradient-move 8s ease infinite;
-        }
-        @keyframes gradient-slow {
-          0% {
-            background-position: 0% 0%;
-          }
-          50% {
-            background-position: 100% 100%;
-          }
-          100% {
-            background-position: 0% 0%;
-          }
-        }
-        .animate-gradient-slow {
-          background-size: 300% 300%;
-          animation: gradient-slow 15s ease infinite;
         }
       `}</style>
     </Card>
