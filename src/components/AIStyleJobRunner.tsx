@@ -210,7 +210,7 @@ export default function AIStyleJobRunner({
         </div>
 
         {/* Processing indicator */}
-        <div className="flex items-center justify-center gap-3 text-slate-300 bg-slate-800/60 backdrop-blur-sm px-8 py-5 rounded-3xl border border-slate-600/40">
+        <div className="flex items-center justify-center gap-3 text-slate-300 bg-slate-800/60 backdrop-blur-sm px-6 py-3 rounded-full border border-slate-600/40">
           <span className="text-sm">*AI is working hard to process your audio...</span>
         </div>
       </div>
