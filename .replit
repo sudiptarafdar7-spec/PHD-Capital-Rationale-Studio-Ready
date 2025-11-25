@@ -106,6 +106,10 @@ localPort = 44175
 localPort = 45903
 externalPort = 3000
 
+[[ports]]
+localPort = 46495
+externalPort = 8008
+
 [deployment]
 deploymentTarget = "cloudrun"
 run = [

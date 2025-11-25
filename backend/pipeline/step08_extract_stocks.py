@@ -1,123 +1,337 @@
+"""
+Step 8: Extract Stock Mentions - Intelligent Chunk-Based Detection
+
+This step uses a multi-phase approach:
+1. Split transcript into 4 chunks (ending at Pradip's lines for context preservation)
+2. For each chunk, OpenAI reads line-by-line, word-by-word to detect stocks
+3. Handle transcription spelling errors intelligently
+4. Exclude indices (Nifty, Bank Nifty, Sensex, etc.)
+5. Merge all chunks and run final OpenAI for accurate NSE symbols
+6. Output final CSV with STOCK NAME, STOCK SYMBOL, START TIME
+"""
+
 import os
 import re
 import psycopg2
 from openai import OpenAI
 from backend.utils.openai_config import get_model, get_stock_extraction_prompt
 
-# Custom symbol corrections for commonly confused stocks (keys must be UPPERCASE)
-SYMBOL_CORRECTIONS = {
-    "VEDANTA": "VEDL",
-    "ZOMATO": "ETERNAL",
-    "VODAFONE": "IDEA",
-    "VI": "IDEA",
-    "SHRIRAM": "SHRIRAMFIN",
-    "SHREE FINANCE": "SHRIRAMFIN",
-    "SHRIRAMFINANCE": "SHRIRAMFIN",
-}
+NUM_CHUNKS = 4
+
+INDICES_TO_EXCLUDE = [
+    "nifty", "bank nifty", "banknifty", "sensex", "nifty50", "nifty 50",
+    "finnifty", "fin nifty", "midcap nifty", "nifty midcap", "nifty it",
+    "nifty bank", "index", "indices", "bse", "nse", "market"
+]
 
 
-def parse_transcript_turns(transcript_content):
-    """Parse transcript into structured turns with speaker, time, and text."""
-    turns = []
-    lines = transcript_content.strip().splitlines()
+def parse_transcript_lines(transcript_content):
+    """Parse transcript into structured lines with speaker, time, and text."""
+    lines = []
+    raw_lines = transcript_content.strip().splitlines()
 
-    for line in lines:
+    for line in raw_lines:
         match = re.match(
             r'\[(.+?)\]\s*(\d{2}:\d{2}:\d{2})\s*-\s*(\d{2}:\d{2}:\d{2})\s*\|\s*(.+)',
             line)
         if match:
             speaker, start_time, end_time, text = match.groups()
-            turns.append({
+            lines.append({
                 "speaker": speaker.strip(),
                 "start_time": start_time.strip(),
                 "end_time": end_time.strip(),
-                "text": text.strip()
+                "text": text.strip(),
+                "raw_line": line.strip()
             })
 
-    return turns
+    return lines
 
 
-def pair_anchor_pradip_turns(turns, anchor_speaker, pradip_speaker):
-    """Pair anchor questions with Pradip's responses."""
-    pairs = []
-    i = 0
-
-    while i < len(turns):
-        if turns[i]["speaker"] == anchor_speaker:
-            anchor_turn = turns[i]
-            pradip_turns = []
-
-            j = i + 1
-            while j < len(turns) and turns[j]["speaker"] == pradip_speaker:
-                pradip_turns.append(turns[j])
-                j += 1
-
-            if pradip_turns:
-                pairs.append({
-                    "anchor_text":
-                    anchor_turn["text"],
-                    "pradip_text":
-                    " ".join([t["text"] for t in pradip_turns]),
-                    "start_time":
-                    pradip_turns[0]["start_time"]
-                })
-
-            i = j
+def split_into_chunks(lines, pradip_speaker, num_chunks=NUM_CHUNKS):
+    """
+    Split transcript lines into chunks, ensuring each chunk ends at a Pradip line.
+    Uses case-insensitive comparison with the actual detected Pradip speaker name.
+    Falls back to even splits if Pradip turns are sparse.
+    """
+    if len(lines) < num_chunks:
+        return [lines] if lines else []
+    
+    pradip_lower = pradip_speaker.lower().strip()
+    target_size = len(lines) // num_chunks
+    chunks = []
+    current_chunk = []
+    chunk_count = 0
+    
+    for i, line in enumerate(lines):
+        current_chunk.append(line)
+        
+        is_pradip = line["speaker"].lower().strip() == pradip_lower
+        reached_target = len(current_chunk) >= target_size
+        not_last_chunk = chunk_count < num_chunks - 1
+        
+        if is_pradip and reached_target and not_last_chunk:
+            chunks.append(current_chunk)
+            current_chunk = []
+            chunk_count += 1
+    
+    if current_chunk:
+        if chunks and len(current_chunk) < target_size // 2:
+            chunks[-1].extend(current_chunk)
         else:
-            i += 1
-
-    return pairs
-
-
-def has_analytical_cues(text):
-    """Check if text contains market analysis language."""
-    analytical_patterns = [
-        r'\b(buy|sell|hold|exit|accumulate|book)\b',
-        r'\b(target|price|level|support|resistance)\b',
-        r'\b(stop.?loss|trailing|breakout|momentum)\b',
-        r'\b(trading|rally|correction|positive|negative)\b',
-        r'\b\d+\s*(rupees?|rs\.?|₹)\b', r'\b(view|recommend|advise|suggest)\b'
-    ]
-
-    text_lower = text.lower()
-    return any(
-        re.search(pattern, text_lower) for pattern in analytical_patterns)
+            chunks.append(current_chunk)
+    
+    if len(chunks) < num_chunks and len(lines) >= num_chunks:
+        chunks = []
+        chunk_size = len(lines) // num_chunks
+        for i in range(num_chunks):
+            start_idx = i * chunk_size
+            if i == num_chunks - 1:
+                chunks.append(lines[start_idx:])
+            else:
+                chunks.append(lines[start_idx:start_idx + chunk_size])
+    
+    return chunks
 
 
-def extract_stocks_from_pair(anchor_text, pradip_text, start_time, client):
-    """Extract stocks from a single anchor-pradip conversation pair using GPT-4o Expert Analyst."""
+def format_chunk_for_analysis(chunk_lines):
+    """Format chunk lines as JSON array for structured OpenAI analysis."""
+    import json
+    formatted = []
+    for line in chunk_lines:
+        formatted.append({
+            "time": line['start_time'],
+            "speaker": line['speaker'],
+            "text": line['text']
+        })
+    return json.dumps(formatted, indent=2)
 
-    if not has_analytical_cues(pradip_text):
+
+def extract_stocks_from_chunk(chunk_lines, chunk_num, client):
+    """
+    Extract stocks from a single chunk using OpenAI with word-by-word analysis.
+    Uses structured JSON input/output for reliable parsing.
+    Returns list of (time, stock_name) tuples.
+    """
+    import json
+    
+    chunk_json = []
+    for line in chunk_lines:
+        chunk_json.append({
+            "time": line['start_time'],
+            "speaker": line['speaker'],
+            "text": line['text']
+        })
+    
+    prompt = f"""**CRITICAL TASK: Stock Name Detection in Financial TV Transcript - Chunk {chunk_num}**
+
+You are analyzing a transcript from an Indian financial TV show where an analyst discusses stocks.
+Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names mentioned.
+
+**IMPORTANT INSTRUCTIONS:**
+1. Read each line carefully, word by word
+2. Detect ALL company/stock names mentioned by BOTH speakers (Anchor and Analyst)
+3. Use INTELLIGENCE to understand misspelled stock names due to transcription errors:
+   - "Relayance" → Reliance
+   - "Infosis" → Infosys
+   - "Tatta Motors" → Tata Motors
+   - "HDFC Benk" → HDFC Bank
+   - "Bajaj Finanse" → Bajaj Finance
+   - "Maruti Suzuky" → Maruti Suzuki
+   - "Shriram Finence" → Shriram Finance
+   - "Vedenta" → Vedanta
+   - "Zometo" → Zomato
+   - "Bharti Airtal" → Bharti Airtel
+   - "Coil India" → Coal India
+   - "Adani Ent" → Adani Enterprises
+   - "L&T" → Larsen & Toubro
+   - "SBI" → State Bank of India
+   - "ICICI" → ICICI Bank
+   - "TCS" → Tata Consultancy Services
+   - "M&M" → Mahindra & Mahindra
+   - "BEL" → Bharat Electronics
+   - "HAL" → Hindustan Aeronautics
+   - "ITC" → ITC
+   - Similar phonetic/spelling variations
+
+4. EXCLUDE these indices (NOT stocks):
+   - Nifty, Bank Nifty, Sensex, Nifty 50, Finnifty
+   - Any index references
+
+5. DO NOT skip any stock - even if mentioned briefly
+6. DO NOT add stocks that were NOT discussed
+7. Use the EXACT timestamp from the input line where the stock is mentioned
+
+**TRANSCRIPT DATA (JSON format):**
+{json.dumps(chunk_json, indent=2)}
+
+**OUTPUT FORMAT - Return a JSON array:**
+[
+  {{"time": "HH:MM:SS", "stock": "Stock Name"}},
+  {{"time": "HH:MM:SS", "stock": "Stock Name"}}
+]
+
+**IMPORTANT:** Return ONLY the JSON array, no other text. Use exact timestamps from input."""
+
+    try:
+        response = client.chat.completions.create(
+            model=get_model(),
+            messages=[{
+                "role": "system",
+                "content": """You are an expert at identifying Indian stock names in financial transcripts.
+You have deep knowledge of:
+- All NSE/BSE listed companies and their common abbreviations
+- Common transcription errors and how to correct them
+- The difference between company names and market indices
+
+Your task is to identify EVERY stock mentioned, understanding that transcription may have spelling errors.
+Be thorough - do not miss any stock. Be accurate - do not add stocks that weren't discussed.
+Always return valid JSON array format."""
+            }, {
+                "role": "user",
+                "content": prompt
+            }],
+            temperature=0.1,
+            max_tokens=2000,
+            timeout=60)
+
+        content = (response.choices[0].message.content or "").strip()
+        
+        if content.startswith("```"):
+            content = re.sub(r'^```(?:json)?\n?', '', content)
+            content = re.sub(r'\n?```$', '', content)
+        
+        stocks = []
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict) and "time" in item and "stock" in item:
+                        time_str = item["time"].strip()
+                        stock_name = item["stock"].strip()
+                        
+                        is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
+                        if not is_index and len(stock_name) > 1:
+                            stocks.append((time_str, stock_name))
+        except json.JSONDecodeError:
+            for line in content.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                match = re.match(r'(\d{2}:\d{2}:\d{2})\s*[-–—]\s*(.+)', line)
+                if match:
+                    time_str, stock_name = match.groups()
+                    stock_name = stock_name.strip()
+                    is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
+                    if not is_index and len(stock_name) > 1:
+                        stocks.append((time_str, stock_name))
+
+        return stocks
+
+    except Exception as e:
+        print(f"   ⚠️ Chunk {chunk_num} extraction failed: {e}")
         return []
 
-    prompt = f"""**Financial TV Conversation Analysis**
 
-ANCHOR Question: "{anchor_text}"
-ANALYST Response: "{pradip_text}"
+def merge_and_deduplicate_stocks(all_chunk_stocks):
+    """Merge stocks from all chunks and remove duplicates, keeping earliest time."""
+    stock_dict = {}
+    
+    for time_str, stock_name in all_chunk_stocks:
+        stock_key = stock_name.lower().strip()
+        
+        if stock_key not in stock_dict:
+            stock_dict[stock_key] = (time_str, stock_name)
+        else:
+            existing_time = stock_dict[stock_key][0]
+            if time_str < existing_time:
+                stock_dict[stock_key] = (time_str, stock_name)
+    
+    merged = [(v[0], v[1]) for v in stock_dict.values()]
+    merged.sort(key=lambda x: x[0])
+    
+    return merged
 
-**Extraction Rules:**
-1. ONLY extract stocks where the ANALYST provides actionable analysis (price targets, stop-loss, recommendations, technical/fundamental view)
-2. Include stocks mentioned by ANCHOR if the ANALYST subsequently analyzes them
-3. Ignore casual mentions without analytical content
-4. Ignore index/market references (Nifty, Sensex, Bank Nifty)
 
-**Symbol Mapping (MANDATORY):**
-- Vedanta → VEDL
-- Zomato → ETERNAL
-- Vodafone Idea / VI → IDEA
-- Shriram Finance / Shree Finance → SHRIRAMFIN
-- Bharat Electronics / BEL Defence → BEL
-- Tata Motors DVR → TATAMTRDVR
+def get_accurate_symbols(merged_stocks, client):
+    """
+    Final OpenAI call to get accurate NSE stock symbols for all detected stocks.
+    """
+    if not merged_stocks:
+        return []
+    
+    stock_list = "\n".join([f"{i+1}. {time} - {name}" for i, (time, name) in enumerate(merged_stocks)])
+    
+    prompt = f"""**FINAL TASK: Convert Stock Names to Accurate NSE Symbols**
 
-**Output Format:** STOCK NAME|SYMBOL (one per line, NSE symbols only, no suffix)
+You have a list of Indian stocks detected from a financial transcript.
+Your task is to provide the ACCURATE NSE stock symbol for each.
 
-**Examples:**
-- HDFC Bank|HDFCBANK
-- Reliance Industries|RELIANCE
-- Infosys|INFY
-- Tata Steel|TATASTEEL
+**CRITICAL RULES:**
+1. Use ONLY valid NSE trading symbols
+2. NO .NS or .BO suffix - just the symbol
+3. Handle common naming variations:
+   - Vedanta → VEDL (not VEDANTA)
+   - Zomato → ETERNAL (not ZOMATO)
+   - Vodafone Idea / VI → IDEA
+   - Shriram Finance → SHRIRAMFIN
+   - Bharat Electronics / BEL → BEL
+   - Hindustan Aeronautics / HAL → HAL
+   - Coal India → COALINDIA
+   - L&T / Larsen & Toubro → LT
+   - M&M / Mahindra → M&M
+   - State Bank of India / SBI → SBIN
+   - ICICI Bank → ICICIBANK
+   - HDFC Bank → HDFCBANK
+   - Axis Bank → AXISBANK
+   - Kotak Bank → KOTAKBANK
+   - Bajaj Finance → BAJFINANCE
+   - Bajaj Finserv → BAJAJFINSV
+   - Tata Consultancy / TCS → TCS
+   - Infosys → INFY
+   - Wipro → WIPRO
+   - HCL Tech → HCLTECH
+   - Tech Mahindra → TECHM
+   - Reliance Industries → RELIANCE
+   - Tata Motors → TATAMOTORS
+   - Tata Steel → TATASTEEL
+   - Tata Power → TATAPOWER
+   - Maruti Suzuki → MARUTI
+   - Bharti Airtel → BHARTIARTL
+   - ITC → ITC
+   - Adani Enterprises → ADANIENT
+   - Adani Ports → ADANIPORTS
+   - Power Grid → POWERGRID
+   - NTPC → NTPC
+   - ONGC → ONGC
+   - BPCL → BPCL
+   - Indian Oil → IOC
+   - GAIL → GAIL
+   - Sun Pharma → SUNPHARMA
+   - Dr Reddy's → DRREDDY
+   - Cipla → CIPLA
+   - Divis Labs → DIVISLAB
+   - Apollo Hospitals → APOLLOHOSP
+   - Titan → TITAN
+   - Asian Paints → ASIANPAINT
+   - Nestle → NESTLEIND
+   - Hindustan Unilever → HINDUNILVR
+   - Britannia → BRITANNIA
+   - UltraTech Cement → ULTRACEMCO
+   - Grasim → GRASIM
+   - JSW Steel → JSWSTEEL
+   - Hindalco → HINDALCO
+   - Eicher Motors → EICHERMOT
+   - Hero MotoCorp → HEROMOTOCO
+   - Bajaj Auto → BAJAJ-AUTO
+   - TVS Motor → TVSMOTOR
 
-Extract stocks now:"""
+**OUTPUT FORMAT (CSV - one per line):**
+STOCK NAME,STOCK SYMBOL,START TIME
+
+**DETECTED STOCKS:**
+{stock_list}
+
+**Output the CSV now (no header, just data rows):**"""
 
     try:
         response = client.chat.completions.create(
@@ -130,43 +344,39 @@ Extract stocks now:"""
                 "content": prompt
             }],
             temperature=0,
-            max_tokens=300,
-            timeout=20)
+            max_tokens=2000,
+            timeout=60)
 
         content = (response.choices[0].message.content or "").strip()
-        stocks = []
-
+        
+        results = []
         for line in content.splitlines():
             line = line.strip()
-            if '|' in line and line.count('|') == 1:
-                parts = line.split('|')
-                if len(parts) == 2:
-                    stock_name = parts[0].strip()
-                    symbol = parts[1].strip().upper()
+            if not line or line.startswith("STOCK NAME"):
+                continue
+            
+            parts = line.split(',')
+            if len(parts) >= 3:
+                stock_name = parts[0].strip()
+                symbol = parts[1].strip().upper()
+                time_str = parts[2].strip()
+                
+                if symbol.endswith('.NS'):
+                    symbol = symbol[:-3]
+                elif symbol.endswith('.BO'):
+                    symbol = symbol[:-3]
+                
+                if stock_name and symbol and time_str:
+                    results.append({
+                        "stock_name": stock_name,
+                        "stock_symbol": symbol,
+                        "start_time": time_str
+                    })
 
-                    # Strip .NS and .BO suffixes
-                    if symbol.endswith('.NS'):
-                        symbol = symbol[:-3]
-                    elif symbol.endswith('.BO'):
-                        symbol = symbol[:-3]
-
-                    # Apply custom symbol corrections
-                    symbol_upper = symbol.upper()
-                    if symbol_upper in SYMBOL_CORRECTIONS:
-                        symbol = SYMBOL_CORRECTIONS[symbol_upper]
-
-                    # Only add if we have a valid symbol
-                    if symbol:
-                        stocks.append({
-                            "stock_name": stock_name,
-                            "stock_symbol": symbol,
-                            "start_time": start_time
-                        })
-
-        return stocks
+        return results
 
     except Exception as e:
-        print(f"   ⚠️ GPT extraction failed for pair: {e}")
+        print(f"   ⚠️ Symbol extraction failed: {e}")
         return []
 
 
@@ -195,31 +405,31 @@ def validate_and_format_csv(stocks):
 
 def run(job_folder):
     """
-    Step 8: Extract Stock Mentions (Hybrid: Deterministic pairing + GPT-4o + Symbol validation)
+    Step 8: Extract Stock Mentions using Intelligent Chunk-Based Detection
+    
+    Process:
+    1. Split transcript into 4 chunks (ending at Pradip lines)
+    2. For each chunk, OpenAI reads word-by-word to detect stocks
+    3. Handle transcription spelling errors intelligently
+    4. Merge all chunks and deduplicate
+    5. Final OpenAI call for accurate NSE symbols
+    6. Output CSV with STOCK NAME, STOCK SYMBOL, START TIME
     """
 
     print("\n" + "=" * 60)
-    print("STEP 8: Extract Stock Mentions (Hybrid Approach)")
+    print("STEP 8: Extract Stock Mentions (Intelligent Chunk-Based)")
     print(f"{'='*60}\n")
 
     try:
-        detected_speakers_file = os.path.join(job_folder, "analysis",
-                                              "detected_speakers.txt")
-        filtered_transcript_file = os.path.join(job_folder, "transcripts",
-                                                "filtered_transcription.txt")
-        output_csv = os.path.join(job_folder, "analysis",
-                                  "extracted_stocks.csv")
+        detected_speakers_file = os.path.join(job_folder, "analysis", "detected_speakers.txt")
+        filtered_transcript_file = os.path.join(job_folder, "transcripts", "filtered_transcription.txt")
+        output_csv = os.path.join(job_folder, "analysis", "extracted_stocks.csv")
+        chunks_folder = os.path.join(job_folder, "analysis", "stock_chunks")
 
         if not os.path.exists(detected_speakers_file):
-            return {
-                'status': 'failed',
-                'message': f'Detected speakers file not found'
-            }
+            return {'status': 'failed', 'message': 'Detected speakers file not found'}
         if not os.path.exists(filtered_transcript_file):
-            return {
-                'status': 'failed',
-                'message': f'Filtered transcript file not found'
-            }
+            return {'status': 'failed', 'message': 'Filtered transcript file not found'}
 
         print("📖 Reading detected speakers...")
         with open(detected_speakers_file, 'r', encoding='utf-8') as f:
@@ -227,22 +437,21 @@ def run(job_folder):
 
         anchor_speaker = detected_lines[0].split(":")[1].strip()
         pradip_speaker = detected_lines[1].split(":")[1].strip()
-
         print(f"✅ Anchor = {anchor_speaker}, Pradip = {pradip_speaker}\n")
 
         print("📖 Reading filtered transcription...")
         with open(filtered_transcript_file, 'r', encoding='utf-8') as f:
             transcript_content = f.read().strip()
 
-        print(f"✅ Transcript: {len(transcript_content.splitlines())} lines\n")
+        lines = parse_transcript_lines(transcript_content)
+        print(f"✅ Parsed {len(lines)} transcript lines\n")
 
-        print("🔍 Parsing transcript into structured turns...")
-        turns = parse_transcript_turns(transcript_content)
-        print(f"✅ Parsed {len(turns)} turns\n")
-
-        print("🔗 Pairing anchor questions with Pradip responses...")
-        pairs = pair_anchor_pradip_turns(turns, anchor_speaker, pradip_speaker)
-        print(f"✅ Found {len(pairs)} conversation pairs\n")
+        print(f"📊 Splitting transcript into {NUM_CHUNKS} chunks...")
+        chunks = split_into_chunks(lines, pradip_speaker, NUM_CHUNKS)
+        print(f"✅ Created {len(chunks)} chunks:")
+        for i, chunk in enumerate(chunks, 1):
+            print(f"   Chunk {i}: {len(chunk)} lines ({chunk[0]['start_time']} - {chunk[-1]['end_time']})")
+        print()
 
         print("🔑 Fetching OpenAI API key...")
         conn = psycopg2.connect(os.environ['DATABASE_URL'])
@@ -259,23 +468,47 @@ def run(job_folder):
 
         client = OpenAI(api_key=result[0])
 
-        print("🎯 Extracting stocks from each pair (GPT-4o + validation)...\n")
-        all_stocks = []
+        os.makedirs(chunks_folder, exist_ok=True)
 
-        for i, pair in enumerate(pairs, 1):
-            stocks = extract_stocks_from_pair(pair["anchor_text"],
-                                              pair["pradip_text"],
-                                              pair["start_time"], client)
-            all_stocks.extend(stocks)
+        print("\n🔍 Phase 1: Extracting stocks from each chunk (word-by-word analysis)...\n")
+        all_chunk_stocks = []
 
-            if stocks:
-                print(
-                    f"   Pair {i}/{len(pairs)}: Found {len(stocks)} stock(s)")
+        for i, chunk in enumerate(chunks, 1):
+            print(f"   📝 Processing Chunk {i}/{len(chunks)}...")
+            
+            stocks = extract_stocks_from_chunk(chunk, i, client)
+            
+            chunk_file = os.path.join(chunks_folder, f"chunk_{i}_stocks.txt")
+            with open(chunk_file, 'w', encoding='utf-8') as f:
+                for time_str, stock_name in stocks:
+                    f.write(f"{time_str} - {stock_name}\n")
+            
+            print(f"      ✅ Found {len(stocks)} stocks in chunk {i}")
+            for time_str, stock_name in stocks[:3]:
+                print(f"         • {time_str} - {stock_name}")
+            if len(stocks) > 3:
+                print(f"         ... and {len(stocks) - 3} more")
+            
+            all_chunk_stocks.extend(stocks)
+            print()
 
-        print(f"\n✅ Total extracted: {len(all_stocks)} stock mentions\n")
+        print(f"\n📊 Total stocks from all chunks: {len(all_chunk_stocks)}")
 
-        print("📝 Validating and formatting CSV...")
-        csv_content = validate_and_format_csv(all_stocks)
+        print("\n🔄 Phase 2: Merging and deduplicating stocks...")
+        merged_stocks = merge_and_deduplicate_stocks(all_chunk_stocks)
+        print(f"✅ Unique stocks after merge: {len(merged_stocks)}")
+
+        merged_file = os.path.join(chunks_folder, "merged_stocks.txt")
+        with open(merged_file, 'w', encoding='utf-8') as f:
+            for time_str, stock_name in merged_stocks:
+                f.write(f"{time_str} - {stock_name}\n")
+
+        print("\n🎯 Phase 3: Getting accurate NSE symbols...")
+        final_stocks = get_accurate_symbols(merged_stocks, client)
+        print(f"✅ Final stocks with symbols: {len(final_stocks)}")
+
+        print("\n📝 Phase 4: Validating and formatting final CSV...")
+        csv_content = validate_and_format_csv(final_stocks)
 
         os.makedirs(os.path.dirname(output_csv), exist_ok=True)
         with open(output_csv, "w", encoding="utf-8") as f:
@@ -285,16 +518,17 @@ def run(job_folder):
         print(f"✅ Final unique stocks: {stock_count}\n")
 
         if stock_count > 0:
+            print("📋 Final Extracted Stocks:")
             lines = csv_content.strip().splitlines()[1:]
-            for line in lines[:5]:
+            for line in lines[:10]:
                 print(f"   • {line}")
-            if stock_count > 5:
-                print(f"   ... and {stock_count - 5} more\n")
+            if stock_count > 10:
+                print(f"   ... and {stock_count - 10} more\n")
 
         return {
             "status": "success",
-            "message": f"Extracted {stock_count} stocks using hybrid approach",
-            "output_files": ["analysis/extracted_stocks.csv"]
+            "message": f"Extracted {stock_count} stocks using intelligent chunk-based detection",
+            "output_files": ["analysis/extracted_stocks.csv", "analysis/stock_chunks/"]
         }
 
     except Exception as e:
@@ -305,8 +539,7 @@ def run(job_folder):
 
 if __name__ == "__main__":
     import sys
-    test_folder = sys.argv[1] if len(
-        sys.argv) > 1 else "backend/job_files/test_job"
+    test_folder = sys.argv[1] if len(sys.argv) > 1 else "backend/job_files/test_job"
     result = run(test_folder)
     print(f"\n{'='*60}")
     print(f"Result: {result['status'].upper()}")
