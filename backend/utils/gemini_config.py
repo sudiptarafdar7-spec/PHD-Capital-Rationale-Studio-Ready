@@ -7,8 +7,8 @@ This module provides:
 3. Consistent system prompts across pipeline steps
 """
 
-GEMINI_MODEL = "gemini-2.5-pro"
-GEMINI_MODEL_FLASH = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL_FLASH = "gemini-2.0-flash"
 
 EXPERT_FINANCIAL_ANALYST_PERSONA = """You are a SEBI-registered Research Analyst with 15+ years of expertise in Indian equity markets (NSE/BSE). You specialize in:
 

@@ -12,9 +12,12 @@ This step uses a multi-phase approach:
 
 import os
 import re
+import json
 import psycopg2
-import google.generativeai as genai
+import requests
 from backend.utils.gemini_config import get_gemini_model
+
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 NUM_CHUNKS = 4
 
@@ -172,8 +175,7 @@ def split_into_chunks(lines, pradip_speaker, num_chunks=NUM_CHUNKS):
 
 
 def format_chunk_for_analysis(chunk_lines):
-    """Format chunk lines as JSON array for structured OpenAI analysis."""
-    import json
+    """Format chunk lines as JSON array for structured analysis."""
     formatted = []
     for line in chunk_lines:
         formatted.append({
@@ -184,14 +186,57 @@ def format_chunk_for_analysis(chunk_lines):
     return json.dumps(formatted, indent=2)
 
 
-def extract_stocks_from_chunk(chunk_lines, chunk_num, model):
+def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=2000):
     """
-    Extract stocks from a single chunk using Gemini with word-by-word analysis.
+    Call Gemini API via REST to avoid SDK dependency conflicts.
+    Returns the text response or None on error.
+    """
+    url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": max_tokens
+        }
+    }
+    
+    try:
+        response = requests.post(url, json=payload, timeout=120)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if "candidates" in data and len(data["candidates"]) > 0:
+            candidate = data["candidates"][0]
+            if "content" in candidate and "parts" in candidate["content"]:
+                parts = candidate["content"]["parts"]
+                if parts and "text" in parts[0]:
+                    return parts[0]["text"]
+        
+        print(f"      ⚠️ Unexpected Gemini response format: {data}")
+        return None
+        
+    except requests.exceptions.RequestException as e:
+        print(f"      ⚠️ Gemini API request failed: {e}")
+        return None
+    except Exception as e:
+        print(f"      ⚠️ Gemini API error: {e}")
+        return None
+
+
+def extract_stocks_from_chunk(chunk_lines, chunk_num, api_key, model_name):
+    """
+    Extract stocks from a single chunk using Gemini REST API with word-by-word analysis.
     Uses structured JSON input/output for reliable parsing.
     Returns list of (time, stock_name) tuples.
     """
-    import json
-    
     chunk_json = []
     for line in chunk_lines:
         chunk_json.append({
@@ -268,55 +313,48 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
 
 **IMPORTANT:** Return ONLY the JSON array, no other text. Use exact timestamps from input."""
 
+    content = call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=2000)
+    
+    if not content:
+        print(f"   ⚠️ Chunk {chunk_num} extraction failed: No response from Gemini")
+        return []
+    
+    content = content.strip()
+    
+    if content.startswith("```"):
+        content = re.sub(r'^```(?:json)?\n?', '', content)
+        content = re.sub(r'\n?```$', '', content)
+    
+    stocks = []
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.1,
-                max_output_tokens=2000,
-            )
-        )
-        
-        content = (response.text or "").strip()
-        
-        if content.startswith("```"):
-            content = re.sub(r'^```(?:json)?\n?', '', content)
-            content = re.sub(r'\n?```$', '', content)
-        
-        stocks = []
-        try:
-            parsed = json.loads(content)
-            if isinstance(parsed, list):
-                for item in parsed:
-                    if isinstance(item, dict) and "time" in item and "stock" in item:
-                        time_str = item["time"].strip()
-                        stock_name = item["stock"].strip()
-                        
-                        is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
-                        if not is_index and len(stock_name) > 1:
-                            stocks.append((time_str, stock_name))
-                
-                print(f"      📋 Gemini detected stocks: {[s[1] for s in stocks]}")
-        except json.JSONDecodeError as e:
-            print(f"      ⚠️ JSON parse error: {e}")
-            print(f"      📄 Raw response: {content[:500]}...")
-            for line in content.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                match = re.match(r'(\d{2}:\d{2}:\d{2})\s*[-–—]\s*(.+)', line)
-                if match:
-                    time_str, stock_name = match.groups()
-                    stock_name = stock_name.strip()
+        parsed = json.loads(content)
+        if isinstance(parsed, list):
+            for item in parsed:
+                if isinstance(item, dict) and "time" in item and "stock" in item:
+                    time_str = item["time"].strip()
+                    stock_name = item["stock"].strip()
+                    
                     is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
                     if not is_index and len(stock_name) > 1:
                         stocks.append((time_str, stock_name))
+            
+            print(f"      📋 Gemini detected stocks: {[s[1] for s in stocks]}")
+    except json.JSONDecodeError as e:
+        print(f"      ⚠️ JSON parse error: {e}")
+        print(f"      📄 Raw response: {content[:500]}...")
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            match = re.match(r'(\d{2}:\d{2}:\d{2})\s*[-–—]\s*(.+)', line)
+            if match:
+                time_str, stock_name = match.groups()
+                stock_name = stock_name.strip()
+                is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
+                if not is_index and len(stock_name) > 1:
+                    stocks.append((time_str, stock_name))
 
-        return stocks
-
-    except Exception as e:
-        print(f"   ⚠️ Chunk {chunk_num} extraction failed: {e}")
-        return []
+    return stocks
 
 
 def merge_and_deduplicate_stocks(all_chunk_stocks):
@@ -339,13 +377,11 @@ def merge_and_deduplicate_stocks(all_chunk_stocks):
     return merged
 
 
-def get_accurate_symbols(merged_stocks, model):
+def get_accurate_symbols(merged_stocks, api_key, model_name):
     """
     Final Gemini call to get accurate NSE stock symbols for all detected stocks.
     Uses JSON input/output for reliable parsing.
     """
-    import json
-    
     if not merged_stocks:
         return []
     
@@ -433,61 +469,53 @@ For EACH stock in the input, provide the correct NSE trading symbol.
 - Include ALL {len(merged_stocks)} stocks - do not skip any
 - Use exact timestamps from input"""
 
+    content = call_gemini_api(prompt, api_key, model_name, temperature=0, max_tokens=4000)
+    
+    if not content:
+        print("   ⚠️ Symbol mapping failed: No response from Gemini")
+        return []
+    
+    content = content.strip()
+    
+    if content.startswith("```"):
+        content = re.sub(r'^```(?:json)?\n?', '', content)
+        content = re.sub(r'\n?```$', '', content)
+    
+    print(f"   📄 Gemini returned {len(content)} characters")
+    
+    results = []
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0,
-                max_output_tokens=4000,
-            )
-        )
-
-        content = (response.text or "").strip()
-        
-        if content.startswith("```"):
-            content = re.sub(r'^```(?:json)?\n?', '', content)
-            content = re.sub(r'\n?```$', '', content)
-        
-        print(f"   📄 OpenAI returned {len(content)} characters")
-        
-        results = []
-        try:
-            parsed = json.loads(content)
-            if isinstance(parsed, list):
-                for item in parsed:
-                    if isinstance(item, dict):
-                        time_str = item.get("time", "").strip()
-                        stock_name = item.get("name", "").strip()
-                        symbol = item.get("symbol", "").strip().upper()
-                        
-                        if symbol.endswith('.NS'):
-                            symbol = symbol[:-3]
-                        elif symbol.endswith('.BO'):
-                            symbol = symbol[:-3]
-                        
-                        if stock_name and symbol and time_str:
-                            results.append({
-                                "stock_name": stock_name,
-                                "stock_symbol": symbol,
-                                "start_time": time_str
-                            })
-                
-                print(f"   ✅ Parsed {len(results)} stocks from JSON response")
-                
-                if len(results) < len(merged_stocks):
-                    print(f"   ⚠️ Warning: Only got {len(results)}/{len(merged_stocks)} stocks, using fallback mapping")
-                    results = fallback_symbol_mapping(merged_stocks)
-        except json.JSONDecodeError as e:
-            print(f"   ⚠️ JSON parse error: {e}")
-            print(f"   🔄 Using fallback symbol mapping...")
-            results = fallback_symbol_mapping(merged_stocks)
-
-        return results
-
-    except Exception as e:
-        print(f"   ⚠️ Symbol extraction failed: {e}")
+        parsed = json.loads(content)
+        if isinstance(parsed, list):
+            for item in parsed:
+                if isinstance(item, dict):
+                    time_str = item.get("time", "").strip()
+                    stock_name = item.get("name", "").strip()
+                    symbol = item.get("symbol", "").strip().upper()
+                    
+                    if symbol.endswith('.NS'):
+                        symbol = symbol[:-3]
+                    elif symbol.endswith('.BO'):
+                        symbol = symbol[:-3]
+                    
+                    if stock_name and symbol and time_str:
+                        results.append({
+                            "stock_name": stock_name,
+                            "stock_symbol": symbol,
+                            "start_time": time_str
+                        })
+            
+            print(f"   ✅ Parsed {len(results)} stocks from JSON response")
+            
+            if len(results) < len(merged_stocks):
+                print(f"   ⚠️ Warning: Only got {len(results)}/{len(merged_stocks)} stocks, using fallback mapping")
+                results = fallback_symbol_mapping(merged_stocks)
+    except json.JSONDecodeError as e:
+        print(f"   ⚠️ JSON parse error: {e}")
         print(f"   🔄 Using fallback symbol mapping...")
-        return fallback_symbol_mapping(merged_stocks)
+        results = fallback_symbol_mapping(merged_stocks)
+
+    return results
 
 
 def fallback_symbol_mapping(merged_stocks):
@@ -770,17 +798,10 @@ def run(job_folder):
             return {'status': 'failed', 'message': 'Gemini API key not found. Please add it in Settings → API Keys → Gemini'}
 
         gemini_api_key = result[0].strip()
-        
-        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-            del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
-        
-        genai.configure(api_key=gemini_api_key)
-        
         model_name = get_gemini_model()
-        print(f"✅ Gemini API key configured (starts with: {gemini_api_key[:10]}...)")
-        print(f"✅ Using Gemini model: {model_name}\n")
         
-        model = genai.GenerativeModel(model_name)
+        print(f"✅ Gemini API key found (starts with: {gemini_api_key[:10]}...)")
+        print(f"✅ Using Gemini model: {model_name} (REST API)\n")
 
         os.makedirs(chunks_folder, exist_ok=True)
 
@@ -790,7 +811,7 @@ def run(job_folder):
         for i, chunk in enumerate(chunks, 1):
             print(f"   📝 Processing Chunk {i}/{len(chunks)}...")
             
-            stocks = extract_stocks_from_chunk(chunk, i, model)
+            stocks = extract_stocks_from_chunk(chunk, i, gemini_api_key, model_name)
             
             chunk_file = os.path.join(chunks_folder, f"chunk_{i}_stocks.txt")
             with open(chunk_file, 'w', encoding='utf-8') as f:
@@ -818,7 +839,7 @@ def run(job_folder):
                 f.write(f"{time_str} - {stock_name}\n")
 
         print("\n🎯 Phase 3: Getting accurate NSE symbols...")
-        final_stocks = get_accurate_symbols(merged_stocks, model)
+        final_stocks = get_accurate_symbols(merged_stocks, gemini_api_key, model_name)
         print(f"✅ Final stocks with symbols: {len(final_stocks)}")
 
         print("\n📝 Phase 4: Validating and formatting final CSV...")
