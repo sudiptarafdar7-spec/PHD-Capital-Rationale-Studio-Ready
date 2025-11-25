@@ -130,7 +130,20 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
 **IMPORTANT INSTRUCTIONS:**
 1. Read each line carefully, word by word
 2. Detect ALL company/stock names mentioned by BOTH speakers (Anchor and Analyst)
-3. Use INTELLIGENCE to understand misspelled stock names due to transcription errors:
+3. Include these RECENT IPO STOCKS (often discussed):
+   - Swiggy (food delivery)
+   - Zomato (food delivery)
+   - Paytm / One97 Communications
+   - Nykaa / FSN E-Commerce
+   - PolicyBazaar / PB Fintech
+   - Delhivery
+   - CarTrade
+   - Ola Electric
+   - FirstCry / Brainbees
+   
+4. Use INTELLIGENCE to understand misspelled stock names due to transcription errors:
+   - "Swigee" / "Swigi" → Swiggy
+   - "Zometo" / "Zomatto" → Zomato
    - "Relayance" → Reliance
    - "Infosis" → Infosys
    - "Tatta Motors" → Tata Motors
@@ -139,7 +152,6 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
    - "Maruti Suzuky" → Maruti Suzuki
    - "Shriram Finence" → Shriram Finance
    - "Vedenta" → Vedanta
-   - "Zometo" → Zomato
    - "Bharti Airtal" → Bharti Airtel
    - "Coil India" → Coal India
    - "Adani Ent" → Adani Enterprises
@@ -153,13 +165,13 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
    - "ITC" → ITC
    - Similar phonetic/spelling variations
 
-4. EXCLUDE these indices (NOT stocks):
+5. EXCLUDE these indices (NOT stocks):
    - Nifty, Bank Nifty, Sensex, Nifty 50, Finnifty
    - Any index references
 
-5. DO NOT skip any stock - even if mentioned briefly
-6. DO NOT add stocks that were NOT discussed
-7. Use the EXACT timestamp from the input line where the stock is mentioned
+6. DO NOT skip any stock - even if mentioned briefly or in a question
+7. DO NOT add stocks that were NOT discussed
+8. Use the EXACT timestamp from the input line where the stock is mentioned
 
 **TRANSCRIPT DATA (JSON format):**
 {json.dumps(chunk_json, indent=2)}
@@ -212,7 +224,11 @@ Always return valid JSON array format."""
                         is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
                         if not is_index and len(stock_name) > 1:
                             stocks.append((time_str, stock_name))
-        except json.JSONDecodeError:
+                
+                print(f"      📋 OpenAI detected stocks: {[s[1] for s in stocks]}")
+        except json.JSONDecodeError as e:
+            print(f"      ⚠️ JSON parse error: {e}")
+            print(f"      📄 Raw response: {content[:500]}...")
             for line in content.splitlines():
                 line = line.strip()
                 if not line:
@@ -281,8 +297,13 @@ You MUST process ALL {len(merged_stocks)} stocks listed below. Do NOT skip any.
 For EACH stock in the input, provide the correct NSE trading symbol.
 
 **SYMBOL MAPPING RULES:**
+- Swiggy → SWIGGY
+- Zomato → ZOMATO
+- Paytm → PAYTM
+- Nykaa → NYKAA
+- PolicyBazaar → POLICYBZR
+- Delhivery → DELHIVERY
 - Vedanta → VEDL
-- Zomato → ETERNAL  
 - Vodafone Idea / VI → IDEA
 - Shriram Finance → SHRIRAMFIN
 - Supriya Life Sciences → SUPRIYA
@@ -406,6 +427,22 @@ def fallback_symbol_mapping(merged_stocks):
     Fallback symbol mapping using a local dictionary when OpenAI fails.
     """
     SYMBOL_MAP = {
+        "swiggy": "SWIGGY",
+        "swigee": "SWIGGY",
+        "swigi": "SWIGGY",
+        "zomato": "ZOMATO",
+        "zometo": "ZOMATO",
+        "paytm": "PAYTM",
+        "one97": "PAYTM",
+        "nykaa": "NYKAA",
+        "fsn ecommerce": "NYKAA",
+        "policybazaar": "POLICYBZR",
+        "pb fintech": "POLICYBZR",
+        "delhivery": "DELHIVERY",
+        "cartrade": "CARTRADE",
+        "ola electric": "OLAELEC",
+        "firstcry": "FIRSTCRY",
+        "brainbees": "FIRSTCRY",
         "supriya life sciences": "SUPRIYA",
         "supriya lifesciences": "SUPRIYA",
         "supriya": "SUPRIYA",
@@ -432,7 +469,6 @@ def fallback_symbol_mapping(merged_stocks):
         "tata power": "TATAPOWER",
         "td power": "TDPOWERSYS",
         "vedanta": "VEDL",
-        "zomato": "ETERNAL",
         "shriram finance": "SHRIRAMFIN",
         "shriram": "SHRIRAMFIN",
         "coal india": "COALINDIA",
