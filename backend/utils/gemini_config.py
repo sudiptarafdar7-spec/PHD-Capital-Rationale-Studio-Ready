@@ -2,17 +2,21 @@
 Centralized Gemini Configuration for PHD Capital Rationale Studio
 
 This module provides:
-1. Latest Gemini model configuration (gemini-2.5-pro - Google's most capable model)
+1. Latest Gemini model configuration
 2. Expert Financial Analyst persona prompts
 3. Consistent system prompts across pipeline steps
 
 Model Notes:
-- gemini-2.5-pro: Most capable model with advanced reasoning (used for complex tasks)
-- gemini-2.0-flash: Fast model for simple tasks (fallback)
+- gemini-2.0-flash: Fast, reliable model for production use (default)
+- gemini-2.5-pro: Advanced reasoning model (high rate limits, uses thinking tokens)
+
+Note: gemini-2.5-pro uses "thinking tokens" which consume maxOutputTokens budget
+before producing actual output, causing MAX_TOKENS errors. Use 2.0-flash for stability.
 """
 
-GEMINI_MODEL = "gemini-2.5-pro"
+GEMINI_MODEL = "gemini-2.0-flash"
 GEMINI_MODEL_FLASH = "gemini-2.0-flash"
+GEMINI_MODEL_PRO = "gemini-2.5-pro"
 
 EXPERT_FINANCIAL_ANALYST_PERSONA = """You are a SEBI-registered Research Analyst with 15+ years of expertise in Indian equity markets (NSE/BSE). You specialize in:
 

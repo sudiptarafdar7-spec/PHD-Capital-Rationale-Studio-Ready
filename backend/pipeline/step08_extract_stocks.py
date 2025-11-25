@@ -199,12 +199,13 @@ def format_chunk_for_analysis(chunk_lines):
     return json.dumps(formatted, indent=2)
 
 
-def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=4000):
+def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=4000, max_retries=3):
     """
-    Call Gemini API via REST to avoid SDK dependency conflicts.
-    Supports gemini-2.5-pro (thinking model) with proper response handling.
+    Call Gemini API via REST with retry logic for transient errors.
     Returns the text response or None on error.
     """
+    import time
+    
     url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
     
     payload = {
@@ -221,42 +222,67 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=400
         }
     }
     
-    # Longer timeout for gemini-2.5-pro thinking model
-    timeout = 180 if "2.5" in model_name else 120
+    timeout = 120
     
-    try:
-        print(f"      🤖 Calling {model_name}...")
-        response = requests.post(url, json=payload, timeout=timeout)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        if "candidates" in data and len(data["candidates"]) > 0:
-            candidate = data["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                parts = candidate["content"]["parts"]
+    for attempt in range(max_retries):
+        try:
+            if attempt == 0:
+                print(f"      🤖 Calling {model_name}...")
+            else:
+                wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                print(f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s...")
+                time.sleep(wait_time)
+            
+            response = requests.post(url, json=payload, timeout=timeout)
+            
+            # Handle rate limiting and server errors with retry
+            if response.status_code == 429:
+                print(f"      ⚠️ Rate limited (429), will retry...")
+                continue
+            elif response.status_code == 503:
+                print(f"      ⚠️ Service unavailable (503), will retry...")
+                continue
+            
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if "candidates" in data and len(data["candidates"]) > 0:
+                candidate = data["candidates"][0]
                 
-                # Handle gemini-2.5-pro thinking model - may have multiple parts
-                # Look for the final text part (after any thinking parts)
-                text_content = None
-                for part in parts:
-                    if "text" in part:
-                        text_content = part["text"]
+                # Check for MAX_TOKENS finish reason
+                finish_reason = candidate.get("finishReason", "")
+                if finish_reason == "MAX_TOKENS":
+                    print(f"      ⚠️ Response truncated (MAX_TOKENS), using partial response...")
                 
-                if text_content:
-                    # Clean any thinking markers if present
-                    text_content = clean_thinking_response(text_content)
-                    return text_content
-        
-        print(f"      ⚠️ Unexpected Gemini response format: {data}")
-        return None
-        
-    except requests.exceptions.RequestException as e:
-        print(f"      ⚠️ Gemini API request failed: {e}")
-        return None
-    except Exception as e:
-        print(f"      ⚠️ Gemini API error: {e}")
-        return None
+                if "content" in candidate and "parts" in candidate["content"]:
+                    parts = candidate["content"]["parts"]
+                    
+                    # Get the text content
+                    text_content = None
+                    for part in parts:
+                        if "text" in part:
+                            text_content = part["text"]
+                    
+                    if text_content:
+                        text_content = clean_thinking_response(text_content)
+                        return text_content
+            
+            print(f"      ⚠️ Unexpected Gemini response format: {data}")
+            return None
+            
+        except requests.exceptions.RequestException as e:
+            if "429" in str(e) or "503" in str(e):
+                if attempt < max_retries - 1:
+                    continue
+            print(f"      ⚠️ Gemini API request failed: {e}")
+            return None
+        except Exception as e:
+            print(f"      ⚠️ Gemini API error: {e}")
+            return None
+    
+    print(f"      ⚠️ All {max_retries} retries exhausted")
+    return None
 
 
 def clean_thinking_response(text):
@@ -783,6 +809,7 @@ Format:
 Only return the JSON array, no other text."""
 
     try:
+        import time
         model = get_gemini_model()
         url = f"{GEMINI_API_URL}/{model}:generateContent?key={api_key}"
         
@@ -801,9 +828,25 @@ Only return the JSON array, no other text."""
             }
         }
         
-        # Longer timeout for gemini-2.5-pro thinking model with web search
-        timeout = 180 if "2.5" in model else 90
-        response = requests.post(url, json=payload, timeout=timeout)
+        # Retry logic for transient errors
+        max_retries = 3
+        response = None
+        for attempt in range(max_retries):
+            if attempt > 0:
+                wait_time = 2 ** attempt
+                print(f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s...")
+                time.sleep(wait_time)
+            
+            response = requests.post(url, json=payload, timeout=120)
+            
+            if response.status_code == 429 or response.status_code == 503:
+                print(f"      ⚠️ Error {response.status_code}, will retry...")
+                continue
+            break
+        
+        if response is None:
+            print("   ⚠️ All retries exhausted for Gemini Search")
+            return []
         
         if response.status_code != 200:
             print(f"   ⚠️ Gemini Search API error: {response.status_code}")
