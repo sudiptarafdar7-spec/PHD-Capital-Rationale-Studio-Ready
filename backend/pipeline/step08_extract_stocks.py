@@ -33,13 +33,12 @@ SPELLING_CORRECTIONS = {
     "sujalan": "Suzlon Energy",
     "sujolon": "Suzlon Energy",
     "sujlon": "Suzlon Energy",
-    "c bank": "ICICI Bank",
-    "cbank": "ICICI Bank",
-    "cera bank": None,
-    "cerabank": None,
+    "suzuelon": "Suzlon Energy",
+    "suzelon": "Suzlon Energy",
+    "suzlon energy": "Suzlon Energy",
+    "suzlon": "Suzlon Energy",
     "adan power": "Adani Power",
     "adanpower": "Adani Power",
-    "adan": "Adani Power",
     "adanipower": "Adani Power",
     "adani power": "Adani Power",
     "tatta power": "Tata Power",
@@ -47,20 +46,24 @@ SPELLING_CORRECTIONS = {
     "tatapower": "Tata Power",
     "td power": "TD Power Systems",
     "tdpower": "TD Power Systems",
+    "td power systems": "TD Power Systems",
     "swigee": "Swiggy",
     "swigi": "Swiggy",
+    "swiggy": "Swiggy",
     "zometo": "Zomato",
     "zomatto": "Zomato",
+    "zomato": "Zomato",
     "relayance": "Reliance",
+    "reliance": "Reliance",
     "infosis": "Infosys",
+    "infosys": "Infosys",
     "bharti airtal": "Bharti Airtel",
     "airtal": "Bharti Airtel",
+    "airtel": "Bharti Airtel",
+    "bharti airtel": "Bharti Airtel",
     "vodafone idea": "Vodafone Idea",
     "vodafone": "Vodafone Idea",
     "vi": "Vodafone Idea",
-    "idea": "Vodafone Idea",
-    "suzlon energy": "Suzlon Energy",
-    "suzlon": "Suzlon Energy",
     "city union bank": "City Union Bank",
     "city union": "City Union Bank",
     "cub": "City Union Bank",
@@ -69,40 +72,50 @@ SPELLING_CORRECTIONS = {
     "industower": "Indus Towers",
     "shipping corp": "Shipping Corporation",
     "shipping corporation": "Shipping Corporation",
-    "sci": "Shipping Corporation",
     "supriya life": "Supriya Life Sciences",
     "supriya lifesciences": "Supriya Life Sciences",
     "supriya life sciences": "Supriya Life Sciences",
+    "supriya": "Supriya Life Sciences",
     "apollo tyre": "Apollo Tyres",
     "apollo tyres": "Apollo Tyres",
     "titan": "Titan",
     "mrpl": "MRPL",
     "cdsl": "CDSL",
-    "hitachi": None,
+    "hitachi": "Hitachi Energy",
+    "hitachi energy": "Hitachi Energy",
 }
 
 INVALID_STOCKS = [
-    "cera bank", "cerabank", "sujalan", "hitachi", 
-    "c bank", "cbank", "adan", "td power"
+    "cera bank", "cerabank", "wari", "niba"
 ]
 
 SYMBOL_NORMALIZATION = {
     "ADANPOWER": "ADANIPOWER",
+    "ADANIPOWER": "ADANIPOWER",
     "TATAPOWER": "TATAPOWER",
     "INDUSTOWER": "INDUSTOWER",
     "SUZLON": "SUZLON",
+    "SUZLONENERGY": "SUZLON",
     "IDEA": "IDEA",
+    "VODAFONEIDEA": "IDEA",
     "BHARTIARTL": "BHARTIARTL",
+    "AIRTEL": "BHARTIARTL",
     "CUB": "CUB",
+    "CITYUNIONBANK": "CUB",
     "MRPL": "MRPL",
     "SCI": "SCI",
+    "SHIPPINGCORP": "SCI",
     "TITAN": "TITAN",
     "APOLLOTYRE": "APOLLOTYRE",
     "SUPRIYA": "SUPRIYA",
+    "SUPRIYALIFESCIENCES": "SUPRIYA",
     "SWIGGY": "SWIGGY",
     "ZOMATO": "ZOMATO",
     "CDSL": "CDSL",
     "TDPOWERSYS": "TDPOWERSYS",
+    "TDPOWER": "TDPOWERSYS",
+    "HITACHIENERGY": "POWERINDIA",
+    "HITACHI": "POWERINDIA",
 }
 
 
@@ -665,12 +678,21 @@ def correct_stock_name(stock_name):
     name_lower = stock_name.lower().strip()
     
     for invalid in INVALID_STOCKS:
-        if invalid in name_lower:
+        if name_lower == invalid or name_lower == invalid.replace(" ", ""):
             print(f"      🚫 Removing invalid stock: {stock_name}")
             return None
     
+    if name_lower in SPELLING_CORRECTIONS:
+        correct = SPELLING_CORRECTIONS[name_lower]
+        if correct is None:
+            print(f"      🚫 Removing invalid stock: {stock_name}")
+            return None
+        if correct.lower() != stock_name.lower():
+            print(f"      🔧 Correcting: {stock_name} → {correct}")
+        return correct
+    
     for wrong, correct in SPELLING_CORRECTIONS.items():
-        if wrong == name_lower or wrong in name_lower:
+        if wrong in name_lower and len(wrong) >= 4:
             if correct is None:
                 print(f"      🚫 Removing invalid stock: {stock_name}")
                 return None
