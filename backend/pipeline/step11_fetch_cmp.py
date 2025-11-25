@@ -33,7 +33,11 @@ def get_dhan_api_key():
             result = cursor.fetchone()
             
             if result and result['key_value']:
-                return result['key_value']
+                # Strip whitespace and return clean token
+                api_key = result['key_value'].strip()
+                # Debug: Show first/last few chars
+                print(f"   Token preview: {api_key[:15]}...{api_key[-10:]} (length: {len(api_key)})")
+                return api_key
             else:
                 raise ValueError(
                     "❌ Dhan API key not found in database.\n"
@@ -100,8 +104,9 @@ def fetch_last_closing_price(api_key, security_id, exchange, segment, instrument
         if response.status_code == 401:
             raise RuntimeError(
                 "❌ Dhan API authentication failed (401 Unauthorized).\n"
-                "   Your Dhan API key is invalid or expired.\n"
-                "   Please update it in Settings → API Keys → Dhan"
+                "   Your Dhan Access Token is invalid or EXPIRED.\n"
+                "   NOTE: Dhan tokens expire every 24 hours (SEBI regulation).\n"
+                "   Get a fresh token from https://web.dhan.co and update in Settings → API Keys → Dhan"
             )
         
         response.raise_for_status()
@@ -185,8 +190,9 @@ def fetch_cmp_from_dhan(api_key, security_id, exchange, segment, instrument,
         if response.status_code == 401:
             raise RuntimeError(
                 "❌ Dhan API authentication failed (401 Unauthorized).\n"
-                "   Your Dhan API key is invalid or expired.\n"
-                "   Please update it in Settings → API Keys → Dhan"
+                "   Your Dhan Access Token is invalid or EXPIRED.\n"
+                "   NOTE: Dhan tokens expire every 24 hours (SEBI regulation).\n"
+                "   Get a fresh token from https://web.dhan.co and update in Settings → API Keys → Dhan"
             )
         
         response.raise_for_status()
@@ -210,8 +216,9 @@ def fetch_cmp_from_dhan(api_key, security_id, exchange, segment, instrument,
         if response and response.status_code == 401:
             raise RuntimeError(
                 "❌ Dhan API authentication failed (401 Unauthorized).\n"
-                "   Your Dhan API key is invalid or expired.\n"
-                "   Please update it in Settings → API Keys → Dhan"
+                "   Your Dhan Access Token is invalid or EXPIRED.\n"
+                "   NOTE: Dhan tokens expire every 24 hours (SEBI regulation).\n"
+                "   Get a fresh token from https://web.dhan.co and update in Settings → API Keys → Dhan"
             )
         print(f"    ⚠️ Intraday API error: {str(e)}")
         # Try fallback to closing price
