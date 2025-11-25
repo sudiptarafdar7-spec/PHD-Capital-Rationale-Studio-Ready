@@ -199,9 +199,10 @@ def format_chunk_for_analysis(chunk_lines):
     return json.dumps(formatted, indent=2)
 
 
-def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=2000):
+def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=4000):
     """
     Call Gemini API via REST to avoid SDK dependency conflicts.
+    Supports gemini-2.5-pro (thinking model) with proper response handling.
     Returns the text response or None on error.
     """
     url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
@@ -220,8 +221,12 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=200
         }
     }
     
+    # Longer timeout for gemini-2.5-pro thinking model
+    timeout = 180 if "2.5" in model_name else 120
+    
     try:
-        response = requests.post(url, json=payload, timeout=120)
+        print(f"      🤖 Calling {model_name}...")
+        response = requests.post(url, json=payload, timeout=timeout)
         response.raise_for_status()
         
         data = response.json()
@@ -230,8 +235,18 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=200
             candidate = data["candidates"][0]
             if "content" in candidate and "parts" in candidate["content"]:
                 parts = candidate["content"]["parts"]
-                if parts and "text" in parts[0]:
-                    return parts[0]["text"]
+                
+                # Handle gemini-2.5-pro thinking model - may have multiple parts
+                # Look for the final text part (after any thinking parts)
+                text_content = None
+                for part in parts:
+                    if "text" in part:
+                        text_content = part["text"]
+                
+                if text_content:
+                    # Clean any thinking markers if present
+                    text_content = clean_thinking_response(text_content)
+                    return text_content
         
         print(f"      ⚠️ Unexpected Gemini response format: {data}")
         return None
@@ -242,6 +257,27 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=200
     except Exception as e:
         print(f"      ⚠️ Gemini API error: {e}")
         return None
+
+
+def clean_thinking_response(text):
+    """
+    Clean response from thinking models (gemini-2.5-pro).
+    Removes thinking/reasoning blocks and extracts final answer.
+    """
+    import re
+    
+    # Remove <thinking>...</thinking> blocks if present
+    text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+    
+    # Remove **Thinking:** or similar headers
+    text = re.sub(r'\*\*(?:Thinking|Reasoning|Analysis):\*\*.*?(?=\[|\{|$)', '', text, flags=re.DOTALL | re.IGNORECASE)
+    
+    # If response has "Final Answer:" or similar, extract that part
+    final_match = re.search(r'(?:Final Answer|Output|Result):\s*(\[.*\])', text, flags=re.DOTALL | re.IGNORECASE)
+    if final_match:
+        text = final_match.group(1)
+    
+    return text.strip()
 
 
 def extract_stocks_from_chunk(chunk_lines, chunk_num, api_key, model_name):
@@ -705,7 +741,7 @@ def correct_stock_name(stock_name, skip_unclear=False):
 
 def resolve_unclear_stocks_with_search(unclear_stocks, api_key):
     """
-    Use Gemini with Google Search grounding to find correct NSE stock names
+    Use Gemini 2.5-pro with Google Search grounding to find correct NSE stock names
     for unclear transcription errors.
     
     Args:
@@ -750,6 +786,8 @@ Only return the JSON array, no other text."""
         model = get_gemini_model()
         url = f"{GEMINI_API_URL}/{model}:generateContent?key={api_key}"
         
+        print(f"      🤖 Calling {model} with Google Search grounding...")
+        
         payload = {
             "contents": [{
                 "parts": [{"text": prompt}]
@@ -759,14 +797,17 @@ Only return the JSON array, no other text."""
             }],
             "generationConfig": {
                 "temperature": 0.1,
-                "maxOutputTokens": 2048
+                "maxOutputTokens": 4096
             }
         }
         
-        response = requests.post(url, json=payload, timeout=60)
+        # Longer timeout for gemini-2.5-pro thinking model with web search
+        timeout = 180 if "2.5" in model else 90
+        response = requests.post(url, json=payload, timeout=timeout)
         
         if response.status_code != 200:
             print(f"   ⚠️ Gemini Search API error: {response.status_code}")
+            print(f"   📄 Response: {response.text[:500]}")
             return []
         
         result = response.json()
@@ -775,7 +816,15 @@ Only return the JSON array, no other text."""
             print("   ⚠️ No response from Gemini Search")
             return []
         
-        text = result["candidates"][0]["content"]["parts"][0]["text"]
+        # Handle thinking model - get all text parts
+        parts = result["candidates"][0]["content"]["parts"]
+        text = ""
+        for part in parts:
+            if "text" in part:
+                text = part["text"]  # Take the last text part (final answer)
+        
+        # Clean thinking response
+        text = clean_thinking_response(text)
         print(f"   📄 Gemini Search returned {len(text)} characters")
         
         if "groundingMetadata" in result["candidates"][0]:
@@ -786,6 +835,7 @@ Only return the JSON array, no other text."""
         json_match = re.search(r'\[[\s\S]*\]', text)
         if not json_match:
             print("   ⚠️ Could not parse JSON from response")
+            print(f"   📄 Raw response: {text[:300]}...")
             return []
         
         resolved = json.loads(json_match.group())
@@ -818,6 +868,8 @@ Only return the JSON array, no other text."""
         
     except Exception as e:
         print(f"   ⚠️ Error resolving unclear stocks: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
