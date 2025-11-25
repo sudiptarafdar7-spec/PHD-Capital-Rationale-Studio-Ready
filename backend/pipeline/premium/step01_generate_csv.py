@@ -1,10 +1,11 @@
 """
 Premium Step 1: Generate Premium Rationale CSV from Input Text
-Uses OpenAI GPT to parse stock calls and create structured CSV
+Uses OpenAI GPT-4o Expert Analyst to parse stock calls and create structured CSV
 """
 import os
 import csv
 from openai import OpenAI
+from backend.utils.openai_config import get_model, get_premium_csv_prompt
 
 
 def run(job_folder, input_text, openai_api_key):
@@ -43,33 +44,49 @@ def run(job_folder, input_text, openai_api_key):
         
         client = OpenAI(api_key=openai_api_key)
         
-        prompt = f"""You are a financial data extraction expert. Parse the following stock market calls and extract structured data into a CSV format.
+        prompt = f"""**Premium Stock Call Extraction Task**
 
-**Required CSV Columns (MUST be exact):**
+**Required CSV Columns (EXACT header):**
 DATE,TIME,STOCK NAME,TARGETS,STOP LOSS,HOLDING PERIOD,CALL,CHART TYPE
 
-**Instructions:**
-1. Extract each stock call as a separate row
-2. DATE: Format as YYYY-MM-DD (e.g., 2025-11-11)
-3. TIME: Format as HH:MM:SS (e.g., 14:30:00)
-4. STOCK NAME: Full stock name or symbol
-5. TARGETS: Target prices (comma-separated if multiple, e.g., "150, 160, 170")
-6. STOP LOSS: Stop loss price or percentage (e.g., "140" or "5%")
-7. HOLDING PERIOD: Duration to hold (e.g., "1 Week", "Short Term", "Intraday")
-8. CALL: Type of call (e.g., "BUY", "SELL", "HOLD", "ACCUMULATE")
-9. CHART TYPE: Chart timeframe - STRICTLY one of: "Daily", "Weekly", "Monthly"
-   - Use "Daily" for Intraday, Short Term, or Swing trades
-   - Use "Weekly" for Medium Term trades
-   - Use "Monthly" for Long Term or Positional trades
-   - Default to "Daily" if unclear
+**Extraction Rules:**
 
-**Important:**
-- Return ONLY the CSV data with header row
+1. **DATE:** Format as YYYY-MM-DD (e.g., 2025-11-25)
+   - If only day mentioned, use current month/year
+   - If "today", use current date
+
+2. **TIME:** Format as HH:MM:SS (24-hour, e.g., 14:30:00)
+   - If not specified, use 09:15:00 (market open)
+
+3. **STOCK NAME:** Full company name or NSE symbol
+   - Standardize names (e.g., "Reliance" → "Reliance Industries")
+
+4. **TARGETS:** Price targets (comma-separated if multiple)
+   - Format: "150, 175, 200" for multiple targets
+   - Include only numeric values with commas
+
+5. **STOP LOSS:** Stop-loss price or percentage
+   - Prefer absolute price if available
+   - Format percentage as "5%" if given
+
+6. **HOLDING PERIOD:** Trading timeframe
+   - Intraday, Short Term (1-5 days), Medium Term (1-4 weeks), Long Term (1+ month)
+
+7. **CALL:** Trade action - STRICTLY one of:
+   - BUY, SELL, HOLD, ACCUMULATE, BOOK PROFIT, EXIT
+
+8. **CHART TYPE:** STRICTLY one of:
+   - "Daily" → Intraday, Short Term, Swing trades
+   - "Weekly" → Medium Term trades (1-4 weeks)
+   - "Monthly" → Long Term, Positional trades
+   - Default: "Daily" if unclear
+
+**Output Requirements:**
+- Return ONLY CSV data with header row
 - NO markdown formatting (no ```csv or ``` tags)
-- Use proper CSV escaping for commas in values
-- If a field is missing, leave it empty but include the comma
-- Ensure all rows have exactly 8 columns
-- CHART TYPE must be EXACTLY one of: Daily, Weekly, Monthly (case-sensitive)
+- Proper CSV escaping for commas in values
+- Empty fields: include comma but leave blank
+- All rows must have exactly 8 columns
 
 **Input Text:**
 {input_text}
@@ -77,18 +94,19 @@ DATE,TIME,STOCK NAME,TARGETS,STOP LOSS,HOLDING PERIOD,CALL,CHART TYPE
 **Output (CSV format only):**"""
         
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=get_model(),
             messages=[
                 {
                     "role": "system", 
-                    "content": "You are a precise financial data extraction system. Return only valid CSV data without any additional text or formatting."
+                    "content": get_premium_csv_prompt()
                 },
                 {
                     "role": "user", 
                     "content": prompt
                 }
             ],
-            temperature=0.1
+            temperature=0.1,
+            max_tokens=2000
         )
         
         csv_content = response.choices[0].message.content.strip()

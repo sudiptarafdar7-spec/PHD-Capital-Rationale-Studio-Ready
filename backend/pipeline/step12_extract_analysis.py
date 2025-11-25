@@ -18,6 +18,7 @@ import json
 import pandas as pd
 import psycopg2
 from openai import OpenAI
+from backend.utils.openai_config import get_model, get_analysis_extraction_prompt
 
 
 def get_openai_api_key():
@@ -123,53 +124,75 @@ def run(job_folder):
         client = OpenAI(api_key=api_key)
         print(f"✅ OpenAI API key found\n")
 
-        # Build GPT prompt
-        print("🤖 Building GPT-4o prompt...")
-        prompt = f"""
-You are a financial market analyst. Extract ONLY {pradip_speaker}'s detailed stock analysis
-from the transcript below. Do NOT include any other speaker's words.
+        # Build GPT prompt with Expert Financial Analyst persona
+        print("🤖 Building Expert Financial Analyst prompt...")
+        prompt = f"""**Investment Rationale Extraction Task**
 
-Transcript (Pradip only):
+**Analyst Speaking:** {pradip_speaker}
+**Stocks to Analyze:** {', '.join(stock_names)}
+**Current Market Prices:** {', '.join([f'{name} = ₹{cmp}' for name, cmp in zip(stock_names, stock_cmp)])}
+
+**Transcript:**
 {convo_text}
 
-Instructions:
-- For each of these stocks: {', '.join(stock_names)}
-- Write the detailed, elaborative analysis given by Pradip.
-- Start each stock's section with: "For [STOCK NAME], ..."
-- Use ₹ for all amounts, and convert word numbers to digits.
-- If chart type is mentioned, include it in the analysis as "On [Chart Type] charts, ...".
-- If chart type not mentioned, default to "Daily, ...".
-- Only 3 Chart type strictly [Daily/Weekly/Monthly]
-- If analysis was revised later, keep ONLY the FINAL/latest version.
-- Ignore greetings or casual talk.
-- Do not use I or We. Speaker, Pradip name etc, and for each write to minimum 100 words but use simple english not complex english words.
-- CMP for each stock is: {', '.join([f'{name} = ₹{cmp}' for name, cmp in zip(stock_names, stock_cmp)])}. So for other values like targets, stoploss etc, use CMP and if you find that they are out of CMP range in transcription then it might be transcription error, fix it.
-- Example Analysis must like: For Jamna Auto, the view remains positive even though the momentum has
-slowed down compared to earlier moves from the ₹70–80 range. The stock looks
-stronger when compared to Rico Auto, as it has taken solid support around the
-₹100 mark. A strict stop-loss should be maintained at ₹94–95, and as long as the
-stock sustains above this level, the overall outlook remains intact. The key
-resistance zone is around ₹110–111, and once this level is crossed, the stock has
-the potential to move further towards ₹125–130 levels. Holding is advisable with
-disciplined stop-loss management.
-- Output ONLY valid JSON mapping each stock to:
+**Extraction Guidelines:**
+
+1. **Content Source:** Extract ONLY {pradip_speaker}'s analysis. Ignore other speakers.
+
+2. **Analysis Format:** For each stock, provide:
+   - Start with "For [STOCK NAME], ..."
+   - Technical view (support, resistance, chart patterns)
+   - Entry point, target prices, and stop-loss levels
+   - Holding period recommendation
+   - Risk factors or caveats
+
+3. **Price Formatting:**
+   - Use ₹ symbol for all prices
+   - Convert spoken numbers to digits (e.g., "one fifty" → ₹150)
+   - Validate prices against CMP (fix transcription errors if targets/stop-loss seem unrealistic)
+
+4. **Chart Type Classification:**
+   - "Daily" for short-term/intraday views
+   - "Weekly" for swing/medium-term views  
+   - "Monthly" for positional/long-term views
+   - Default to "Daily" if not specified
+
+5. **Quality Standards:**
+   - Minimum 100 words per stock analysis
+   - Simple, professional English
+   - No first-person pronouns (I, We)
+   - No speaker names in the analysis text
+   - Keep only the FINAL/latest version if revised
+
+**Example Output Format:**
+For Jamna Auto, the view remains positive even though the momentum has slowed down compared to earlier moves from the ₹70–80 range. The stock looks stronger when compared to Rico Auto, as it has taken solid support around the ₹100 mark. A strict stop-loss should be maintained at ₹94–95, and as long as the stock sustains above this level, the overall outlook remains intact. The key resistance zone is around ₹110–111, and once this level is crossed, the stock has the potential to move further towards ₹125–130 levels. Holding is advisable with disciplined stop-loss management.
+
+**Output Format (JSON only):**
 {{
-  "STOCK NAME": {{"chart_type": "...", "analysis": "..."}}
+  "STOCK NAME": {{"chart_type": "Daily/Weekly/Monthly", "analysis": "detailed analysis text..."}}
 }}
 """
 
-        print("✅ Prompt built\n")
+        print("✅ Expert prompt built\n")
 
-        # Call GPT-4o
-        print("🚀 Calling OpenAI GPT-4o API...")
+        # Call GPT-4o with Expert Financial Analyst system prompt
+        print("🚀 Calling OpenAI GPT-4o Expert Analyst API...")
         print("⏳ This may take 30-60 seconds...\n")
 
-        response = client.chat.completions.create(model="gpt-4o",
-                                                  messages=[{
-                                                      "role": "user",
-                                                      "content": prompt
-                                                  }],
-                                                  temperature=0.3)
+        response = client.chat.completions.create(
+            model=get_model(),
+            messages=[
+                {
+                    "role": "system",
+                    "content": get_analysis_extraction_prompt()
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.3,
+            max_tokens=4000)
 
         content = response.choices[0].message.content.strip()
         print("✅ Received response from GPT-4o\n")

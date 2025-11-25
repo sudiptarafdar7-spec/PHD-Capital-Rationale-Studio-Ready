@@ -13,6 +13,7 @@ Output:
 import os
 import pandas as pd
 from openai import OpenAI
+from backend.utils.openai_config import get_model, get_premium_analysis_prompt
 
 
 def safe_value(value, default="N/A"):
@@ -29,13 +30,13 @@ def safe_value(value, default="N/A"):
 
 def generate_analysis_prompt(row):
     """
-    Create a detailed prompt for GPT-4 to generate stock analysis
+    Create a detailed prompt for GPT-4o Expert Analyst to generate stock analysis
     
     Args:
         row: DataFrame row with all stock data
         
     Returns:
-        str: Formatted prompt for GPT-4
+        str: Formatted prompt for GPT-4o Expert Analyst
     """
     stock_name = safe_value(row.get('STOCK NAME'), 'Unknown Stock')
     call_type = safe_value(row.get('CALL'), 'N/A')
@@ -61,70 +62,87 @@ def generate_analysis_prompt(row):
     sector = safe_value(row.get('SECTOR'))
     industry = safe_value(row.get('INDUSTRY'))
     
-    prompt = f"""You are a professional financial analyst preparing a SEBI-compliant investment rationale report for Indian equity markets.
+    prompt = f"""**SEBI-Compliant Investment Rationale Generation**
 
-**Stock Information:**
+**Stock Profile:**
 - Company: {stock_name}
-- Sector: {sector}
-- Industry: {industry}
+- Sector: {sector} | Industry: {industry}
 - Call Type: {call_type}
-- Current Market Price (CMP): Rs. {cmp}
-- Target Price(s): {targets}
+- CMP: Rs. {cmp}
+- Target(s): {targets}
 - Stop Loss: Rs. {stop_loss}
 
-**Technical Indicators:**
-- RSI(14): {rsi}
-- MA20: Rs. {ma20}
-- MA50: Rs. {ma50}
-- MA100: Rs. {ma100}
-- MA200: Rs. {ma200}
+**Technical Data:**
+| Indicator | Value |
+|-----------|-------|
+| RSI (14) | {rsi} |
+| 20 DMA | Rs. {ma20} |
+| 50 DMA | Rs. {ma50} |
+| 100 DMA | Rs. {ma100} |
+| 200 DMA | Rs. {ma200} |
 
-**Fundamental Metrics:**
-- P/E Ratio: {pe_ratio}
-- P/B Ratio: {pb_ratio}
-- ROE: {roe}%
-- ROCE: {roce}%
-- Debt/Equity: {debt_equity}
-- EPS (TTM): Rs. {eps_ttm}
-- EPS Growth (YoY): {eps_growth}%
-- Revenue Growth (YoY): {revenue_growth}%
-- Dividend Yield: {dividend_yield}%
+**Fundamental Data:**
+| Metric | Value |
+|--------|-------|
+| P/E Ratio | {pe_ratio} |
+| P/B Ratio | {pb_ratio} |
+| ROE | {roe}% |
+| ROCE | {roce}% |
+| Debt/Equity | {debt_equity} |
+| EPS (TTM) | Rs. {eps_ttm} |
+| EPS Growth (YoY) | {eps_growth}% |
+| Revenue Growth (YoY) | {revenue_growth}% |
+| Dividend Yield | {dividend_yield}% |
 
-**Task:**
-Generate a professional, comprehensive investment analysis rationale (5-7 sentences) that:
-1. Evaluates the technical setup (RSI, moving averages, price action)
-2. Analyzes fundamental strength (valuations, profitability, growth)
-3. Explains why this {call_type} call makes sense at CMP Rs. {cmp}
-4. Justifies the target and stop loss levels
-5. Mentions any risks or considerations
+**Analysis Requirements:**
 
-**Style Guidelines:**
-- Professional and concise
-- Use "Rs." for currency (not symbols)
-- Use Indian market terminology (Nifty, BSE/NSE references if relevant)
-- Be objective and balanced
-- Avoid overly promotional language
-- Focus on data-driven insights
-- Use only standard ASCII characters for better compatibility
+Generate a professional investment rationale (5-7 sentences) covering:
+
+1. **Technical Assessment** (2 sentences):
+   - RSI interpretation: Oversold (<30), Neutral (30-70), Overbought (>70)
+   - Price position relative to key moving averages (20/50/100/200 DMA)
+   - Key support/resistance levels
+
+2. **Fundamental Evaluation** (2 sentences):
+   - Valuation assessment (P/E, P/B vs sector average)
+   - Profitability metrics (ROE, ROCE interpretation)
+   - Growth trajectory (EPS, Revenue trends)
+
+3. **Investment Thesis** (2-3 sentences):
+   - Clear rationale for {call_type} recommendation
+   - Target price justification with potential upside
+   - Stop-loss rationale and downside risk
+   - Key catalysts or risk factors
+
+**Format Guidelines:**
+- Use Rs. for all currency values
+- Professional, objective tone
+- No promotional language
+- Data-driven insights
+- Standard ASCII characters only
+- Maximum 150 words
 
 Generate the analysis:"""
     
     return prompt
 
 
-def generate_stock_analysis(client, row, model="gpt-4o"):
+def generate_stock_analysis(client, row, model=None):
     """
-    Generate analysis for a single stock using OpenAI GPT-4
+    Generate analysis for a single stock using OpenAI GPT-4o Expert Analyst
     
     Args:
         client: OpenAI client instance
         row: DataFrame row with stock data
-        model: OpenAI model to use
+        model: OpenAI model to use (defaults to centralized config)
         
     Returns:
         tuple: (success: bool, analysis: str or error_message: str)
     """
     try:
+        if model is None:
+            model = get_model()
+            
         prompt = generate_analysis_prompt(row)
         
         response = client.chat.completions.create(
@@ -132,15 +150,15 @@ def generate_stock_analysis(client, row, model="gpt-4o"):
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a professional Indian equity market analyst with expertise in both technical and fundamental analysis. Generate concise, data-driven investment rationales."
+                    "content": get_premium_analysis_prompt()
                 },
                 {
                     "role": "user",
                     "content": prompt
                 }
             ],
-            temperature=0.7,
-            max_tokens=500
+            temperature=0.5,
+            max_tokens=600
         )
         
         analysis = response.choices[0].message.content.strip()
@@ -194,7 +212,7 @@ def run(job_folder, openai_api_key):
         if 'ANALYSIS' not in df.columns:
             df['ANALYSIS'] = ''
         
-        print("🤖 Generating AI-powered Analysis using GPT-4...")
+        print("🤖 Generating AI-powered Analysis using GPT-4o Expert Analyst...")
         print("-" * 60)
         
         client = OpenAI(api_key=openai_api_key)

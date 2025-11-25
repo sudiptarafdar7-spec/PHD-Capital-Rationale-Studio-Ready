@@ -2,6 +2,7 @@ import os
 import re
 import psycopg2
 from openai import OpenAI
+from backend.utils.openai_config import get_model, get_stock_extraction_prompt
 
 # Custom symbol corrections for commonly confused stocks (keys must be UPPERCASE)
 SYMBOL_CORRECTIONS = {
@@ -84,57 +85,53 @@ def has_analytical_cues(text):
 
 
 def extract_stocks_from_pair(anchor_text, pradip_text, start_time, client):
-    """Extract stocks from a single anchor-pradip conversation pair using GPT-4o."""
+    """Extract stocks from a single anchor-pradip conversation pair using GPT-4o Expert Analyst."""
 
     if not has_analytical_cues(pradip_text):
         return []
 
-    prompt = f"""Extract stock names from this financial TV conversation snippet.
+    prompt = f"""**Financial TV Conversation Analysis**
 
-ANCHOR says: "{anchor_text}"
-ANALYST responds: "{pradip_text}"
+ANCHOR Question: "{anchor_text}"
+ANALYST Response: "{pradip_text}"
 
-Rules:
-1. ONLY extract if the ANALYST discusses/analyzes the stock (gives opinion, price levels, recommendation)
-2. Include stocks that ANCHOR mentions if ANALYST analyzes them (even without repeating name)
-3. Output format: STOCK NAME|SYMBOL (one per line, no extra text)
-4. Ignore non-stock mentions (e.g., "market", "indices")
-5. Do not give any wrong STOCK NAME|SYMBOL pairs.
-MANDATORY SYMBOL MAPPINGS (use these EXACT symbols):
+**Extraction Rules:**
+1. ONLY extract stocks where the ANALYST provides actionable analysis (price targets, stop-loss, recommendations, technical/fundamental view)
+2. Include stocks mentioned by ANCHOR if the ANALYST subsequently analyzes them
+3. Ignore casual mentions without analytical content
+4. Ignore index/market references (Nifty, Sensex, Bank Nifty)
+
+**Symbol Mapping (MANDATORY):**
 - Vedanta → VEDL
 - Zomato → ETERNAL
-- Vodafone → IDEA
-- VI (Vodafone Idea) → IDEA
-- Shriram Finance → SHRIRAMFIN
-- SHREE FINANCE → SHRIRAMFIN
-- BL DEFENSE → BEL
-- TATA MOTORS → TMCV
+- Vodafone Idea / VI → IDEA
+- Shriram Finance / Shree Finance → SHRIRAMFIN
+- Bharat Electronics / BEL Defence → BEL
+- Tata Motors DVR → TATAMTRDVR
 
-Examples:
-- "HDFC Bank|HDFCBANK"
-- "Ashok Leyland|ASHOKLEY"
-- "Bank of Baroda|BANKBARODA"
-- "Vedanta|VEDL"
-- "Vodafone|IDEA"
-- "Shriram Finance|SHRIRAMFIN"
+**Output Format:** STOCK NAME|SYMBOL (one per line, NSE symbols only, no suffix)
 
-Extract now (stock names and NSE symbols only, one per line):"""
+**Examples:**
+- HDFC Bank|HDFCBANK
+- Reliance Industries|RELIANCE
+- Infosys|INFY
+- Tata Steel|TATASTEEL
+
+Extract stocks now:"""
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=get_model(),
             messages=[{
-                "role":
-                "system",
-                "content":
-                "You are a stock symbol extractor. Use MANDATORY symbol mappings: Vedanta=VEDL, Zomato=ETERNAL, Vodafone=IDEA, VI=IDEA, Shriram Finance=SHRIRAMFIN. Output format: STOCK NAME|SYMBOL (no .NS/.BO suffix, one per line, nothing else)."
+                "role": "system",
+                "content": get_stock_extraction_prompt()
             }, {
                 "role": "user",
                 "content": prompt
             }],
             temperature=0,
-            max_tokens=200,
-            timeout=15)
+            max_tokens=300,
+            timeout=20)
 
         content = (response.choices[0].message.content or "").strip()
         stocks = []
