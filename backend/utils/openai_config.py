@@ -2,13 +2,13 @@
 Centralized OpenAI Configuration for PHD Capital Rationale Studio
 
 This module provides:
-1. Latest GPT model configuration (gpt-4o latest)
+1. Latest GPT model configuration (GPT-5 - released August 2025)
 2. Expert Financial Analyst persona prompts
 3. Consistent system prompts across all pipeline steps
 """
 
-OPENAI_MODEL = "gpt-4o"
-OPENAI_MODEL_MINI = "gpt-4o-mini"
+OPENAI_MODEL = "gpt-5"
+OPENAI_MODEL_MINI = "gpt-5-mini"
 
 EXPERT_FINANCIAL_ANALYST_PERSONA = """You are a SEBI-registered Research Analyst with 15+ years of expertise in Indian equity markets (NSE/BSE). You specialize in:
 
