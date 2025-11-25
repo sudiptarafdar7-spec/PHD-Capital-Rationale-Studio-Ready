@@ -24,6 +24,84 @@ INDICES_TO_EXCLUDE = [
     "nifty bank", "index", "indices", "bse", "nse", "market"
 ]
 
+SPELLING_CORRECTIONS = {
+    "sujour energy": "Suzlon Energy",
+    "sujour": "Suzlon Energy",
+    "sujalan": "Suzlon Energy",
+    "sujolon": "Suzlon Energy",
+    "sujlon": "Suzlon Energy",
+    "c bank": "ICICI Bank",
+    "cbank": "ICICI Bank",
+    "cera bank": None,
+    "cerabank": None,
+    "adan power": "Adani Power",
+    "adanpower": "Adani Power",
+    "adan": "Adani Power",
+    "adanipower": "Adani Power",
+    "adani power": "Adani Power",
+    "tatta power": "Tata Power",
+    "tata power": "Tata Power",
+    "tatapower": "Tata Power",
+    "td power": "TD Power Systems",
+    "tdpower": "TD Power Systems",
+    "swigee": "Swiggy",
+    "swigi": "Swiggy",
+    "zometo": "Zomato",
+    "zomatto": "Zomato",
+    "relayance": "Reliance",
+    "infosis": "Infosys",
+    "bharti airtal": "Bharti Airtel",
+    "airtal": "Bharti Airtel",
+    "vodafone idea": "Vodafone Idea",
+    "vodafone": "Vodafone Idea",
+    "vi": "Vodafone Idea",
+    "idea": "Vodafone Idea",
+    "suzlon energy": "Suzlon Energy",
+    "suzlon": "Suzlon Energy",
+    "city union bank": "City Union Bank",
+    "city union": "City Union Bank",
+    "cub": "City Union Bank",
+    "indus tower": "Indus Towers",
+    "indus towers": "Indus Towers",
+    "industower": "Indus Towers",
+    "shipping corp": "Shipping Corporation",
+    "shipping corporation": "Shipping Corporation",
+    "sci": "Shipping Corporation",
+    "supriya life": "Supriya Life Sciences",
+    "supriya lifesciences": "Supriya Life Sciences",
+    "supriya life sciences": "Supriya Life Sciences",
+    "apollo tyre": "Apollo Tyres",
+    "apollo tyres": "Apollo Tyres",
+    "titan": "Titan",
+    "mrpl": "MRPL",
+    "cdsl": "CDSL",
+    "hitachi": None,
+}
+
+INVALID_STOCKS = [
+    "cera bank", "cerabank", "sujalan", "hitachi", 
+    "c bank", "cbank", "adan", "td power"
+]
+
+SYMBOL_NORMALIZATION = {
+    "ADANPOWER": "ADANIPOWER",
+    "TATAPOWER": "TATAPOWER",
+    "INDUSTOWER": "INDUSTOWER",
+    "SUZLON": "SUZLON",
+    "IDEA": "IDEA",
+    "BHARTIARTL": "BHARTIARTL",
+    "CUB": "CUB",
+    "MRPL": "MRPL",
+    "SCI": "SCI",
+    "TITAN": "TITAN",
+    "APOLLOTYRE": "APOLLOTYRE",
+    "SUPRIYA": "SUPRIYA",
+    "SWIGGY": "SWIGGY",
+    "ZOMATO": "ZOMATO",
+    "CDSL": "CDSL",
+    "TDPOWERSYS": "TDPOWERSYS",
+}
+
 
 def parse_transcript_lines(transcript_content):
     """Parse transcript into structured lines with speaker, time, and text."""
@@ -561,19 +639,73 @@ def fallback_symbol_mapping(merged_stocks):
     return results
 
 
+def correct_stock_name(stock_name):
+    """
+    Apply spelling corrections and validate stock names.
+    Returns corrected name or None if invalid.
+    """
+    name_lower = stock_name.lower().strip()
+    
+    for invalid in INVALID_STOCKS:
+        if invalid in name_lower:
+            print(f"      🚫 Removing invalid stock: {stock_name}")
+            return None
+    
+    for wrong, correct in SPELLING_CORRECTIONS.items():
+        if wrong == name_lower or wrong in name_lower:
+            if correct is None:
+                print(f"      🚫 Removing invalid stock: {stock_name}")
+                return None
+            if correct.lower() != stock_name.lower():
+                print(f"      🔧 Correcting: {stock_name} → {correct}")
+            return correct
+    
+    return stock_name
+
+
+def normalize_symbol(symbol):
+    """Normalize stock symbols to prevent duplicates."""
+    symbol_upper = symbol.upper().strip()
+    
+    return SYMBOL_NORMALIZATION.get(symbol_upper, symbol_upper)
+
+
 def validate_and_format_csv(stocks):
-    """Validate extracted stocks and format as CSV - deduplicate by symbol."""
+    """
+    Validate extracted stocks and format as CSV.
+    - Apply spelling corrections
+    - Remove invalid stocks
+    - Deduplicate by normalized symbol
+    """
     if not stocks:
         return "STOCK NAME,STOCK SYMBOL,START TIME\n"
 
-    seen_symbols = set()
-    unique_stocks = []
-
+    print("\n   🔍 Applying spelling corrections and validation...")
+    
+    corrected_stocks = []
     for stock in stocks:
-        symbol = stock["stock_symbol"]
-        if symbol not in seen_symbols:
-            seen_symbols.add(symbol)
+        corrected_name = correct_stock_name(stock["stock_name"])
+        if corrected_name:
+            corrected_stocks.append({
+                "stock_name": corrected_name,
+                "stock_symbol": stock["stock_symbol"],
+                "start_time": stock["start_time"]
+            })
+    
+    print(f"\n   📊 Normalizing symbols and removing duplicates...")
+    
+    seen_normalized = {}
+    unique_stocks = []
+    
+    for stock in corrected_stocks:
+        normalized_symbol = normalize_symbol(stock["stock_symbol"])
+        
+        if normalized_symbol not in seen_normalized:
+            seen_normalized[normalized_symbol] = True
+            stock["stock_symbol"] = normalized_symbol
             unique_stocks.append(stock)
+        else:
+            print(f"      🔄 Removing duplicate: {stock['stock_name']} ({stock['stock_symbol']})")
 
     csv_rows = ["STOCK NAME,STOCK SYMBOL,START TIME"]
     for stock in sorted(unique_stocks, key=lambda x: x["start_time"]):
