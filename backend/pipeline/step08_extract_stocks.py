@@ -273,15 +273,6 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
 1. Read each line carefully, word by word
 2. Detect ALL company/stock names mentioned by BOTH speakers (Anchor and Analyst)
 3. Include these RECENT IPO STOCKS (often discussed):
-   - Swiggy (food delivery)
-   - Zomato (food delivery)
-   - Paytm / One97 Communications
-   - Nykaa / FSN E-Commerce
-   - PolicyBazaar / PB Fintech
-   - Delhivery
-   - CarTrade
-   - Ola Electric
-   - FirstCry / Brainbees
    
 4. Use INTELLIGENCE to understand misspelled stock names due to transcription errors:
    - "Swigee" / "Swigi" → Swiggy
