@@ -296,7 +296,7 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
                         if not is_index and len(stock_name) > 1:
                             stocks.append((time_str, stock_name))
                 
-                print(f"      📋 OpenAI detected stocks: {[s[1] for s in stocks]}")
+                print(f"      📋 Gemini detected stocks: {[s[1] for s in stocks]}")
         except json.JSONDecodeError as e:
             print(f"      ⚠️ JSON parse error: {e}")
             print(f"      📄 Raw response: {content[:500]}...")
@@ -769,9 +769,18 @@ def run(job_folder):
         if not result:
             return {'status': 'failed', 'message': 'Gemini API key not found. Please add it in Settings → API Keys → Gemini'}
 
-        genai.configure(api_key=result[0])
-        model = genai.GenerativeModel(get_gemini_model())
-        print(f"✅ Using Gemini model: {get_gemini_model()}\n")
+        gemini_api_key = result[0].strip()
+        
+        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+            del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+        
+        genai.configure(api_key=gemini_api_key)
+        
+        model_name = get_gemini_model()
+        print(f"✅ Gemini API key configured (starts with: {gemini_api_key[:10]}...)")
+        print(f"✅ Using Gemini model: {model_name}\n")
+        
+        model = genai.GenerativeModel(model_name)
 
         os.makedirs(chunks_folder, exist_ok=True)
 
