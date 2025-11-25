@@ -48,14 +48,18 @@ The application maintains a clear separation between a React-based frontend and 
 
 ## AI Configuration
 - **Dual AI Provider Architecture**:
-    - **Gemini (Google AI)**: Used for Step 8 (Stock Extraction) - Gemini 2.5 Pro model
+    - **Gemini (Google AI)**: Used for Step 8 (Stock Extraction) - gemini-2.0-flash model via REST API
     - **OpenAI (GPT-4o)**: Used for other pipeline steps (analysis extraction, content generation)
 - **Centralized Configuration**: 
     - `backend/utils/gemini_config.py` provides Gemini settings for Step 8
     - `backend/utils/openai_config.py` provides OpenAI settings for other steps
 - **Expert Persona**: All AI responses behave as a SEBI-registered Research Analyst with 15+ years of experience
 - **Pipeline Integration**:
-    - Step 8 (Stock Extraction): Uses Gemini 2.5 Pro with `get_stock_extraction_prompt()` for accurate NSE symbol mapping
+    - Step 8 (Stock Extraction): Uses gemini-2.0-flash with `get_stock_extraction_prompt()` for accurate NSE symbol mapping
+        - **4-Chunk Processing**: Transcript split into 4 chunks for comprehensive stock detection
+        - **Intelligent Spelling Correction**: 50+ transcription error mappings (Suzuelon→Suzlon, Sujalan→Suzlon, etc.)
+        - **Google Search Grounding**: For unclear transcription errors (Cera Bank, Wari, NIBA), uses Gemini with Google Search to find correct NSE stock names
+        - **Symbol Normalization**: Deduplication and standardization of NSE symbols
     - Step 12 (Analysis Extraction): Uses OpenAI GPT-4o with `get_analysis_extraction_prompt()` for professional rationale extraction
     - Premium Step 1 (CSV Generation): Uses OpenAI GPT-4o with `get_premium_csv_prompt()` for structured stock call parsing
     - Premium Step 7 (Analysis Generation): Uses OpenAI GPT-4o with `get_premium_analysis_prompt()` for SEBI-compliant investment rationales
