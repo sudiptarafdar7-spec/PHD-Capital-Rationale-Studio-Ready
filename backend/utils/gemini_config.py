@@ -2,21 +2,31 @@
 Centralized Gemini Configuration for PHD Capital Rationale Studio
 
 This module provides:
-1. Latest Gemini model configuration
+1. Latest Gemini model configuration (gemini-2.5-pro with thinkingConfig)
 2. Expert Financial Analyst persona prompts
 3. Consistent system prompts across pipeline steps
 
 Model Notes:
-- gemini-2.0-flash: Fast, reliable model for production use (default)
-- gemini-2.5-pro: Advanced reasoning model (high rate limits, uses thinking tokens)
+- gemini-2.5-pro: Most capable model with advanced reasoning (default)
+  - Uses thinkingConfig to control thinking budget (512-24576 tokens)
+  - maxOutputTokens up to 65536
+  - Higher accuracy for complex stock extraction tasks
+- gemini-2.0-flash: Fast model for simple tasks (fallback)
 
-Note: gemini-2.5-pro uses "thinking tokens" which consume maxOutputTokens budget
-before producing actual output, causing MAX_TOKENS errors. Use 2.0-flash for stability.
+Thinking Budget Guidelines:
+- Simple tasks (yes/no): 512-1024 tokens
+- Moderate tasks (stock extraction): 2048-4096 tokens
+- Complex tasks (analysis): 8192-16384 tokens
 """
 
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-pro"
 GEMINI_MODEL_FLASH = "gemini-2.0-flash"
 GEMINI_MODEL_PRO = "gemini-2.5-pro"
+
+# Thinking budgets for different task complexities
+THINKING_BUDGET_LOW = 1024      # Simple extraction
+THINKING_BUDGET_MEDIUM = 4096   # Stock detection with spelling correction
+THINKING_BUDGET_HIGH = 8192     # Complex analysis with web search
 
 EXPERT_FINANCIAL_ANALYST_PERSONA = """You are a SEBI-registered Research Analyst with 15+ years of expertise in Indian equity markets (NSE/BSE). You specialize in:
 

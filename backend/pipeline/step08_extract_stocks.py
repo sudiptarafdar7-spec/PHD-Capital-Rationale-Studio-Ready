@@ -199,15 +199,27 @@ def format_chunk_for_analysis(chunk_lines):
     return json.dumps(formatted, indent=2)
 
 
-def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=4000, max_retries=3):
+def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=16384, thinking_budget=4096, max_retries=4):
     """
-    Call Gemini API via REST with retry logic for transient errors.
-    Returns the text response or None on error.
+    Call Gemini 2.5 Pro API via REST with proper thinkingConfig.
+    
+    Args:
+        prompt: The prompt text
+        api_key: Gemini API key
+        model_name: Model name (gemini-2.5-pro)
+        temperature: Generation temperature (0.0-1.0)
+        max_tokens: Maximum output tokens (up to 65536)
+        thinking_budget: Tokens for internal reasoning (512-24576)
+        max_retries: Number of retry attempts for transient errors
+    
+    Returns:
+        Text response or None on error
     """
     import time
     
     url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
     
+    # Build payload with thinkingConfig for gemini-2.5-pro
     payload = {
         "contents": [
             {
@@ -218,18 +230,23 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=400
         ],
         "generationConfig": {
             "temperature": temperature,
-            "maxOutputTokens": max_tokens
+            "maxOutputTokens": max_tokens,
+            "thinkingConfig": {
+                "thinkingBudget": thinking_budget
+            }
         }
     }
     
-    timeout = 120
+    # Longer timeout for thinking model
+    timeout = 180
     
     for attempt in range(max_retries):
         try:
             if attempt == 0:
-                print(f"      🤖 Calling {model_name}...")
+                print(f"      🤖 Calling {model_name} (thinking: {thinking_budget} tokens)...")
             else:
-                wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                # Longer exponential backoff for rate limits: 5, 10, 20, 40 seconds
+                wait_time = 5 * (2 ** attempt)
                 print(f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s...")
                 time.sleep(wait_time)
             
@@ -237,7 +254,7 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=400
             
             # Handle rate limiting and server errors with retry
             if response.status_code == 429:
-                print(f"      ⚠️ Rate limited (429), will retry...")
+                print(f"      ⚠️ Rate limited (429), will retry with backoff...")
                 continue
             elif response.status_code == 503:
                 print(f"      ⚠️ Service unavailable (503), will retry...")
@@ -250,32 +267,49 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=400
             if "candidates" in data and len(data["candidates"]) > 0:
                 candidate = data["candidates"][0]
                 
-                # Check for MAX_TOKENS finish reason
+                # Log thinking token usage
+                if "usageMetadata" in data:
+                    thoughts_used = data["usageMetadata"].get("thoughtsTokenCount", 0)
+                    if thoughts_used > 0:
+                        print(f"      💭 Thinking tokens used: {thoughts_used}")
+                
+                # Check for finish reason
                 finish_reason = candidate.get("finishReason", "")
                 if finish_reason == "MAX_TOKENS":
-                    print(f"      ⚠️ Response truncated (MAX_TOKENS), using partial response...")
+                    print(f"      ⚠️ Response truncated (MAX_TOKENS)")
+                elif finish_reason == "STOP":
+                    pass  # Normal completion
                 
                 if "content" in candidate and "parts" in candidate["content"]:
                     parts = candidate["content"]["parts"]
                     
-                    # Get the text content
+                    # Get the text content (skip thought parts)
                     text_content = None
                     for part in parts:
-                        if "text" in part:
+                        if "text" in part and not part.get("thought", False):
                             text_content = part["text"]
                     
                     if text_content:
                         text_content = clean_thinking_response(text_content)
                         return text_content
+                    else:
+                        # If no non-thought text, try to get any text
+                        for part in parts:
+                            if "text" in part:
+                                text_content = clean_thinking_response(part["text"])
+                                return text_content
             
-            print(f"      ⚠️ Unexpected Gemini response format: {data}")
+            print(f"      ⚠️ Unexpected Gemini response: {str(data)[:500]}")
             return None
             
         except requests.exceptions.RequestException as e:
-            if "429" in str(e) or "503" in str(e):
+            error_str = str(e)
+            if "429" in error_str or "503" in error_str:
                 if attempt < max_retries - 1:
                     continue
             print(f"      ⚠️ Gemini API request failed: {e}")
+            if attempt < max_retries - 1:
+                continue
             return None
         except Exception as e:
             print(f"      ⚠️ Gemini API error: {e}")
@@ -379,7 +413,15 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
 
 **IMPORTANT:** Return ONLY the JSON array, no other text. Use exact timestamps from input."""
 
-    content = call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=2000)
+    # Use thinking budget for accurate stock detection with spelling correction
+    content = call_gemini_api(
+        prompt, 
+        api_key, 
+        model_name, 
+        temperature=0.1, 
+        max_tokens=8192,
+        thinking_budget=4096  # Medium budget for stock detection
+    )
     
     if not content:
         print(f"   ⚠️ Chunk {chunk_num} extraction failed: No response from Gemini")
@@ -535,7 +577,15 @@ For EACH stock in the input, provide the correct NSE trading symbol.
 - Include ALL {len(merged_stocks)} stocks - do not skip any
 - Use exact timestamps from input"""
 
-    content = call_gemini_api(prompt, api_key, model_name, temperature=0, max_tokens=4000)
+    # Use thinking budget for accurate symbol mapping
+    content = call_gemini_api(
+        prompt, 
+        api_key, 
+        model_name, 
+        temperature=0, 
+        max_tokens=16384,
+        thinking_budget=4096  # Medium budget for symbol mapping
+    )
     
     if not content:
         print("   ⚠️ Symbol mapping failed: No response from Gemini")
@@ -815,6 +865,7 @@ Only return the JSON array, no other text."""
         
         print(f"      🤖 Calling {model} with Google Search grounding...")
         
+        # Use thinkingConfig for gemini-2.5-pro with web search
         payload = {
             "contents": [{
                 "parts": [{"text": prompt}]
@@ -824,23 +875,26 @@ Only return the JSON array, no other text."""
             }],
             "generationConfig": {
                 "temperature": 0.1,
-                "maxOutputTokens": 4096
+                "maxOutputTokens": 16384,
+                "thinkingConfig": {
+                    "thinkingBudget": 8192  # Higher budget for web search tasks
+                }
             }
         }
         
-        # Retry logic for transient errors
-        max_retries = 3
+        # Retry logic for transient errors with longer backoff
+        max_retries = 4
         response = None
         for attempt in range(max_retries):
             if attempt > 0:
-                wait_time = 2 ** attempt
+                wait_time = 5 * (2 ** attempt)  # 10, 20, 40 seconds
                 print(f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s...")
                 time.sleep(wait_time)
             
-            response = requests.post(url, json=payload, timeout=120)
+            response = requests.post(url, json=payload, timeout=180)
             
             if response.status_code == 429 or response.status_code == 503:
-                print(f"      ⚠️ Error {response.status_code}, will retry...")
+                print(f"      ⚠️ Error {response.status_code}, will retry with backoff...")
                 continue
             break
         

@@ -48,14 +48,18 @@ The application maintains a clear separation between a React-based frontend and 
 
 ## AI Configuration
 - **Dual AI Provider Architecture**:
-    - **Gemini (Google AI)**: Used for Step 8 (Stock Extraction) - gemini-2.0-flash model via REST API (fast and reliable)
+    - **Gemini (Google AI)**: Used for Step 8 (Stock Extraction) - gemini-2.5-pro model with thinkingConfig for maximum accuracy
     - **OpenAI (GPT-4o)**: Used for other pipeline steps (analysis extraction, content generation)
 - **Centralized Configuration**: 
-    - `backend/utils/gemini_config.py` provides Gemini settings for Step 8
+    - `backend/utils/gemini_config.py` provides Gemini settings for Step 8 (with thinkingBudget configuration)
     - `backend/utils/openai_config.py` provides OpenAI settings for other steps
 - **Expert Persona**: All AI responses behave as a SEBI-registered Research Analyst with 15+ years of experience
+- **Gemini 2.5-pro Configuration**:
+    - `thinkingBudget`: 4096 tokens for stock extraction, 8192 for web search grounding
+    - `maxOutputTokens`: 8192-16384 for adequate response space
+    - Retry logic with exponential backoff (5s, 10s, 20s, 40s) for 429/503 errors
 - **Pipeline Integration**:
-    - Step 8 (Stock Extraction): Uses gemini-2.0-flash with `get_stock_extraction_prompt()` for accurate NSE symbol mapping (with retry logic for 429/503 errors)
+    - Step 8 (Stock Extraction): Uses gemini-2.5-pro with thinkingConfig for accurate NSE symbol mapping
         - **4-Chunk Processing**: Transcript split into 4 chunks for comprehensive stock detection
         - **Intelligent Spelling Correction**: 50+ transcription error mappings (Suzuelon→Suzlon, Sujalan→Suzlon, etc.)
         - **Google Search Grounding**: For unclear transcription errors (Cera Bank, Wari, NIBA), uses Gemini with Google Search to find correct NSE stock names
