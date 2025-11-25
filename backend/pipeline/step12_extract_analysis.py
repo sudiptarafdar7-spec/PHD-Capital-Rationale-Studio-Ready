@@ -192,7 +192,7 @@ For Jamna Auto, the view remains positive even though the momentum has slowed do
                 }
             ],
             temperature=0.3,
-            max_tokens=4000)
+            max_completion_tokens=4000)
 
         content = response.choices[0].message.content.strip()
         print("✅ Received response from GPT-4o\n")
