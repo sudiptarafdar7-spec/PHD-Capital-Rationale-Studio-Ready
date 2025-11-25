@@ -85,8 +85,8 @@ SPELLING_CORRECTIONS = {
     "hitachi energy": "Hitachi Energy",
 }
 
-INVALID_STOCKS = [
-    "cera bank", "cerabank", "wari", "niba"
+UNCLEAR_STOCKS = [
+    "cera bank", "cerabank", "wari", "niba", "c bank", "cbank"
 ]
 
 SYMBOL_NORMALIZATION = {
@@ -670,17 +670,26 @@ def fallback_symbol_mapping(merged_stocks):
     return results
 
 
-def correct_stock_name(stock_name):
+def is_unclear_stock(stock_name):
+    """Check if a stock name is unclear and needs web search resolution."""
+    name_lower = stock_name.lower().strip()
+    for unclear in UNCLEAR_STOCKS:
+        if name_lower == unclear or name_lower == unclear.replace(" ", ""):
+            return True
+    return False
+
+
+def correct_stock_name(stock_name, skip_unclear=False):
     """
     Apply spelling corrections and validate stock names.
-    Returns corrected name or None if invalid.
+    Returns corrected name, None if invalid, or 'UNCLEAR' if needs web search.
     """
     name_lower = stock_name.lower().strip()
     
-    for invalid in INVALID_STOCKS:
-        if name_lower == invalid or name_lower == invalid.replace(" ", ""):
-            print(f"      🚫 Removing invalid stock: {stock_name}")
+    if is_unclear_stock(stock_name):
+        if skip_unclear:
             return None
+        return "UNCLEAR"
     
     if name_lower in SPELLING_CORRECTIONS:
         correct = SPELLING_CORRECTIONS[name_lower]
@@ -703,6 +712,124 @@ def correct_stock_name(stock_name):
     return stock_name
 
 
+def resolve_unclear_stocks_with_search(unclear_stocks, api_key):
+    """
+    Use Gemini with Google Search grounding to find correct NSE stock names
+    for unclear transcription errors.
+    
+    Args:
+        unclear_stocks: List of dicts with stock_name, stock_symbol, start_time
+        api_key: Gemini API key
+        
+    Returns:
+        List of resolved stocks with corrected names and symbols
+    """
+    if not unclear_stocks:
+        return []
+    
+    print(f"\n🔍 Phase 5: Resolving {len(unclear_stocks)} unclear stocks with Google Search...")
+    
+    stock_list = "\n".join([f"- {s['stock_name']} (timestamp: {s['start_time']})" for s in unclear_stocks])
+    
+    prompt = f"""You are an expert on Indian stock market (NSE/BSE). I have some unclear stock names from a YouTube video transcript that may be transcription errors.
+
+For each stock name below, search the web to find what actual NSE-listed stock it might refer to. Consider:
+1. Phonetic similarity (sounds like)
+2. Common transcription errors
+3. Actual NSE-listed companies in India
+
+UNCLEAR STOCK NAMES:
+{stock_list}
+
+IMPORTANT CONTEXT:
+- These are from an Indian stock market discussion
+- They should be NSE-listed stocks
+- Consider that speech-to-text often mishears similar sounding words
+
+For each unclear stock, respond with a JSON array. If you cannot find a match, use null for that stock.
+Format:
+[
+  {{"original": "unclear name", "corrected_name": "Actual Stock Name", "nse_symbol": "SYMBOL", "confidence": "high/medium/low", "reasoning": "brief explanation"}},
+  ...
+]
+
+Only return the JSON array, no other text."""
+
+    try:
+        model = get_gemini_model()
+        url = f"{GEMINI_API_URL}/{model}:generateContent?key={api_key}"
+        
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }],
+            "tools": [{
+                "google_search": {}
+            }],
+            "generationConfig": {
+                "temperature": 0.1,
+                "maxOutputTokens": 2048
+            }
+        }
+        
+        response = requests.post(url, json=payload, timeout=60)
+        
+        if response.status_code != 200:
+            print(f"   ⚠️ Gemini Search API error: {response.status_code}")
+            return []
+        
+        result = response.json()
+        
+        if "candidates" not in result or not result["candidates"]:
+            print("   ⚠️ No response from Gemini Search")
+            return []
+        
+        text = result["candidates"][0]["content"]["parts"][0]["text"]
+        print(f"   📄 Gemini Search returned {len(text)} characters")
+        
+        if "groundingMetadata" in result["candidates"][0]:
+            queries = result["candidates"][0]["groundingMetadata"].get("webSearchQueries", [])
+            if queries:
+                print(f"   🔎 Web searches performed: {', '.join(queries[:3])}...")
+        
+        json_match = re.search(r'\[[\s\S]*\]', text)
+        if not json_match:
+            print("   ⚠️ Could not parse JSON from response")
+            return []
+        
+        resolved = json.loads(json_match.group())
+        
+        result_stocks = []
+        for item in resolved:
+            if item.get("corrected_name") and item.get("nse_symbol"):
+                original = item.get("original", "")
+                corrected = item["corrected_name"]
+                symbol = item["nse_symbol"].upper()
+                confidence = item.get("confidence", "medium")
+                reasoning = item.get("reasoning", "")
+                
+                for unclear in unclear_stocks:
+                    if unclear["stock_name"].lower() == original.lower():
+                        print(f"      ✅ {original} → {corrected} ({symbol}) [{confidence}]")
+                        if reasoning:
+                            print(f"         Reason: {reasoning}")
+                        result_stocks.append({
+                            "stock_name": corrected,
+                            "stock_symbol": symbol,
+                            "start_time": unclear["start_time"]
+                        })
+                        break
+            else:
+                original = item.get("original", "unknown")
+                print(f"      ❌ {original} → No match found")
+        
+        return result_stocks
+        
+    except Exception as e:
+        print(f"   ⚠️ Error resolving unclear stocks: {e}")
+        return []
+
+
 def normalize_symbol(symbol):
     """Normalize stock symbols to prevent duplicates."""
     symbol_upper = symbol.upper().strip()
@@ -710,11 +837,11 @@ def normalize_symbol(symbol):
     return SYMBOL_NORMALIZATION.get(symbol_upper, symbol_upper)
 
 
-def validate_and_format_csv(stocks):
+def validate_and_format_csv(stocks, api_key=None):
     """
     Validate extracted stocks and format as CSV.
     - Apply spelling corrections
-    - Remove invalid stocks
+    - Resolve unclear stocks with Google Search
     - Deduplicate by normalized symbol
     """
     if not stocks:
@@ -723,14 +850,30 @@ def validate_and_format_csv(stocks):
     print("\n   🔍 Applying spelling corrections and validation...")
     
     corrected_stocks = []
+    unclear_stocks = []
+    
     for stock in stocks:
         corrected_name = correct_stock_name(stock["stock_name"])
-        if corrected_name:
+        if corrected_name == "UNCLEAR":
+            unclear_stocks.append({
+                "stock_name": stock["stock_name"],
+                "stock_symbol": stock["stock_symbol"],
+                "start_time": stock["start_time"]
+            })
+            print(f"      ❓ Unclear stock needs search: {stock['stock_name']}")
+        elif corrected_name:
             corrected_stocks.append({
                 "stock_name": corrected_name,
                 "stock_symbol": stock["stock_symbol"],
                 "start_time": stock["start_time"]
             })
+    
+    if unclear_stocks and api_key:
+        resolved_stocks = resolve_unclear_stocks_with_search(unclear_stocks, api_key)
+        corrected_stocks.extend(resolved_stocks)
+        print(f"   ✅ Resolved {len(resolved_stocks)} of {len(unclear_stocks)} unclear stocks")
+    elif unclear_stocks:
+        print(f"   ⚠️ Skipping {len(unclear_stocks)} unclear stocks (no API key for search)")
     
     print(f"\n   📊 Normalizing symbols and removing duplicates...")
     
@@ -865,7 +1008,7 @@ def run(job_folder):
         print(f"✅ Final stocks with symbols: {len(final_stocks)}")
 
         print("\n📝 Phase 4: Validating and formatting final CSV...")
-        csv_content = validate_and_format_csv(final_stocks)
+        csv_content = validate_and_format_csv(final_stocks, api_key=gemini_api_key)
 
         os.makedirs(os.path.dirname(output_csv), exist_ok=True)
         with open(output_csv, "w", encoding="utf-8") as f:
