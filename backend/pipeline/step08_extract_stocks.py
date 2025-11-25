@@ -1,20 +1,20 @@
 """
-Step 8: Extract Stock Mentions - Intelligent Chunk-Based Detection
+Step 8: Extract Stock Mentions - Intelligent Chunk-Based Detection with Gemini
 
 This step uses a multi-phase approach:
 1. Split transcript into 4 chunks (ending at Pradip's lines for context preservation)
-2. For each chunk, OpenAI reads line-by-line, word-by-word to detect stocks
+2. For each chunk, Gemini reads line-by-line, word-by-word to detect stocks
 3. Handle transcription spelling errors intelligently
 4. Exclude indices (Nifty, Bank Nifty, Sensex, etc.)
-5. Merge all chunks and run final OpenAI for accurate NSE symbols
+5. Merge all chunks and run final Gemini for accurate NSE symbols
 6. Output final CSV with STOCK NAME, STOCK SYMBOL, START TIME
 """
 
 import os
 import re
 import psycopg2
-from openai import OpenAI
-from backend.utils.openai_config import get_model, get_stock_extraction_prompt
+import google.generativeai as genai
+from backend.utils.gemini_config import get_gemini_model, get_stock_extraction_prompt
 
 NUM_CHUNKS = 4
 
@@ -184,9 +184,9 @@ def format_chunk_for_analysis(chunk_lines):
     return json.dumps(formatted, indent=2)
 
 
-def extract_stocks_from_chunk(chunk_lines, chunk_num, client):
+def extract_stocks_from_chunk(chunk_lines, chunk_num, model):
     """
-    Extract stocks from a single chunk using OpenAI with word-by-word analysis.
+    Extract stocks from a single chunk using Gemini with word-by-word analysis.
     Uses structured JSON input/output for reliable parsing.
     Returns list of (time, stock_name) tuples.
     """
@@ -201,6 +201,12 @@ def extract_stocks_from_chunk(chunk_lines, chunk_num, client):
         })
     
     prompt = f"""**CRITICAL TASK: Stock Name Detection in Financial TV Transcript - Chunk {chunk_num}**
+
+You are an expert at identifying Indian stock names in financial transcripts.
+You have deep knowledge of:
+- All NSE/BSE listed companies and their common abbreviations
+- Common transcription errors and how to correct them
+- The difference between company names and market indices
 
 You are analyzing a transcript from an Indian financial TV show where an analyst discusses stocks.
 Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names mentioned.
@@ -263,28 +269,15 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
 **IMPORTANT:** Return ONLY the JSON array, no other text. Use exact timestamps from input."""
 
     try:
-        response = client.chat.completions.create(
-            model=get_model(),
-            messages=[{
-                "role": "system",
-                "content": """You are an expert at identifying Indian stock names in financial transcripts.
-You have deep knowledge of:
-- All NSE/BSE listed companies and their common abbreviations
-- Common transcription errors and how to correct them
-- The difference between company names and market indices
-
-Your task is to identify EVERY stock mentioned, understanding that transcription may have spelling errors.
-Be thorough - do not miss any stock. Be accurate - do not add stocks that weren't discussed.
-Always return valid JSON array format."""
-            }, {
-                "role": "user",
-                "content": prompt
-            }],
-            temperature=0.1,
-            max_tokens=2000,
-            timeout=60)
-
-        content = (response.choices[0].message.content or "").strip()
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.1,
+                max_output_tokens=2000,
+            )
+        )
+        
+        content = (response.text or "").strip()
         
         if content.startswith("```"):
             content = re.sub(r'^```(?:json)?\n?', '', content)
@@ -346,9 +339,9 @@ def merge_and_deduplicate_stocks(all_chunk_stocks):
     return merged
 
 
-def get_accurate_symbols(merged_stocks, client):
+def get_accurate_symbols(merged_stocks, model):
     """
-    Final OpenAI call to get accurate NSE stock symbols for all detected stocks.
+    Final Gemini call to get accurate NSE stock symbols for all detected stocks.
     Uses JSON input/output for reliable parsing.
     """
     import json
@@ -364,7 +357,11 @@ def get_accurate_symbols(merged_stocks, client):
             "name": name
         })
     
-    prompt = f"""**CRITICAL TASK: Convert ALL Stock Names to NSE Symbols**
+    prompt = f"""You are an expert at mapping Indian stock names to their NSE trading symbols.
+You must process EVERY stock in the input - do not skip any.
+Always return valid JSON array format with all stocks.
+
+**CRITICAL TASK: Convert ALL Stock Names to NSE Symbols**
 
 You MUST process ALL {len(merged_stocks)} stocks listed below. Do NOT skip any.
 
@@ -437,22 +434,15 @@ For EACH stock in the input, provide the correct NSE trading symbol.
 - Use exact timestamps from input"""
 
     try:
-        response = client.chat.completions.create(
-            model=get_model(),
-            messages=[{
-                "role": "system",
-                "content": """You are an expert at mapping Indian stock names to their NSE trading symbols.
-You must process EVERY stock in the input - do not skip any.
-Always return valid JSON array format with all stocks."""
-            }, {
-                "role": "user",
-                "content": prompt
-            }],
-            temperature=0,
-            max_tokens=4000,
-            timeout=90)
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0,
+                max_output_tokens=4000,
+            )
+        )
 
-        content = (response.choices[0].message.content or "").strip()
+        content = (response.text or "").strip()
         
         if content.startswith("```"):
             content = re.sub(r'^```(?:json)?\n?', '', content)
@@ -718,19 +708,19 @@ def validate_and_format_csv(stocks):
 
 def run(job_folder):
     """
-    Step 8: Extract Stock Mentions using Intelligent Chunk-Based Detection
+    Step 8: Extract Stock Mentions using Intelligent Chunk-Based Detection with Gemini
     
     Process:
     1. Split transcript into 4 chunks (ending at Pradip lines)
-    2. For each chunk, OpenAI reads word-by-word to detect stocks
+    2. For each chunk, Gemini reads word-by-word to detect stocks
     3. Handle transcription spelling errors intelligently
     4. Merge all chunks and deduplicate
-    5. Final OpenAI call for accurate NSE symbols
+    5. Final Gemini call for accurate NSE symbols
     6. Output CSV with STOCK NAME, STOCK SYMBOL, START TIME
     """
 
     print("\n" + "=" * 60)
-    print("STEP 8: Extract Stock Mentions (Intelligent Chunk-Based)")
+    print("STEP 8: Extract Stock Mentions (Gemini AI - Chunk-Based)")
     print(f"{'='*60}\n")
 
     try:
@@ -766,30 +756,32 @@ def run(job_folder):
             print(f"   Chunk {i}: {len(chunk)} lines ({chunk[0]['start_time']} - {chunk[-1]['end_time']})")
         print()
 
-        print("🔑 Fetching OpenAI API key...")
+        print("🔑 Fetching Gemini API key...")
         conn = psycopg2.connect(os.environ['DATABASE_URL'])
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT key_value FROM api_keys WHERE LOWER(provider) = 'openai' LIMIT 1"
+            "SELECT key_value FROM api_keys WHERE LOWER(provider) = 'gemini' LIMIT 1"
         )
         result = cursor.fetchone()
         cursor.close()
         conn.close()
 
         if not result:
-            return {'status': 'failed', 'message': 'OpenAI API key not found'}
+            return {'status': 'failed', 'message': 'Gemini API key not found. Please add it in Settings → API Keys → Gemini'}
 
-        client = OpenAI(api_key=result[0])
+        genai.configure(api_key=result[0])
+        model = genai.GenerativeModel(get_gemini_model())
+        print(f"✅ Using Gemini model: {get_gemini_model()}\n")
 
         os.makedirs(chunks_folder, exist_ok=True)
 
-        print("\n🔍 Phase 1: Extracting stocks from each chunk (word-by-word analysis)...\n")
+        print("🔍 Phase 1: Extracting stocks from each chunk (word-by-word analysis)...\n")
         all_chunk_stocks = []
 
         for i, chunk in enumerate(chunks, 1):
             print(f"   📝 Processing Chunk {i}/{len(chunks)}...")
             
-            stocks = extract_stocks_from_chunk(chunk, i, client)
+            stocks = extract_stocks_from_chunk(chunk, i, model)
             
             chunk_file = os.path.join(chunks_folder, f"chunk_{i}_stocks.txt")
             with open(chunk_file, 'w', encoding='utf-8') as f:
@@ -817,7 +809,7 @@ def run(job_folder):
                 f.write(f"{time_str} - {stock_name}\n")
 
         print("\n🎯 Phase 3: Getting accurate NSE symbols...")
-        final_stocks = get_accurate_symbols(merged_stocks, client)
+        final_stocks = get_accurate_symbols(merged_stocks, model)
         print(f"✅ Final stocks with symbols: {len(final_stocks)}")
 
         print("\n📝 Phase 4: Validating and formatting final CSV...")

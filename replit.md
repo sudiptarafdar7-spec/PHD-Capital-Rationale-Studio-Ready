@@ -47,15 +47,20 @@ The application maintains a clear separation between a React-based frontend and 
     - **Deployment**: Optimized for VPS environments with automated setup, including git safe directory configurations.
 
 ## AI Configuration
-- **Centralized Configuration**: `backend/utils/openai_config.py` provides unified OpenAI settings
-- **Model**: GPT-4o (OpenAI's most advanced model) with expert financial analyst persona
+- **Dual AI Provider Architecture**:
+    - **Gemini (Google AI)**: Used for Step 8 (Stock Extraction) - Gemini 2.5 Pro model
+    - **OpenAI (GPT-4o)**: Used for other pipeline steps (analysis extraction, content generation)
+- **Centralized Configuration**: 
+    - `backend/utils/gemini_config.py` provides Gemini settings for Step 8
+    - `backend/utils/openai_config.py` provides OpenAI settings for other steps
 - **Expert Persona**: All AI responses behave as a SEBI-registered Research Analyst with 15+ years of experience
 - **Pipeline Integration**:
-    - Step 8 (Stock Extraction): Uses `get_stock_extraction_prompt()` for accurate NSE symbol mapping
-    - Step 12 (Analysis Extraction): Uses `get_analysis_extraction_prompt()` for professional rationale extraction
-    - Premium Step 1 (CSV Generation): Uses `get_premium_csv_prompt()` for structured stock call parsing
-    - Premium Step 7 (Analysis Generation): Uses `get_premium_analysis_prompt()` for SEBI-compliant investment rationales
+    - Step 8 (Stock Extraction): Uses Gemini 2.5 Pro with `get_stock_extraction_prompt()` for accurate NSE symbol mapping
+    - Step 12 (Analysis Extraction): Uses OpenAI GPT-4o with `get_analysis_extraction_prompt()` for professional rationale extraction
+    - Premium Step 1 (CSV Generation): Uses OpenAI GPT-4o with `get_premium_csv_prompt()` for structured stock call parsing
+    - Premium Step 7 (Analysis Generation): Uses OpenAI GPT-4o with `get_premium_analysis_prompt()` for SEBI-compliant investment rationales
 - **Temperature Settings**: 0.0-0.3 for extraction tasks, 0.5-0.7 for analysis generation
+- **API Key Management**: Both Gemini and OpenAI API keys are managed through Settings → API Keys
 
 ## External Dependencies
 - **Database**: PostgreSQL (via Neon)
