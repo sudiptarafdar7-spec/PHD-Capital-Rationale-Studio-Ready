@@ -111,7 +111,7 @@ Transcript sample:
                 {"role": "user", "content": prompt_detect_speakers}
             ],
             temperature=0.3,
-            max_completion_tokens=100
+            max_tokens=100
         )
         
         speakers_detected = response.choices[0].message.content.strip()

@@ -158,7 +158,7 @@ def generate_stock_analysis(client, row, model=None):
                 }
             ],
             temperature=0.5,
-            max_completion_tokens=600
+            max_tokens=600
         )
         
         analysis = response.choices[0].message.content.strip()

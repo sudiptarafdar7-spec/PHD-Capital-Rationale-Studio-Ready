@@ -203,7 +203,7 @@ Always return valid JSON array format."""
                 "content": prompt
             }],
             temperature=0.1,
-            max_completion_tokens=2000,
+            max_tokens=2000,
             timeout=60)
 
         content = (response.choices[0].message.content or "").strip()
@@ -371,7 +371,7 @@ Always return valid JSON array format with all stocks."""
                 "content": prompt
             }],
             temperature=0,
-            max_completion_tokens=4000,
+            max_tokens=4000,
             timeout=90)
 
         content = (response.choices[0].message.content or "").strip()
