@@ -12,6 +12,7 @@ export default function ApiKeysPage() {
   const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
   const [keys, setKeys] = useState<Record<string, string>>({
     openai: '',
+    gemini: '',
     assemblyai: '',
     dhan: '',
     youtubedata: '',
@@ -20,6 +21,7 @@ export default function ApiKeysPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [configuredProviders, setConfiguredProviders] = useState<Record<string, boolean>>({
     openai: false,
+    gemini: false,
     assemblyai: false,
     google_cloud: false,
     dhan: false,
@@ -51,6 +53,7 @@ export default function ApiKeysPage() {
         const keyMap: Record<string, string> = {};
         const configMap: Record<string, boolean> = {
           openai: false,
+          gemini: false,
           assemblyai: false,
           google_cloud: false,
           dhan: false,
@@ -226,6 +229,13 @@ export default function ApiKeysPage() {
       description: '',
       type: 'key',
       placeholder: 'sk-...',
+    },
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      description: 'Google AI for Step 8 stock extraction',
+      type: 'key',
+      placeholder: 'AIzaSy...',
     },
     {
       id: 'assemblyai',

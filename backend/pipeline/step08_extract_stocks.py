@@ -14,7 +14,7 @@ import os
 import re
 import psycopg2
 import google.generativeai as genai
-from backend.utils.gemini_config import get_gemini_model, get_stock_extraction_prompt
+from backend.utils.gemini_config import get_gemini_model
 
 NUM_CHUNKS = 4
 
