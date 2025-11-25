@@ -255,129 +255,274 @@ def merge_and_deduplicate_stocks(all_chunk_stocks):
 def get_accurate_symbols(merged_stocks, client):
     """
     Final OpenAI call to get accurate NSE stock symbols for all detected stocks.
+    Uses JSON input/output for reliable parsing.
     """
+    import json
+    
     if not merged_stocks:
         return []
     
-    stock_list = "\n".join([f"{i+1}. {time} - {name}" for i, (time, name) in enumerate(merged_stocks)])
+    input_stocks = []
+    for i, (time_str, name) in enumerate(merged_stocks):
+        input_stocks.append({
+            "id": i + 1,
+            "time": time_str,
+            "name": name
+        })
     
-    prompt = f"""**FINAL TASK: Convert Stock Names to Accurate NSE Symbols**
+    prompt = f"""**CRITICAL TASK: Convert ALL Stock Names to NSE Symbols**
 
-You have a list of Indian stocks detected from a financial transcript.
-Your task is to provide the ACCURATE NSE stock symbol for each.
+You MUST process ALL {len(merged_stocks)} stocks listed below. Do NOT skip any.
 
-**CRITICAL RULES:**
-1. Use ONLY valid NSE trading symbols
-2. NO .NS or .BO suffix - just the symbol
-3. Handle common naming variations:
-   - Vedanta → VEDL (not VEDANTA)
-   - Zomato → ETERNAL (not ZOMATO)
-   - Vodafone Idea / VI → IDEA
-   - Shriram Finance → SHRIRAMFIN
-   - Bharat Electronics / BEL → BEL
-   - Hindustan Aeronautics / HAL → HAL
-   - Coal India → COALINDIA
-   - L&T / Larsen & Toubro → LT
-   - M&M / Mahindra → M&M
-   - State Bank of India / SBI → SBIN
-   - ICICI Bank → ICICIBANK
-   - HDFC Bank → HDFCBANK
-   - Axis Bank → AXISBANK
-   - Kotak Bank → KOTAKBANK
-   - Bajaj Finance → BAJFINANCE
-   - Bajaj Finserv → BAJAJFINSV
-   - Tata Consultancy / TCS → TCS
-   - Infosys → INFY
-   - Wipro → WIPRO
-   - HCL Tech → HCLTECH
-   - Tech Mahindra → TECHM
-   - Reliance Industries → RELIANCE
-   - Tata Motors → TATAMOTORS
-   - Tata Steel → TATASTEEL
-   - Tata Power → TATAPOWER
-   - Maruti Suzuki → MARUTI
-   - Bharti Airtel → BHARTIARTL
-   - ITC → ITC
-   - Adani Enterprises → ADANIENT
-   - Adani Ports → ADANIPORTS
-   - Power Grid → POWERGRID
-   - NTPC → NTPC
-   - ONGC → ONGC
-   - BPCL → BPCL
-   - Indian Oil → IOC
-   - GAIL → GAIL
-   - Sun Pharma → SUNPHARMA
-   - Dr Reddy's → DRREDDY
-   - Cipla → CIPLA
-   - Divis Labs → DIVISLAB
-   - Apollo Hospitals → APOLLOHOSP
-   - Titan → TITAN
-   - Asian Paints → ASIANPAINT
-   - Nestle → NESTLEIND
-   - Hindustan Unilever → HINDUNILVR
-   - Britannia → BRITANNIA
-   - UltraTech Cement → ULTRACEMCO
-   - Grasim → GRASIM
-   - JSW Steel → JSWSTEEL
-   - Hindalco → HINDALCO
-   - Eicher Motors → EICHERMOT
-   - Hero MotoCorp → HEROMOTOCO
-   - Bajaj Auto → BAJAJ-AUTO
-   - TVS Motor → TVSMOTOR
+**INPUT STOCKS (JSON):**
+{json.dumps(input_stocks, indent=2)}
 
-**OUTPUT FORMAT (CSV - one per line):**
-STOCK NAME,STOCK SYMBOL,START TIME
+**YOUR TASK:**
+For EACH stock in the input, provide the correct NSE trading symbol.
 
-**DETECTED STOCKS:**
-{stock_list}
+**SYMBOL MAPPING RULES:**
+- Vedanta → VEDL
+- Zomato → ETERNAL  
+- Vodafone Idea / VI → IDEA
+- Shriram Finance → SHRIRAMFIN
+- Supriya Life Sciences → SUPRIYA
+- Apollo Tyres → APOLLOTYRE
+- Shipping Corporation → SCI
+- City Union Bank → CUB
+- MRPL → MRPL
+- Indus Towers → INDUSTOWER
+- Suzlon Energy → SUZLON
+- Cera Sanitaryware → CERA
+- TD Power → TDPOWERSYS
+- Tata Power → TATAPOWER
+- Titan → TITAN
+- Bharti Airtel → BHARTIARTL
+- Coal India → COALINDIA
+- L&T → LT
+- M&M → M&M
+- SBI → SBIN
+- ICICI Bank → ICICIBANK
+- HDFC Bank → HDFCBANK
+- TCS → TCS
+- Infosys → INFY
+- Reliance → RELIANCE
+- Tata Motors → TATAMOTORS
+- Tata Steel → TATASTEEL
+- Maruti Suzuki → MARUTI
+- ITC → ITC
+- Power Grid → POWERGRID
+- NTPC → NTPC
+- ONGC → ONGC
+- Sun Pharma → SUNPHARMA
+- Cipla → CIPLA
+- Asian Paints → ASIANPAINT
+- Nestle → NESTLEIND
+- JSW Steel → JSWSTEEL
+- Hindalco → HINDALCO
+- Hero MotoCorp → HEROMOTOCO
+- Bajaj Auto → BAJAJ-AUTO
+- TVS Motor → TVSMOTOR
+- For any other stock, use the standard NSE symbol
 
-**Output the CSV now (no header, just data rows):**"""
+**NO .NS or .BO suffix - just the symbol**
+
+**OUTPUT FORMAT - Return a JSON array with ALL {len(merged_stocks)} stocks:**
+[
+  {{"time": "HH:MM:SS", "name": "Stock Name", "symbol": "SYMBOL"}},
+  ...
+]
+
+**IMPORTANT:** 
+- Return ONLY the JSON array
+- Include ALL {len(merged_stocks)} stocks - do not skip any
+- Use exact timestamps from input"""
 
     try:
         response = client.chat.completions.create(
             model=get_model(),
             messages=[{
                 "role": "system",
-                "content": get_stock_extraction_prompt()
+                "content": """You are an expert at mapping Indian stock names to their NSE trading symbols.
+You must process EVERY stock in the input - do not skip any.
+Always return valid JSON array format with all stocks."""
             }, {
                 "role": "user",
                 "content": prompt
             }],
             temperature=0,
-            max_tokens=2000,
-            timeout=60)
+            max_tokens=4000,
+            timeout=90)
 
         content = (response.choices[0].message.content or "").strip()
         
+        if content.startswith("```"):
+            content = re.sub(r'^```(?:json)?\n?', '', content)
+            content = re.sub(r'\n?```$', '', content)
+        
+        print(f"   📄 OpenAI returned {len(content)} characters")
+        
         results = []
-        for line in content.splitlines():
-            line = line.strip()
-            if not line or line.startswith("STOCK NAME"):
-                continue
-            
-            parts = line.split(',')
-            if len(parts) >= 3:
-                stock_name = parts[0].strip()
-                symbol = parts[1].strip().upper()
-                time_str = parts[2].strip()
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, list):
+                for item in parsed:
+                    if isinstance(item, dict):
+                        time_str = item.get("time", "").strip()
+                        stock_name = item.get("name", "").strip()
+                        symbol = item.get("symbol", "").strip().upper()
+                        
+                        if symbol.endswith('.NS'):
+                            symbol = symbol[:-3]
+                        elif symbol.endswith('.BO'):
+                            symbol = symbol[:-3]
+                        
+                        if stock_name and symbol and time_str:
+                            results.append({
+                                "stock_name": stock_name,
+                                "stock_symbol": symbol,
+                                "start_time": time_str
+                            })
                 
-                if symbol.endswith('.NS'):
-                    symbol = symbol[:-3]
-                elif symbol.endswith('.BO'):
-                    symbol = symbol[:-3]
+                print(f"   ✅ Parsed {len(results)} stocks from JSON response")
                 
-                if stock_name and symbol and time_str:
-                    results.append({
-                        "stock_name": stock_name,
-                        "stock_symbol": symbol,
-                        "start_time": time_str
-                    })
+                if len(results) < len(merged_stocks):
+                    print(f"   ⚠️ Warning: Only got {len(results)}/{len(merged_stocks)} stocks, using fallback mapping")
+                    results = fallback_symbol_mapping(merged_stocks)
+        except json.JSONDecodeError as e:
+            print(f"   ⚠️ JSON parse error: {e}")
+            print(f"   🔄 Using fallback symbol mapping...")
+            results = fallback_symbol_mapping(merged_stocks)
 
         return results
 
     except Exception as e:
         print(f"   ⚠️ Symbol extraction failed: {e}")
-        return []
+        print(f"   🔄 Using fallback symbol mapping...")
+        return fallback_symbol_mapping(merged_stocks)
+
+
+def fallback_symbol_mapping(merged_stocks):
+    """
+    Fallback symbol mapping using a local dictionary when OpenAI fails.
+    """
+    SYMBOL_MAP = {
+        "supriya life sciences": "SUPRIYA",
+        "supriya lifesciences": "SUPRIYA",
+        "supriya": "SUPRIYA",
+        "apollo tyres": "APOLLOTYRE",
+        "apollo tyre": "APOLLOTYRE",
+        "shipping corporation": "SCI",
+        "shipping corp": "SCI",
+        "titan": "TITAN",
+        "city union bank": "CUB",
+        "mrpl": "MRPL",
+        "indus towers": "INDUSTOWER",
+        "indus tower": "INDUSTOWER",
+        "bharti airtel": "BHARTIARTL",
+        "airtel": "BHARTIARTL",
+        "vodafone idea": "IDEA",
+        "vodafone": "IDEA",
+        "vi": "IDEA",
+        "idea": "IDEA",
+        "suzlon energy": "SUZLON",
+        "suzlon": "SUZLON",
+        "cera bank": "CERA",
+        "cera sanitaryware": "CERA",
+        "cera": "CERA",
+        "tata power": "TATAPOWER",
+        "td power": "TDPOWERSYS",
+        "vedanta": "VEDL",
+        "zomato": "ETERNAL",
+        "shriram finance": "SHRIRAMFIN",
+        "shriram": "SHRIRAMFIN",
+        "coal india": "COALINDIA",
+        "l&t": "LT",
+        "larsen": "LT",
+        "m&m": "M&M",
+        "mahindra": "M&M",
+        "sbi": "SBIN",
+        "state bank": "SBIN",
+        "icici bank": "ICICIBANK",
+        "icici": "ICICIBANK",
+        "hdfc bank": "HDFCBANK",
+        "hdfc": "HDFCBANK",
+        "axis bank": "AXISBANK",
+        "kotak bank": "KOTAKBANK",
+        "kotak": "KOTAKBANK",
+        "bajaj finance": "BAJFINANCE",
+        "bajaj finserv": "BAJAJFINSV",
+        "tcs": "TCS",
+        "tata consultancy": "TCS",
+        "infosys": "INFY",
+        "wipro": "WIPRO",
+        "hcl tech": "HCLTECH",
+        "tech mahindra": "TECHM",
+        "reliance": "RELIANCE",
+        "reliance industries": "RELIANCE",
+        "tata motors": "TATAMOTORS",
+        "tata steel": "TATASTEEL",
+        "maruti": "MARUTI",
+        "maruti suzuki": "MARUTI",
+        "itc": "ITC",
+        "adani enterprises": "ADANIENT",
+        "adani ent": "ADANIENT",
+        "adani ports": "ADANIPORTS",
+        "power grid": "POWERGRID",
+        "ntpc": "NTPC",
+        "ongc": "ONGC",
+        "bpcl": "BPCL",
+        "indian oil": "IOC",
+        "ioc": "IOC",
+        "gail": "GAIL",
+        "sun pharma": "SUNPHARMA",
+        "dr reddy": "DRREDDY",
+        "dr reddys": "DRREDDY",
+        "cipla": "CIPLA",
+        "divis labs": "DIVISLAB",
+        "apollo hospitals": "APOLLOHOSP",
+        "asian paints": "ASIANPAINT",
+        "nestle": "NESTLEIND",
+        "hindustan unilever": "HINDUNILVR",
+        "hul": "HINDUNILVR",
+        "britannia": "BRITANNIA",
+        "ultratech cement": "ULTRACEMCO",
+        "ultratech": "ULTRACEMCO",
+        "grasim": "GRASIM",
+        "jsw steel": "JSWSTEEL",
+        "hindalco": "HINDALCO",
+        "eicher motors": "EICHERMOT",
+        "eicher": "EICHERMOT",
+        "hero motocorp": "HEROMOTOCO",
+        "hero": "HEROMOTOCO",
+        "bajaj auto": "BAJAJ-AUTO",
+        "tvs motor": "TVSMOTOR",
+        "tvs": "TVSMOTOR",
+        "bharat electronics": "BEL",
+        "bel": "BEL",
+        "hindustan aeronautics": "HAL",
+        "hal": "HAL",
+    }
+    
+    results = []
+    for time_str, stock_name in merged_stocks:
+        name_lower = stock_name.lower().strip()
+        
+        symbol = None
+        for key, sym in SYMBOL_MAP.items():
+            if key in name_lower or name_lower in key:
+                symbol = sym
+                break
+        
+        if not symbol:
+            symbol = stock_name.upper().replace(" ", "").replace(".", "")[:15]
+        
+        results.append({
+            "stock_name": stock_name,
+            "stock_symbol": symbol,
+            "start_time": time_str
+        })
+    
+    return results
 
 
 def validate_and_format_csv(stocks):
