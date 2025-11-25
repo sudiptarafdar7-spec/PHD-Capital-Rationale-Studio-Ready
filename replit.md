@@ -46,6 +46,17 @@ The application maintains a clear separation between a React-based frontend and 
     - **File Storage**: Secure server-side storage using UUID-based filenames.
     - **Deployment**: Optimized for VPS environments with automated setup, including git safe directory configurations.
 
+## AI Configuration
+- **Centralized Configuration**: `backend/utils/openai_config.py` provides unified OpenAI settings
+- **Model**: GPT-4o (OpenAI's most advanced model) with expert financial analyst persona
+- **Expert Persona**: All AI responses behave as a SEBI-registered Research Analyst with 15+ years of experience
+- **Pipeline Integration**:
+    - Step 8 (Stock Extraction): Uses `get_stock_extraction_prompt()` for accurate NSE symbol mapping
+    - Step 12 (Analysis Extraction): Uses `get_analysis_extraction_prompt()` for professional rationale extraction
+    - Premium Step 1 (CSV Generation): Uses `get_premium_csv_prompt()` for structured stock call parsing
+    - Premium Step 7 (Analysis Generation): Uses `get_premium_analysis_prompt()` for SEBI-compliant investment rationales
+- **Temperature Settings**: 0.0-0.3 for extraction tasks, 0.5-0.7 for analysis generation
+
 ## External Dependencies
 - **Database**: PostgreSQL (via Neon)
 - **Authentication**: Flask-JWT-Extended, bcrypt
@@ -55,7 +66,7 @@ The application maintains a clear separation between a React-based frontend and 
 - **Data Processing**: pandas, numpy, rapidfuzz
 - **Translation**: Google Cloud Translation API
 - **UI Icons**: Lucide React
-- **AI Analysis**: OpenAI API (GPT-4o)
+- **AI Analysis**: OpenAI API (GPT-4o) with centralized expert analyst configuration
 - **Financial Data**: Dhan API, Yahoo Finance
 - **PDF Generation**: ReportLab
 - **Image Processing**: Pillow (PIL)
