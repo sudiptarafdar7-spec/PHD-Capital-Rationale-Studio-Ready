@@ -11,34 +11,21 @@ def is_admin(user_id):
 @dashboard_bp.route('', methods=['GET'])
 @jwt_required()
 def get_dashboard_data():
-    """Get dashboard statistics and recent jobs"""
+    """Get dashboard statistics and recent jobs - shows ALL jobs for ALL users"""
     try:
         user_id = get_jwt_identity()
-        user_is_admin = is_admin(user_id)
         
         with get_db_cursor() as cursor:
-            # Get stats - admin sees all, employee sees only their own
-            if user_is_admin:
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as total_jobs,
-                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_jobs,
-                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_jobs,
-                        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as running_jobs,
-                        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_jobs
-                    FROM jobs
-                """)
-            else:
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as total_jobs,
-                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_jobs,
-                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_jobs,
-                        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as running_jobs,
-                        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_jobs
-                    FROM jobs
-                    WHERE user_id = %s
-                """, (user_id,))
+            # Get stats for ALL jobs (all users can see all jobs)
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total_jobs,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_jobs,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_jobs,
+                    SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as running_jobs,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_jobs
+                FROM jobs
+            """)
             
             stats_row = cursor.fetchone()
             
@@ -62,13 +49,9 @@ def get_dashboard_data():
             limit = int(request.args.get('limit', 20))
             offset = int(request.args.get('offset', 0))
             
-            # Build query - admin sees all jobs, employee sees only their own
-            if user_is_admin:
-                where_conditions = ['1=1']
-                query_params = []
-            else:
-                where_conditions = ['j.user_id = %s']
-                query_params = [user_id]
+            # Build query - show ALL jobs for ALL users
+            where_conditions = ['1=1']
+            query_params = []
             
             # Search filter
             if search_query:
@@ -198,34 +181,19 @@ def get_dashboard_data():
 @dashboard_bp.route('/stats', methods=['GET'])
 @jwt_required()
 def get_dashboard_stats():
-    """Get dashboard statistics only"""
+    """Get dashboard statistics only - shows ALL jobs for ALL users"""
     try:
-        user_id = get_jwt_identity()
-        user_is_admin = is_admin(user_id)
-        
         with get_db_cursor() as cursor:
-            # Admin sees all stats, employee sees only their own
-            if user_is_admin:
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as total_jobs,
-                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_jobs,
-                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_jobs,
-                        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as running_jobs,
-                        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_jobs
-                    FROM jobs
-                """)
-            else:
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as total_jobs,
-                        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_jobs,
-                        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_jobs,
-                        SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as running_jobs,
-                        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_jobs
-                    FROM jobs
-                    WHERE user_id = %s
-                """, (user_id,))
+            # Get stats for ALL jobs (all users can see all jobs)
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as total_jobs,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_jobs,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_jobs,
+                    SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as running_jobs,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_jobs
+                FROM jobs
+            """)
             
             stats_row = cursor.fetchone()
             
