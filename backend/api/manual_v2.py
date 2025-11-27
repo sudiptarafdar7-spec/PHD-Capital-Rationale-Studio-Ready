@@ -209,7 +209,7 @@ def save_job(job_id):
     try:
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("""
-                SELECT channel_id, title, date, folder_path, status
+                SELECT channel_id, title, date, folder_path, status, payload
                 FROM jobs WHERE id = %s
             """, (job_id,))
             job = cursor.fetchone()
@@ -220,7 +220,9 @@ def save_job(job_id):
             if job['status'] != 'pdf_ready':
                 return jsonify({'error': 'Job is not ready to be saved'}), 400
             
-            # Get PDF path from Step 3 (Generate PDF) output_files
+            pdf_path = None
+            
+            # Method 1: Get PDF path from Step 3 output_files
             cursor.execute("""
                 SELECT output_files 
                 FROM job_steps 
@@ -228,13 +230,30 @@ def save_job(job_id):
             """, (job_id,))
             step_result = cursor.fetchone()
             
-            if not step_result or not step_result['output_files']:
-                return jsonify({'error': 'PDF not found. Please generate PDF first.'}), 404
+            if step_result and step_result['output_files']:
+                pdf_path = step_result['output_files'][0]
             
-            pdf_path = step_result['output_files'][0]
+            # Method 2: Fallback to payload pdf_filename
+            if not pdf_path or not os.path.exists(pdf_path):
+                payload = job.get('payload', {})
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                pdf_filename = payload.get('pdf_filename')
+                if pdf_filename:
+                    pdf_path = os.path.join(job['folder_path'], 'pdf', pdf_filename)
             
-            if not os.path.exists(pdf_path):
-                return jsonify({'error': 'PDF file not found on disk'}), 404
+            # Method 3: Fallback to finding latest PDF in folder
+            if not pdf_path or not os.path.exists(pdf_path):
+                pdf_folder = os.path.join(job['folder_path'], 'pdf')
+                if os.path.exists(pdf_folder):
+                    pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf')]
+                    if pdf_files:
+                        # Get most recent PDF
+                        pdf_files.sort(key=lambda x: os.path.getmtime(os.path.join(pdf_folder, x)), reverse=True)
+                        pdf_path = os.path.join(pdf_folder, pdf_files[0])
+            
+            if not pdf_path or not os.path.exists(pdf_path):
+                return jsonify({'error': 'PDF file not found. Please generate PDF first.'}), 404
             
             cursor.execute("""
                 SELECT id FROM saved_rationale WHERE job_id = %s
