@@ -5,7 +5,11 @@
 # Domain: researchrationale.in
 # GitHub: https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready.git
 #
-# Usage: bash deploy.sh
+# This script handles both:
+# - FRESH INSTALL: Creates database, users, everything from scratch
+# - UPGRADE: Preserves all existing data, only updates code and schema
+#
+# Usage: sudo bash deploy.sh
 #
 
 set -e
@@ -16,7 +20,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Server IP: 72.60.111.9"
 echo "  Domain: researchrationale.in"
 echo "  OS: Ubuntu 24.04 LTS"
-echo "  Project Folder: rationale-studio"
+echo "  Timestamp: $(date)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -30,18 +34,80 @@ fi
 
 # Configuration
 PROJECT_DIR="/var/www/rationale-studio"
+BACKUP_DIR="/var/www/rationale-studio-backups"
 DOMAIN="researchrationale.in"
 GITHUB_REPO="https://github.com/sudiptarafdar7-spec/PHD-Capital-Rationale-Studio-Ready.git"
 DB_NAME="phd_rationale_db"
 DB_USER="phd_user"
 DB_PASSWORD="ChangeMeToSecurePassword123!"
 
+# ═══════════════════════════════════════════════════════════
+# DETECT INSTALLATION TYPE
+# ═══════════════════════════════════════════════════════════
+IS_UPGRADE=false
+EXISTING_ENV=""
+
+if [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/.env" ]; then
+    IS_UPGRADE=true
+    EXISTING_ENV="$PROJECT_DIR/.env"
+    echo "🔄 UPGRADE MODE DETECTED"
+    echo "   Existing installation found at $PROJECT_DIR"
+    echo "   Your data will be PRESERVED!"
+    echo ""
+    
+    # Read existing database password from .env
+    if grep -q "DATABASE_URL" "$EXISTING_ENV"; then
+        DB_PASSWORD=$(grep "DATABASE_URL" "$EXISTING_ENV" | sed 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/')
+        echo "   ✅ Using existing database credentials"
+    fi
+else
+    echo "🆕 FRESH INSTALL MODE"
+    echo "   Installing to $PROJECT_DIR"
+    echo ""
+fi
+
 echo "📋 Configuration:"
 echo "   Project Directory: $PROJECT_DIR"
 echo "   Domain: $DOMAIN"
 echo "   Database: $DB_NAME"
 echo "   Repository: $GITHUB_REPO"
+echo "   Mode: $([ "$IS_UPGRADE" = true ] && echo "UPGRADE (data preserved)" || echo "FRESH INSTALL")"
 echo ""
+
+# ═══════════════════════════════════════════════════════════
+# STEP 0: Backup Existing Data (UPGRADE MODE ONLY)
+# ═══════════════════════════════════════════════════════════
+if [ "$IS_UPGRADE" = true ]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "💾 STEP 0: Backing Up Existing Data"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    mkdir -p "$BACKUP_DIR"
+    
+    # Backup database
+    if sudo -u postgres pg_dump "$DB_NAME" > "$BACKUP_DIR/db_backup_$TIMESTAMP.sql" 2>/dev/null; then
+        echo "   ✅ Database backed up: $BACKUP_DIR/db_backup_$TIMESTAMP.sql"
+    fi
+    
+    # Backup .env
+    cp "$EXISTING_ENV" "$BACKUP_DIR/.env_backup_$TIMESTAMP"
+    echo "   ✅ Environment file backed up"
+    
+    # Backup uploaded files
+    if [ -d "$PROJECT_DIR/backend/uploaded_files" ]; then
+        cp -r "$PROJECT_DIR/backend/uploaded_files" "$BACKUP_DIR/uploaded_files_$TIMESTAMP" 2>/dev/null || true
+        echo "   ✅ Uploaded files backed up"
+    fi
+    
+    # Backup channel logos
+    if [ -d "$PROJECT_DIR/backend/channel_logos" ]; then
+        cp -r "$PROJECT_DIR/backend/channel_logos" "$BACKUP_DIR/channel_logos_$TIMESTAMP" 2>/dev/null || true
+        echo "   ✅ Channel logos backed up"
+    fi
+    
+    echo ""
+fi
 
 # ═══════════════════════════════════════════════════════════
 # STEP 1: Update System & Install Base Dependencies
@@ -138,7 +204,7 @@ else
     echo "   ✅ yt-dlp updated to latest version"
 fi
 
-# ═════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 # STEP 6: Setup PostgreSQL Database
 # ═══════════════════════════════════════════════════════════
 echo ""
@@ -150,28 +216,62 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 systemctl start postgresql
 systemctl enable postgresql 2>/dev/null || true
 
-# Create database and user
-sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\";" 2>/dev/null || echo "   ℹ️  Database already exists"
-sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null || echo "   ℹ️  User already exists"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE \"$DB_NAME\" TO $DB_USER;" 2>/dev/null
-sudo -u postgres psql -c "ALTER DATABASE \"$DB_NAME\" OWNER TO $DB_USER;" 2>/dev/null
-
-echo "   ✅ PostgreSQL database configured"
-echo "      Database: $DB_NAME"
-echo "      User: $DB_USER"
+if [ "$IS_UPGRADE" = true ]; then
+    echo "   ℹ️  Upgrade mode: Preserving existing database"
+    echo "   ✅ Database preserved: $DB_NAME"
+else
+    # Fresh install: Create database and user
+    sudo -u postgres psql -c "CREATE DATABASE \"$DB_NAME\";" 2>/dev/null || echo "   ℹ️  Database already exists"
+    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';" 2>/dev/null || echo "   ℹ️  User already exists"
+    sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE \"$DB_NAME\" TO $DB_USER;" 2>/dev/null
+    sudo -u postgres psql -c "ALTER DATABASE \"$DB_NAME\" OWNER TO $DB_USER;" 2>/dev/null
+    
+    # Grant schema permissions
+    sudo -u postgres psql -d "$DB_NAME" -c "GRANT ALL ON SCHEMA public TO $DB_USER;" 2>/dev/null || true
+    sudo -u postgres psql -d "$DB_NAME" -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;" 2>/dev/null || true
+    
+    echo "   ✅ PostgreSQL database configured"
+    echo "      Database: $DB_NAME"
+    echo "      User: $DB_USER"
+fi
 
 # ═══════════════════════════════════════════════════════════
 # STEP 7: Clone/Update Application from GitHub
 # ═══════════════════════════════════════════════════════════
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "📥 STEP 7/11: Cloning Application from GitHub"
+echo "📥 STEP 7/11: Getting Application Code from GitHub"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Save existing files before code update
+SAVED_ENV=""
+SAVED_UPLOADS=""
+SAVED_LOGOS=""
+SAVED_JOBS=""
+
+if [ "$IS_UPGRADE" = true ]; then
+    # Save important directories
+    if [ -f "$PROJECT_DIR/.env" ]; then
+        SAVED_ENV=$(cat "$PROJECT_DIR/.env")
+    fi
+    if [ -d "$PROJECT_DIR/backend/uploaded_files" ]; then
+        mkdir -p /tmp/rationale_upgrade
+        cp -r "$PROJECT_DIR/backend/uploaded_files" /tmp/rationale_upgrade/ 2>/dev/null || true
+        SAVED_UPLOADS="/tmp/rationale_upgrade/uploaded_files"
+    fi
+    if [ -d "$PROJECT_DIR/backend/channel_logos" ]; then
+        cp -r "$PROJECT_DIR/backend/channel_logos" /tmp/rationale_upgrade/ 2>/dev/null || true
+        SAVED_LOGOS="/tmp/rationale_upgrade/channel_logos"
+    fi
+    if [ -d "$PROJECT_DIR/backend/job_files" ]; then
+        cp -r "$PROJECT_DIR/backend/job_files" /tmp/rationale_upgrade/ 2>/dev/null || true
+        SAVED_JOBS="/tmp/rationale_upgrade/job_files"
+    fi
+fi
 
 if [ -d "$PROJECT_DIR" ]; then
     echo "   ℹ️  Project directory exists, updating..."
     cd "$PROJECT_DIR"
-    # Configure git safe directory to avoid ownership issues
     git config --global --add safe.directory "$PROJECT_DIR"
     git fetch origin
     git reset --hard origin/main
@@ -189,7 +289,43 @@ cd "$PROJECT_DIR"
 # Configure git safe directory for future operations
 git config --global --add safe.directory "$PROJECT_DIR"
 
-# Create necessary directories
+# Restore saved files
+if [ "$IS_UPGRADE" = true ]; then
+    echo "   📁 Restoring preserved files..."
+    
+    # Restore .env
+    if [ -n "$SAVED_ENV" ]; then
+        echo "$SAVED_ENV" > .env
+        chmod 600 .env
+        echo "   ✅ Environment file restored"
+    fi
+    
+    # Restore uploaded files
+    if [ -d "$SAVED_UPLOADS" ]; then
+        rm -rf backend/uploaded_files 2>/dev/null || true
+        cp -r "$SAVED_UPLOADS" backend/uploaded_files
+        echo "   ✅ Uploaded files restored"
+    fi
+    
+    # Restore channel logos
+    if [ -d "$SAVED_LOGOS" ]; then
+        rm -rf backend/channel_logos 2>/dev/null || true
+        cp -r "$SAVED_LOGOS" backend/channel_logos
+        echo "   ✅ Channel logos restored"
+    fi
+    
+    # Restore job files
+    if [ -d "$SAVED_JOBS" ]; then
+        rm -rf backend/job_files 2>/dev/null || true
+        cp -r "$SAVED_JOBS" backend/job_files
+        echo "   ✅ Job files restored"
+    fi
+    
+    # Cleanup temp files
+    rm -rf /tmp/rationale_upgrade 2>/dev/null || true
+fi
+
+# Create necessary directories (if they don't exist)
 mkdir -p backend/uploaded_files backend/job_files backend/channel_logos
 
 echo "   ✅ Application code ready"
@@ -220,7 +356,7 @@ pip install -r requirements.txt --quiet
 
 deactivate
 
-echo "   ✅ Python environment configured (66 packages installed)"
+echo "   ✅ Python environment configured"
 
 # ═══════════════════════════════════════════════════════════
 # STEP 9: Build React Frontend
@@ -241,18 +377,19 @@ npm run build
 echo "   ✅ React frontend built successfully"
 
 # ═══════════════════════════════════════════════════════════
-# STEP 10: Initialize Database & Create Admin User
+# STEP 10: Initialize/Update Database Schema & Admin User
 # ═══════════════════════════════════════════════════════════
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "👤 STEP 10/11: Creating Admin User"
+echo "🗄️  STEP 10/11: Database Schema & Admin Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Create environment file first
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-JWT_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+if [ "$IS_UPGRADE" = false ]; then
+    # Fresh install: Create environment file
+    SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+    JWT_SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 
-cat > .env << ENVEOF
+    cat > .env << ENVEOF
 # Flask Configuration
 SECRET_KEY=$SECRET_KEY
 JWT_SECRET_KEY=$JWT_SECRET_KEY
@@ -266,24 +403,32 @@ PGUSER=$DB_USER
 PGPASSWORD=$DB_PASSWORD
 ENVEOF
 
-chmod 600 .env
+    chmod 600 .env
+    echo "   ✅ Environment file created"
+fi
 
-# Run seed script to create admin user
-echo "   📦 Creating database tables and admin user..."
+# Export environment variables
+export $(grep -v '^#' .env | xargs)
+
 source venv/bin/activate
 
-# Export environment variables for the seed script
-export DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@localhost/$DB_NAME"
-export PGHOST=localhost
-export PGPORT=5432
-export PGDATABASE=$DB_NAME
-export PGUSER=$DB_USER
-export PGPASSWORD=$DB_PASSWORD
+# Run database migration (safe for both fresh install and upgrade)
+if [ -f "backend/migrations/run_migration.py" ]; then
+    echo "   📋 Running database schema migration..."
+    python3.11 backend/migrations/run_migration.py 2>&1 | grep -E "(✓|✅|Updated|Added|completed|Warning)" || true
+    echo "   ✅ Database schema updated"
+fi
 
-python3.11 -m backend.seed_data
+if [ "$IS_UPGRADE" = false ]; then
+    # Fresh install: Run seed script to create admin user
+    echo "   📦 Creating admin user..."
+    python3.11 -m backend.seed_data
+    echo "   ✅ Admin user created"
+else
+    echo "   ℹ️  Upgrade mode: Existing users preserved"
+fi
+
 deactivate
-
-echo "   ✅ Admin user created successfully"
 
 # ═══════════════════════════════════════════════════════════
 # STEP 11: Setup Systemd Service & Nginx
@@ -320,6 +465,7 @@ SERVICEEOF
 # Set correct permissions
 chown -R www-data:www-data "$PROJECT_DIR"
 chmod -R 755 "$PROJECT_DIR"
+chmod 600 .env
 
 # Configure Nginx
 cat > /etc/nginx/sites-available/rationale-studio << 'NGINXEOF'
@@ -363,26 +509,45 @@ echo "   ✅ Nginx configured and reloaded"
 # ═══════════════════════════════════════════════════════════
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ DEPLOYMENT COMPLETE!"
+if [ "$IS_UPGRADE" = true ]; then
+    echo "✅ UPGRADE COMPLETE! (All data preserved)"
+else
+    echo "✅ FRESH DEPLOYMENT COMPLETE!"
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "🌐 Application URLs:"
 echo "   HTTP:  http://researchrationale.in"
 echo "   HTTP:  http://72.60.111.9"
 echo ""
-echo "🔑 Login Credentials:"
-echo "   Admin Email:    admin@phdcapital.in"
-echo "   Admin Password: admin123"
-echo ""
-echo "   Employee Email:    rajesh@phdcapital.in"
-echo "   Employee Password: employee123"
-echo ""
-echo "⚠️  IMPORTANT: Configure API Keys"
-echo "   After logging in, go to Admin Panel > API Keys and add:"
-echo "   • OpenAI API Key (for GPT-4 analysis)"
-echo "   • Dhan API Key (for stock data)"
-echo "   • AssemblyAI API Key (for transcription)"
-echo "   • Google Cloud JSON (for translation)"
+
+if [ "$IS_UPGRADE" = true ]; then
+    echo "📋 Upgrade Summary:"
+    echo "   • Code updated from GitHub"
+    echo "   • Python dependencies updated"
+    echo "   • Frontend rebuilt"
+    echo "   • Database schema migrated"
+    echo "   • All user data PRESERVED"
+    echo "   • All uploaded files PRESERVED"
+    echo "   • All API keys PRESERVED"
+    echo ""
+    echo "💾 Backups saved to: $BACKUP_DIR"
+else
+    echo "🔑 Login Credentials:"
+    echo "   Admin Email:    admin@phdcapital.in"
+    echo "   Admin Password: admin123"
+    echo ""
+    echo "   Employee Email:    rajesh@phdcapital.in"
+    echo "   Employee Password: employee123"
+    echo ""
+    echo "⚠️  IMPORTANT: Configure API Keys"
+    echo "   After logging in, go to Admin Panel > API Keys and add:"
+    echo "   • OpenAI API Key (for GPT-4 analysis)"
+    echo "   • Gemini API Key (for stock extraction)"
+    echo "   • Dhan API Key (for stock data)"
+    echo "   • AssemblyAI API Key (for transcription)"
+    echo "   • Google Cloud JSON (for translation)"
+fi
 echo ""
 echo "📋 Useful Commands:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -397,7 +562,7 @@ echo "Restart application:"
 echo "  systemctl restart phd-capital"
 echo ""
 echo "Update application (after git push):"
-echo "  cd /var/www/rationale-studio && bash deployment/update.sh"
+echo "  cd /var/www/rationale-studio && sudo bash deployment/update.sh"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
