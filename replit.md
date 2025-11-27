@@ -64,6 +64,8 @@ The application maintains a clear separation between a React-based frontend and 
         - **Intelligent Spelling Correction**: 50+ transcription error mappings (Suzuelon→Suzlon, Sujalan→Suzlon, etc.)
         - **Google Search Grounding**: For unclear transcription errors (Cera Bank, Wari, NIBA), uses Gemini with Google Search to find correct NSE stock names
         - **Symbol Normalization**: Deduplication and standardization of NSE symbols
+        - **CSV Review Pause**: Pipeline pauses after Step 8 for extracted_stocks.csv review (download, edit, upload)
+    - Step 12 (Analysis Extraction): Pipeline pauses for stocks_with_analysis.csv review before chart generation
     - Step 12 (Analysis Extraction): Uses OpenAI GPT-4o with `get_analysis_extraction_prompt()` for professional rationale extraction
     - Premium Step 1 (CSV Generation): Uses OpenAI GPT-4o with `get_premium_csv_prompt()` for structured stock call parsing
     - Premium Step 7 (Analysis Generation): Uses OpenAI GPT-4o with `get_premium_analysis_prompt()` for SEBI-compliant investment rationales

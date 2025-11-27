@@ -165,23 +165,23 @@ def start_analysis():
                         WHERE id = %s
                     """, (datetime.now(), job_id))
                 
-                # Run pipeline steps 1-12 (pause after Step 12 for CSV review)
+                # Run pipeline steps 1-8 (pause after Step 8 for extracted stocks review)
                 all_success = True
-                for step_num in range(1, 13):  # Run steps 1 to 12
+                for step_num in range(1, 9):  # Run steps 1 to 8
                     success = run_pipeline_step(job_id, step_num)
                     if not success:
                         all_success = False
                         break
                 
-                # After Step 12 completes successfully, pause and set status to 'awaiting_csv_review'
+                # After Step 8 completes successfully, pause for extracted stocks CSV review
                 if all_success:
                     with get_db_cursor(commit=True) as cursor:
                         cursor.execute("""
                             UPDATE jobs 
-                            SET status = 'awaiting_csv_review', progress = 80, updated_at = %s
+                            SET status = 'awaiting_step8_review', progress = 55, updated_at = %s
                             WHERE id = %s
                         """, (datetime.now(), job_id))
-                    print(f"Job {job_id}: Paused after Step 12 for CSV review")
+                    print(f"Job {job_id}: Paused after Step 8 for extracted stocks review")
                 
             except Exception as e:
                 print(f"Pipeline error for job {job_id}: {str(e)}")
@@ -1124,36 +1124,27 @@ def step8_continue_pipeline(job_id):
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("""
                 UPDATE jobs 
-                SET status = 'processing', updated_at = %s
+                SET status = 'processing', current_step = 9, updated_at = %s
                 WHERE id = %s
             """, (datetime.now(), job_id))
         
         # Continue pipeline from Step 9 in background thread
         def run_remaining_steps():
             try:
-                # Run Steps 9 through 14
-                for step_num in range(9, 15):
+                # Run Steps 9 through 12 only (pause at Step 12 for analysis CSV review)
+                for step_num in range(9, 13):  # Steps 9, 10, 11, 12
                     success = run_pipeline_step(job_id, step_num)
                     if not success:
                         return
-                    
-                    # After Step 12 completes, pause for CSV review
-                    if step_num == 12:
-                        with get_db_cursor(commit=True) as cursor:
-                            cursor.execute("""
-                                UPDATE jobs 
-                                SET status = 'awaiting_csv_review', updated_at = %s
-                                WHERE id = %s
-                            """, (datetime.now(), job_id))
-                        return  # Stop here and wait for user to continue
                 
-                # After Step 14 completes, set status to pdf_ready
+                # After Step 12 completes, pause for analysis CSV review
                 with get_db_cursor(commit=True) as cursor:
                     cursor.execute("""
                         UPDATE jobs 
-                        SET status = 'pdf_ready', progress = 93, updated_at = %s
+                        SET status = 'awaiting_csv_review', progress = 80, updated_at = %s
                         WHERE id = %s
                     """, (datetime.now(), job_id))
+                print(f"Job {job_id}: Paused after Step 12 for analysis CSV review")
                 
             except Exception as e:
                 print(f"Error continuing pipeline from Step 9 for job {job_id}: {str(e)}")
