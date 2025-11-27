@@ -59,9 +59,9 @@ def create_job():
         
         # Get platform name from channel
         with get_db_cursor() as cursor:
-            cursor.execute("SELECT name FROM channels WHERE id = %s", (channel_id,))
+            cursor.execute("SELECT channel_name FROM channels WHERE id = %s", (channel_id,))
             channel = cursor.fetchone()
-            platform_name = channel['name'] if channel else 'Unknown'
+            platform_name = channel['channel_name'] if channel else 'Unknown'
         
         # Format date for title: DD-MM-YYYY
         try:
