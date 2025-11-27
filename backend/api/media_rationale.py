@@ -36,9 +36,18 @@ def _job_path(job_id, *parts):
     """
     Helper to build absolute path to job file.
     Composes relative path and resolves to absolute path.
+    Raises ValueError if path cannot be resolved.
     """
+    if not job_id:
+        raise ValueError(f"Invalid job_id: {job_id}")
+    
     relative_path = os.path.join('backend', 'job_files', job_id, *parts)
-    return resolve_job_folder_path(relative_path)
+    resolved = resolve_job_folder_path(relative_path)
+    
+    if resolved is None:
+        raise ValueError(f"Could not resolve path for job {job_id}: {relative_path}")
+    
+    return resolved
 
 @media_rationale_bp.route('/fetch-video', methods=['POST'])
 @jwt_required()
