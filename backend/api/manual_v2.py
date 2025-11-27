@@ -200,10 +200,21 @@ def save_job(job_id):
             if job['status'] != 'pdf_ready':
                 return jsonify({'error': 'Job is not ready to be saved'}), 400
             
-            pdf_path = os.path.join(job['folder_path'], 'pdf', 'premium_rationale.pdf')
+            # Get PDF path from Step 3 (Generate PDF) output_files
+            cursor.execute("""
+                SELECT output_files 
+                FROM job_steps 
+                WHERE job_id = %s AND step_number = 3 AND status = 'success'
+            """, (job_id,))
+            step_result = cursor.fetchone()
+            
+            if not step_result or not step_result['output_files']:
+                return jsonify({'error': 'PDF not found. Please generate PDF first.'}), 404
+            
+            pdf_path = step_result['output_files'][0]
             
             if not os.path.exists(pdf_path):
-                return jsonify({'error': 'PDF file not found'}), 404
+                return jsonify({'error': 'PDF file not found on disk'}), 404
             
             cursor.execute("""
                 SELECT id FROM saved_rationale WHERE job_id = %s
