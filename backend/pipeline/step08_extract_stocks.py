@@ -1153,7 +1153,7 @@ def run(job_folder):
         cursor.close()
         conn.close()
 
-        if not result:
+        if not result or not result[0]:
             return {
                 'status':
                 'failed',
@@ -1161,7 +1161,15 @@ def run(job_folder):
                 'Gemini API key not found. Please add it in Settings → API Keys → Gemini'
             }
 
-        gemini_api_key = result[0].strip()
+        gemini_api_key = result[0].strip() if result[0] else None
+        
+        if not gemini_api_key:
+            return {
+                'status':
+                'failed',
+                'message':
+                'Gemini API key is empty. Please update it in Settings → API Keys → Gemini'
+            }
         model_name = get_gemini_model()
 
         print(
