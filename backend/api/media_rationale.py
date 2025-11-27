@@ -390,13 +390,30 @@ def restart_step(job_id, step_number):
         # Restart pipeline execution from the specified step in background thread
         def run_pipeline_from_step():
             try:
-                # Determine the end step based on the start step
-                # If restarting from Step 12 or earlier, pause after Step 12 for CSV review
-                # If restarting from Step 13 or later, run to completion
-                if step_number <= 12:
+                # Determine the end step and pause point based on the start step
+                # Pipeline pause points:
+                # - After Step 8: awaiting_step8_review (extracted_stocks.csv review)
+                # - After Step 12: awaiting_csv_review (stocks_with_analysis.csv review)
+                # - After Step 14: pdf_ready
+                
+                if step_number <= 8:
+                    # Run up to Step 8, then pause for extracted_stocks.csv review
+                    end_step = 9  # Run up to (but not including) Step 9
+                    pause_status = 'awaiting_step8_review'
+                    pause_progress = 55
+                    pause_message = f"Job {job_id}: Paused after Step 8 for extracted stocks review (restarted from step {step_number})"
+                elif step_number <= 12:
+                    # Run up to Step 12, then pause for stocks_with_analysis.csv review
                     end_step = 13  # Run up to (but not including) Step 13
+                    pause_status = 'awaiting_csv_review'
+                    pause_progress = 80
+                    pause_message = f"Job {job_id}: Paused after Step 12 for CSV review (restarted from step {step_number})"
                 else:
-                    end_step = 15  # Run to completion (Step 15 is API-only)
+                    # Run to completion (Steps 13-14)
+                    end_step = 15  # Step 15 is API-only
+                    pause_status = 'pdf_ready'
+                    pause_progress = 93
+                    pause_message = f"✅ Pipeline completed! Job {job_id} status set to 'pdf_ready' (awaiting user action)"
                 
                 # Run pipeline steps
                 all_success = True
@@ -408,24 +425,13 @@ def restart_step(job_id, step_number):
                 
                 # Update job status based on which steps were run
                 if all_success:
-                    if step_number <= 12:
-                        # Paused after Step 12 for CSV review
-                        with get_db_cursor(commit=True) as cursor:
-                            cursor.execute("""
-                                UPDATE jobs 
-                                SET status = 'awaiting_csv_review', progress = 80, updated_at = %s
-                                WHERE id = %s
-                            """, (datetime.now(), job_id))
-                        print(f"Job {job_id}: Paused after Step 12 for CSV review (restarted from step {step_number})")
-                    else:
-                        # Completed Steps 13-14, set to pdf_ready
-                        with get_db_cursor(commit=True) as cursor:
-                            cursor.execute("""
-                                UPDATE jobs 
-                                SET status = 'pdf_ready', progress = 93, updated_at = %s
-                                WHERE id = %s
-                            """, (datetime.now(), job_id))
-                        print(f"✅ Pipeline completed! Job {job_id} status set to 'pdf_ready' (awaiting user action)")
+                    with get_db_cursor(commit=True) as cursor:
+                        cursor.execute("""
+                            UPDATE jobs 
+                            SET status = %s, progress = %s, updated_at = %s
+                            WHERE id = %s
+                        """, (pause_status, pause_progress, datetime.now(), job_id))
+                    print(pause_message)
                         
             except Exception as e:
                 print(f"Pipeline restart error for job {job_id}: {str(e)}")
