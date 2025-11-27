@@ -18,6 +18,7 @@ def is_admin(user_id):
 def get_saved_rationale():
     try:
         current_user_id = get_jwt_identity()
+        user_is_admin = is_admin(current_user_id)
         
         # Get query parameters for filtering
         tool_filter = request.args.get('tool', 'all')
@@ -26,6 +27,7 @@ def get_saved_rationale():
         date_to = request.args.get('dateTo')
         
         with get_db_cursor() as cursor:
+            # Admin sees all rationale, employee sees only their own
             query = """
                 SELECT 
                     sr.id,
@@ -41,12 +43,21 @@ def get_saved_rationale():
                     c.channel_name,
                     c.channel_logo_path,
                     c.platform,
-                    c.channel_url
+                    c.channel_url,
+                    j.user_id,
+                    u.name as creator_name
                 FROM saved_rationale sr
                 LEFT JOIN channels c ON sr.channel_id = c.id
+                LEFT JOIN jobs j ON sr.job_id = j.id
+                LEFT JOIN users u ON j.user_id = u.id
                 WHERE 1=1
             """
             params = []
+            
+            # Non-admin users can only see their own rationale
+            if not user_is_admin:
+                query += " AND j.user_id = %s"
+                params.append(current_user_id)
             
             if tool_filter != 'all':
                 query += " AND sr.tool_used = %s"
@@ -83,6 +94,7 @@ def get_saved_rationale():
 def get_rationale_by_id(rationale_id):
     try:
         current_user_id = get_jwt_identity()
+        user_is_admin = is_admin(current_user_id)
         
         with get_db_cursor() as cursor:
             cursor.execute("""
@@ -100,9 +112,13 @@ def get_rationale_by_id(rationale_id):
                     c.channel_name,
                     c.channel_logo_path,
                     c.platform,
-                    c.channel_url
+                    c.channel_url,
+                    j.user_id,
+                    u.name as creator_name
                 FROM saved_rationale sr
                 LEFT JOIN channels c ON sr.channel_id = c.id
+                LEFT JOIN jobs j ON sr.job_id = j.id
+                LEFT JOIN users u ON j.user_id = u.id
                 WHERE sr.id = %s
             """, (rationale_id,))
             
@@ -110,6 +126,10 @@ def get_rationale_by_id(rationale_id):
             
             if not rationale:
                 return jsonify({'error': 'Rationale not found'}), 404
+            
+            # Non-admin users can only see their own rationale
+            if not user_is_admin and rationale.get('user_id') != current_user_id:
+                return jsonify({'error': 'Access denied'}), 403
             
             return jsonify({
                 'success': True,
@@ -338,19 +358,24 @@ def download_pdf(file_path):
     """Download PDF or CSV files"""
     try:
         current_user_id = get_jwt_identity()
+        user_is_admin = is_admin(current_user_id)
         
-        # Verify the file belongs to user's job
+        # Verify the file belongs to user's job (or user is admin)
         job_id = file_path.split('/')[2] if '/' in file_path else None
         
         if not job_id:
             return jsonify({'error': 'Invalid file path'}), 400
         
         with get_db_cursor() as cursor:
-            cursor.execute("""
-                SELECT j.id
-                FROM jobs j
-                WHERE j.id = %s AND j.user_id = %s
-            """, (job_id, current_user_id))
+            # Admin can access any file, employee can only access their own
+            if user_is_admin:
+                cursor.execute("SELECT id FROM jobs WHERE id = %s", (job_id,))
+            else:
+                cursor.execute("""
+                    SELECT j.id
+                    FROM jobs j
+                    WHERE j.id = %s AND j.user_id = %s
+                """, (job_id, current_user_id))
             
             job = cursor.fetchone()
             
