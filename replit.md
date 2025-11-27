@@ -44,6 +44,7 @@ The application maintains a clear separation between a React-based frontend and 
     - **Database Schema**: Unified `jobs` and `saved_rationale` tables for multi-tool compatibility, alongside tables for `users`, `api_keys`, `pdf_template`, `uploaded_files`, `channels`, `job_steps`, and `activity_logs`.
     - **Status System**: Comprehensive status tracking for jobs and job steps.
     - **File Storage**: Secure server-side storage using UUID-based filenames.
+    - **Cross-Environment Path Resolution**: `resolve_uploaded_file_path()` in `backend/utils/path_utils.py` handles file paths across Replit and VPS deployments by normalizing absolute/relative paths to current workspace.
     - **Deployment**: Optimized for VPS environments with automated setup, including git safe directory configurations.
 
 ## AI Configuration
