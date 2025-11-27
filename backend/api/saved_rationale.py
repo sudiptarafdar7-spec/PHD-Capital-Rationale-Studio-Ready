@@ -148,19 +148,29 @@ def save_rationale():
             if not job:
                 return jsonify({'error': 'Job not found or access denied'}), 404
             
-            # Get Step 14 PDF path
+            # Determine the correct step number based on tool_used
+            # Manual Rationale uses Step 3, Premium Rationale uses Step 8, Media Rationale uses Step 14
+            tool_used = job.get('tool_used', '')
+            if tool_used == 'Manual Rationale':
+                pdf_step_number = 3
+            elif tool_used == 'Premium Rationale':
+                pdf_step_number = 8
+            else:
+                pdf_step_number = 14
+            
+            # Get PDF path from the appropriate step
             cursor.execute("""
                 SELECT output_files 
                 FROM job_steps 
-                WHERE job_id = %s AND step_number = 14 AND status = 'success'
-            """, (job_id,))
+                WHERE job_id = %s AND step_number = %s AND status = 'success'
+            """, (job_id, pdf_step_number))
             
-            step14_result = cursor.fetchone()
+            step_result = cursor.fetchone()
             
-            if not step14_result or not step14_result['output_files']:
+            if not step_result or not step_result['output_files']:
                 return jsonify({'error': 'PDF not found. Please generate PDF first.'}), 400
             
-            unsigned_pdf_path = step14_result['output_files'][0]
+            unsigned_pdf_path = step_result['output_files'][0]
             
             # Check if rationale already exists
             cursor.execute("SELECT id FROM saved_rationale WHERE job_id = %s", (job_id,))
