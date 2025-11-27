@@ -1,21 +1,13 @@
 """
-Step 8: Extract Stock Mentions - Pradip's Analysis Only (Super Accurate)
+Step 8: Extract Stock Mentions - Intelligent Chunk-Based Detection with Gemini
 
-Uses gemini-2.5-pro with thinkingConfig for maximum accuracy.
-
-This step extracts ONLY stocks where Pradip (the analyst) has given his investment analysis:
+This step uses a multi-phase approach:
 1. Split transcript into 4 chunks (ending at Pradip's lines for context preservation)
-2. For each chunk, Gemini extracts ONLY stocks with Pradip's buy/sell/analysis
-3. Fix transcription spelling errors (but don't discover new stocks)
-4. Aggressive deduplication (normalize names, keep earliest time)
-5. Final Gemini call for accurate NSE symbols
+2. For each chunk, Gemini reads line-by-line, word-by-word to detect stocks
+3. Handle transcription spelling errors intelligently
+4. Exclude indices (Nifty, Bank Nifty, Sensex, etc.)
+5. Merge all chunks and run final Gemini for accurate NSE symbols
 6. Output final CSV with STOCK NAME, STOCK SYMBOL, START TIME
-
-Key Rules:
-- ONLY include stocks where Pradip provides investment analysis/recommendation
-- EXCLUDE stocks only mentioned by anchor or in passing
-- FIX transcription errors but DO NOT discover new stocks
-- NO duplicates in final output
 """
 
 import os
@@ -350,8 +342,8 @@ def clean_thinking_response(text):
 
 def extract_stocks_from_chunk(chunk_lines, chunk_num, api_key, model_name):
     """
-    Extract stocks from a single chunk using Gemini REST API.
-    ONLY extracts stocks where Pradip (Analyst) has given investment analysis.
+    Extract stocks from a single chunk using Gemini REST API with word-by-word analysis.
+    Uses structured JSON input/output for reliable parsing.
     Returns list of (time, stock_name) tuples.
     """
     chunk_json = []
@@ -362,71 +354,73 @@ def extract_stocks_from_chunk(chunk_lines, chunk_num, api_key, model_name):
             "text": line['text']
         })
     
-    prompt = f"""**CRITICAL TASK: Extract ONLY Stocks with Pradip's Investment Analysis - Chunk {chunk_num}**
+    prompt = f"""**CRITICAL TASK: Stock Name Detection in Financial TV Transcript - Chunk {chunk_num}**
 
-You are a SEBI-registered Research Analyst extracting stocks from a financial TV transcript.
+You are an expert at identifying Indian stock names in financial transcripts.
+You have deep knowledge of:
+- All NSE/BSE listed companies and their common abbreviations
+- Common transcription errors and how to correct them
+- The difference between company names and market indices
 
-**YOUR SOLE OBJECTIVE:**
-Extract ONLY stocks where **Pradip (the Analyst)** has given his investment analysis, recommendation, or opinion.
+You are analyzing a transcript from an Indian financial TV show where an analyst discusses stocks.
+Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names mentioned.
 
-**STRICT RULES - READ CAREFULLY:**
-
-1. **ONLY INCLUDE** stocks where Pradip (Analyst speaker) provides:
-   - Buy/Sell/Hold recommendation
-   - Target price or stop loss
-   - Investment rationale or analysis
-   - Technical or fundamental opinion
-   - Entry/exit levels
-
-2. **EXCLUDE** these stocks:
-   - Stocks ONLY mentioned by the Anchor (questions, introductions)
-   - Stocks mentioned in passing without Pradip's analysis
-   - Stocks where Pradip only says "I'll discuss later" or similar
-   - Indices: Nifty, Bank Nifty, Sensex, Finnifty, etc.
-
-3. **FIX TRANSCRIPTION ERRORS** for stocks Pradip analyzes:
-   - "Sujour" / "Sujalan" / "Suzelon" → Suzlon Energy
+**IMPORTANT INSTRUCTIONS:**
+1. Read each line carefully, word by word
+2. Detect ALL company/stock names mentioned by BOTH speakers (Anchor and Analyst)
+3. Include these RECENT IPO STOCKS (often discussed):
+   
+4. Use INTELLIGENCE to understand misspelled stock names due to transcription errors:
    - "Swigee" / "Swigi" → Swiggy
    - "Zometo" / "Zomatto" → Zomato
    - "Relayance" → Reliance
    - "Infosis" → Infosys
-   - "Tatta Motors" / "Tatta" → Tata Motors
-   - "Bharti Airtal" / "Airtal" → Bharti Airtel
+   - "Tatta Motors" → Tata Motors
    - "HDFC Benk" → HDFC Bank
+   - "Bajaj Finanse" → Bajaj Finance
+   - "Maruti Suzuky" → Maruti Suzuki
    - "Shriram Finence" → Shriram Finance
    - "Vedenta" → Vedanta
+   - "Bharti Airtal" → Bharti Airtel
    - "Coil India" → Coal India
-   - Use your knowledge for other phonetic variations
+   - "Adani Ent" → Adani Enterprises
+   - "L&T" → Larsen & Toubro
+   - "SBI" → State Bank of India
+   - "ICICI" → ICICI Bank
+   - "TCS" → Tata Consultancy Services
+   - "M&M" → Mahindra & Mahindra
+   - "BEL" → Bharat Electronics
+   - "HAL" → Hindustan Aeronautics
+   - "ITC" → ITC
+   - Similar phonetic/spelling variations
 
-4. **DO NOT DISCOVER NEW STOCKS** - Only extract stocks that are EXPLICITLY mentioned in the transcript
-5. **NO DUPLICATES** - Each stock should appear only ONCE with earliest timestamp
-6. **USE EXACT TIMESTAMP** from the line where Pradip gives his analysis
+5. EXCLUDE these indices (NOT stocks):
+   - Nifty, Bank Nifty, Sensex, Nifty 50, Finnifty
+   - Any index references
 
-**TRANSCRIPT DATA:**
+6. DO NOT skip any stock - even if mentioned briefly or in a question
+7. DO NOT add stocks that were NOT discussed
+8. Use the EXACT timestamp from the input line where the stock is mentioned
+
+**TRANSCRIPT DATA (JSON format):**
 {json.dumps(chunk_json, indent=2)}
 
-**ANALYSIS APPROACH:**
-- Read each Analyst line carefully
-- Ask: "Did Pradip give investment analysis on this stock?"
-- If YES → Include with timestamp
-- If NO (just mentioned, or anchor asked) → Skip
-
-**OUTPUT FORMAT - JSON array ONLY:**
+**OUTPUT FORMAT - Return a JSON array:**
 [
-  {{"time": "HH:MM:SS", "stock": "Corrected Stock Name"}}
+  {{"time": "HH:MM:SS", "stock": "Stock Name"}},
+  {{"time": "HH:MM:SS", "stock": "Stock Name"}}
 ]
 
-Return EMPTY array [] if no stocks with Pradip's analysis found in this chunk.
-Return ONLY the JSON array, no explanations."""
+**IMPORTANT:** Return ONLY the JSON array, no other text. Use exact timestamps from input."""
 
-    # Higher thinking budget for maximum accuracy in Pradip's analysis detection
+    # Use thinking budget for accurate stock detection with spelling correction
     content = call_gemini_api(
         prompt, 
         api_key, 
         model_name, 
-        temperature=0.0,  # Zero temperature for deterministic output
+        temperature=0.1, 
         max_tokens=8192,
-        thinking_budget=8192  # Higher budget for accurate analysis detection
+        thinking_budget=4096  # Medium budget for stock detection
     )
     
     if not content:
@@ -471,60 +465,22 @@ Return ONLY the JSON array, no explanations."""
     return stocks
 
 
-def normalize_stock_name(name):
-    """Normalize stock name for better deduplication."""
-    name = name.lower().strip()
-    # Remove common suffixes
-    suffixes = [' ltd', ' limited', ' industries', ' industry', ' energy', ' power', ' bank', ' finance', ' motors', ' motor']
-    for suffix in suffixes:
-        if name.endswith(suffix):
-            name = name[:-len(suffix)].strip()
-    # Common variations
-    variations = {
-        'tata': 'tata',
-        'suzlon': 'suzlon',
-        'sujlon': 'suzlon',
-        'suzelon': 'suzlon',
-        'adani': 'adani',
-        'reliance': 'reliance',
-        'relayance': 'reliance',
-        'bharti': 'bharti',
-        'airtel': 'bharti',
-        'vodafone': 'vodafone idea',
-        'vi ': 'vodafone idea',
-    }
-    for old, new in variations.items():
-        if old in name:
-            name = name.replace(old, new)
-    return name
-
-
 def merge_and_deduplicate_stocks(all_chunk_stocks):
-    """
-    Merge stocks from all chunks and remove duplicates with aggressive deduplication.
-    Keeps earliest time for each unique stock.
-    """
+    """Merge stocks from all chunks and remove duplicates, keeping earliest time."""
     stock_dict = {}
     
     for time_str, stock_name in all_chunk_stocks:
-        # Use normalized key for deduplication
-        stock_key = normalize_stock_name(stock_name)
+        stock_key = stock_name.lower().strip()
         
         if stock_key not in stock_dict:
             stock_dict[stock_key] = (time_str, stock_name)
         else:
-            # Keep earliest time, prefer longer/more complete name
-            existing_time, existing_name = stock_dict[stock_key]
+            existing_time = stock_dict[stock_key][0]
             if time_str < existing_time:
-                stock_dict[stock_key] = (time_str, stock_name if len(stock_name) >= len(existing_name) else existing_name)
-            elif len(stock_name) > len(existing_name):
-                # Keep the longer/more complete name with existing time
-                stock_dict[stock_key] = (existing_time, stock_name)
+                stock_dict[stock_key] = (time_str, stock_name)
     
     merged = [(v[0], v[1]) for v in stock_dict.values()]
     merged.sort(key=lambda x: x[0])
-    
-    print(f"   🔄 Deduplicated: {len(all_chunk_stocks)} → {len(merged)} unique stocks")
     
     return merged
 
@@ -1085,19 +1041,19 @@ def validate_and_format_csv(stocks, api_key=None):
 
 def run(job_folder):
     """
-    Step 8: Extract Stock Mentions - ONLY stocks where Pradip provides analysis
+    Step 8: Extract Stock Mentions using Intelligent Chunk-Based Detection with Gemini
     
     Process:
     1. Split transcript into 4 chunks (ending at Pradip lines)
-    2. For each chunk, Gemini extracts ONLY stocks with Pradip's investment analysis
-    3. Fix transcription errors (but don't discover new stocks)
-    4. Aggressive deduplication
+    2. For each chunk, Gemini reads word-by-word to detect stocks
+    3. Handle transcription spelling errors intelligently
+    4. Merge all chunks and deduplicate
     5. Final Gemini call for accurate NSE symbols
     6. Output CSV with STOCK NAME, STOCK SYMBOL, START TIME
     """
 
     print("\n" + "=" * 60)
-    print("STEP 8: Extract Stock Mentions (Pradip's Analysis Only)")
+    print("STEP 8: Extract Stock Mentions (Gemini AI - Chunk-Based)")
     print(f"{'='*60}\n")
 
     try:
@@ -1154,7 +1110,7 @@ def run(job_folder):
 
         os.makedirs(chunks_folder, exist_ok=True)
 
-        print("🔍 Phase 1: Extracting ONLY stocks with Pradip's analysis (gemini-2.5-pro)...\n")
+        print("🔍 Phase 1: Extracting stocks from each chunk (word-by-word analysis)...\n")
         all_chunk_stocks = []
 
         for i, chunk in enumerate(chunks, 1):

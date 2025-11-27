@@ -59,14 +59,11 @@ The application maintains a clear separation between a React-based frontend and 
     - `maxOutputTokens`: 8192-16384 for adequate response space
     - Retry logic with exponential backoff (5s, 10s, 20s, 40s) for 429/503 errors
 - **Pipeline Integration**:
-    - Step 8 (Stock Extraction): Uses gemini-2.5-pro with thinkingConfig for **super accurate** extraction
-        - **Pradip's Analysis Only**: Extracts ONLY stocks where Pradip (analyst) provides investment analysis/recommendation
-        - **Excludes**: Stocks only mentioned by anchor, stocks in passing, stocks without analysis
-        - **4-Chunk Processing**: Transcript split into 4 chunks for comprehensive detection
-        - **Aggressive Deduplication**: Name normalization, suffix removal, earliest timestamp preservation
-        - **Transcription Error Fixing**: 50+ error mappings (Suzuelon→Suzlon, etc.) but NO new stock discovery
-        - **Google Search Grounding**: For unclear transcription errors (Cera Bank, Wari), uses Gemini with Google Search
-        - **Symbol Normalization**: Final deduplication by normalized NSE symbol
+    - Step 8 (Stock Extraction): Uses gemini-2.5-pro with thinkingConfig for accurate NSE symbol mapping
+        - **4-Chunk Processing**: Transcript split into 4 chunks for comprehensive stock detection
+        - **Intelligent Spelling Correction**: 50+ transcription error mappings (Suzuelon→Suzlon, Sujalan→Suzlon, etc.)
+        - **Google Search Grounding**: For unclear transcription errors (Cera Bank, Wari, NIBA), uses Gemini with Google Search to find correct NSE stock names
+        - **Symbol Normalization**: Deduplication and standardization of NSE symbols
     - Step 12 (Analysis Extraction): Uses OpenAI GPT-4o with `get_analysis_extraction_prompt()` for professional rationale extraction
     - Premium Step 1 (CSV Generation): Uses OpenAI GPT-4o with `get_premium_csv_prompt()` for structured stock call parsing
     - Premium Step 7 (Analysis Generation): Uses OpenAI GPT-4o with `get_premium_analysis_prompt()` for SEBI-compliant investment rationales
