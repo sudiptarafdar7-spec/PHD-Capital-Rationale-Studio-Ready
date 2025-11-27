@@ -93,7 +93,7 @@ def get_dashboard_data():
                     c.channel_name,
                     j.created_at,
                     j.updated_at,
-                    u.name as creator_name
+                    CONCAT(u.first_name, ' ', u.last_name) as creator_name
                 FROM jobs j
                 LEFT JOIN channels c ON j.channel_id = c.id
                 LEFT JOIN users u ON j.user_id = u.id
