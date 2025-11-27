@@ -45,7 +45,7 @@ def get_saved_rationale():
                     c.platform,
                     c.channel_url,
                     j.user_id,
-                    u.name as creator_name
+                    CONCAT(u.first_name, ' ', u.last_name) as creator_name
                 FROM saved_rationale sr
                 LEFT JOIN channels c ON sr.channel_id = c.id
                 LEFT JOIN jobs j ON sr.job_id = j.id
@@ -114,7 +114,7 @@ def get_rationale_by_id(rationale_id):
                     c.platform,
                     c.channel_url,
                     j.user_id,
-                    u.name as creator_name
+                    CONCAT(u.first_name, ' ', u.last_name) as creator_name
                 FROM saved_rationale sr
                 LEFT JOIN channels c ON sr.channel_id = c.id
                 LEFT JOIN jobs j ON sr.job_id = j.id
