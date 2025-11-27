@@ -1024,16 +1024,8 @@ export default function ManualRationalePage({ selectedJobId, onNavigate }: Manua
           <div className="flex flex-col">
             {workflowStage === 'input' ? (
               <>
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4">
                   <h3 className="text-foreground">Stock Details</h3>
-                  <Button
-                    onClick={addStockDetail}
-                    size="sm"
-                    className="bg-primary hover:bg-primary-hover text-primary-foreground h-8"
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1.5" />
-                    Add Stock
-                  </Button>
                 </div>
 
                 <div className="space-y-3 flex-1 overflow-y-auto pr-1">
@@ -1128,6 +1120,17 @@ export default function ManualRationalePage({ selectedJobId, onNavigate }: Manua
                       </div>
                     </Card>
                   ))}
+                  
+                  {/* Add Stock Button - Below all stocks */}
+                  <Button
+                    onClick={addStockDetail}
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-dashed border-primary/50 text-primary hover:bg-primary/10 h-9"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    Add Stock
+                  </Button>
                 </div>
 
                 {/* Generate Button */}
