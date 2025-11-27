@@ -33,7 +33,7 @@ interface VideoMetadata {
   channelLogo: string;
 }
 
-type WorkflowStage = 'input' | 'processing' | 'csv-review' | 'pdf-generation' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
+type WorkflowStage = 'input' | 'processing' | 'step8-review' | 'csv-review' | 'pdf-generation' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
 type SaveType = 'save' | 'save-and-sign' | null;
 
 export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaRationalePageProps) {
@@ -77,12 +77,18 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   
-  // CSV Review state
+  // CSV Review state (Step 12)
   const [csvData, setCsvData] = useState<any[]>([]);
   const [csvColumns, setCsvColumns] = useState<string[]>([]);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Step 8 CSV Review state
+  const [step8CsvData, setStep8CsvData] = useState<any[]>([]);
+  const [step8CsvColumns, setStep8CsvColumns] = useState<string[]>([]);
+  const [isUploadingStep8Csv, setIsUploadingStep8Csv] = useState(false);
+  const step8CsvFileInputRef = useRef<HTMLInputElement>(null);
 
   // Mock channel data
   const mockChannels = [
@@ -202,6 +208,105 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
     }
   };
 
+  // Step 8 CSV Review functions
+  const fetchStep8CsvData = async (jobId: string) => {
+    try {
+      const response = await fetch(API_ENDPOINTS.mediaRationale.step8CsvPreview(jobId), {
+        headers: getAuthHeaders(token),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setStep8CsvData(data.data);
+        setStep8CsvColumns(data.columns);
+      }
+    } catch (error) {
+      toast.error('Failed to load Step 8 CSV data');
+      console.error('Step 8 CSV fetch error:', error);
+    }
+  };
+
+  const handleDownloadStep8Csv = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.mediaRationale.step8DownloadCsv(currentJobId), {
+        headers: getAuthHeaders(token),
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'extracted_stocks.csv';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast.success('Extracted stocks CSV downloaded successfully');
+      } else {
+        toast.error('Failed to download CSV');
+      }
+    } catch (error) {
+      console.error('Step 8 CSV download error:', error);
+      toast.error('Failed to download CSV');
+    }
+  };
+
+  const handleUploadStep8Csv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !currentJobId) return;
+    
+    setIsUploadingStep8Csv(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.mediaRationale.step8UploadCsv(currentJobId), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      
+      if (response.ok) {
+        toast.success('Extracted stocks CSV uploaded and replaced successfully');
+        await fetchStep8CsvData(currentJobId);
+      } else {
+        toast.error('Failed to upload CSV');
+      }
+    } catch (error) {
+      toast.error('Upload failed');
+      console.error('Step 8 CSV upload error:', error);
+    } finally {
+      setIsUploadingStep8Csv(false);
+      if (step8CsvFileInputRef.current) {
+        step8CsvFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleStep8ContinuePipeline = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.mediaRationale.step8ContinuePipeline(currentJobId), {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+      });
+      
+      if (response.ok) {
+        toast.success('Continuing from Step 9: Fetch CMP');
+        setWorkflowStage('processing');
+        startPolling(currentJobId);
+      } else {
+        toast.error('Failed to continue pipeline');
+      }
+    } catch (error) {
+      toast.error('Continue failed');
+      console.error('Step 8 continue pipeline error:', error);
+    }
+  };
+
   // Poll job status
   const fetchJobStatus = async (jobId?: string) => {
     // Use ref value if jobId not provided (for polling)
@@ -240,9 +345,33 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
           setYoutubeUrl(data.job.youtubeUrl || '');
         }
         
-        // Check if Step 12 completed and awaiting CSV review
+        // Check if Step 8 completed and awaiting CSV review
         const currentWorkflowStage = workflowStageRef.current;
         console.log('[DEBUG CSV] Job status:', data.job.status, 'Current workflow stage (ref):', currentWorkflowStage);
+        
+        if (data.job.status === 'awaiting_step8_review') {
+          console.log('[DEBUG Step8] Status is awaiting_step8_review, checking workflow stage...');
+          if (currentWorkflowStage !== 'step8-review') {
+            console.log('[DEBUG Step8] Transitioning to step8-review stage...');
+            stopPolling();
+            setWorkflowStage('step8-review');
+            
+            // Fetch Step 8 CSV data asynchronously
+            fetchStep8CsvData(targetJobId).catch((error) => {
+              console.error('[DEBUG Step8] Failed to fetch Step 8 CSV data:', error);
+            });
+            
+            playCompletionBell();
+            toast.success('Step 8 Complete - Review Extracted Stocks', {
+              description: 'Please review the extracted stocks before continuing to CMP fetch',
+            });
+          } else {
+            console.log('[DEBUG Step8] Already in step8-review stage, skipping transition');
+          }
+          return; // Don't continue checking other statuses
+        }
+        
+        // Check if Step 12 completed and awaiting CSV review
         if (data.job.status === 'awaiting_csv_review') {
           console.log('[DEBUG CSV] Status is awaiting_csv_review, checking workflow stage...');
           if (currentWorkflowStage !== 'csv-review') {
@@ -1062,6 +1191,110 @@ export default function MediaRationalePage({ onNavigate, selectedJobId }: MediaR
             </Button>
           </div>
         </div>
+      );
+    }
+
+    if (workflowStage === 'step8-review') {
+      return (
+        <Card className="p-6 bg-card border-border">
+          <div className="space-y-6">
+            {/* Header Section */}
+            <div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">
+                Review Extracted Stocks
+                <span className="text-sm font-normal text-muted-foreground ml-2">(Step 8 Complete)</span>
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Review the extracted stocks below. Download, edit, and upload if changes are needed before CMP fetch.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-3">
+              <Button 
+                onClick={handleDownloadStep8Csv} 
+                variant="outline" 
+                className="border-blue-500/50 text-blue-500 hover:bg-blue-500/10"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download CSV
+              </Button>
+              <Button 
+                onClick={() => step8CsvFileInputRef.current?.click()} 
+                variant="outline"
+                disabled={isUploadingStep8Csv}
+                className="border-purple-500/50 text-purple-500 hover:bg-purple-500/10"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {isUploadingStep8Csv ? 'Uploading...' : 'Upload Edited CSV'}
+              </Button>
+              <input
+                ref={step8CsvFileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleUploadStep8Csv}
+                style={{ display: 'none' }}
+              />
+              <Button 
+                onClick={handleStep8ContinuePipeline} 
+                className="bg-green-600 hover:bg-green-700 text-white ml-auto"
+              >
+                <PlayCircle className="w-4 h-4 mr-2" />
+                Continue to Step 9
+              </Button>
+            </div>
+            
+            {/* Table Section */}
+            {step8CsvData.length > 0 ? (
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="overflow-x-auto" style={{ maxHeight: '600px' }}>
+                  <table className="w-full text-sm border-collapse">
+                    <thead className="bg-muted/80 sticky top-0 z-10">
+                      <tr>
+                        {step8CsvColumns.map(col => (
+                          <th 
+                            key={col} 
+                            className="px-4 py-3 text-left font-semibold text-foreground border-b-2 border-border whitespace-nowrap"
+                            style={{ 
+                              minWidth: col === 'STOCK NAME' ? '180px' : 
+                                       col === 'NSE SYMBOL' ? '120px' :
+                                       col === 'TIME' ? '100px' : '120px'
+                            }}
+                          >
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-background">
+                      {step8CsvData.map((row, idx) => (
+                        <tr 
+                          key={idx} 
+                          className="border-b border-border hover:bg-muted/30 transition-colors"
+                        >
+                          {step8CsvColumns.map(col => (
+                            <td 
+                              key={col} 
+                              className="px-4 py-3 text-foreground align-top"
+                            >
+                              <span className="whitespace-nowrap">{row[col] || '-'}</span>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="border border-border rounded-lg bg-muted/20 text-center py-12">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground font-medium">No extracted stocks data available</p>
+                <p className="text-sm text-muted-foreground mt-1">The extracted_stocks.csv file may not have been generated yet</p>
+              </div>
+            )}
+          </div>
+        </Card>
       );
     }
 
