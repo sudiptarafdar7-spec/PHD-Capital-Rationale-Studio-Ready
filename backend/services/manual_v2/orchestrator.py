@@ -26,7 +26,7 @@ class ManualRationaleOrchestrator:
                 (status, progress, current_step, datetime.now(), self.job_id)
             )
     
-    def update_step_status(self, step_number: int, status: str, message: str = ''):
+    def update_step_status(self, step_number: int, status: str, message: str = '', output_files: list = None):
         with get_db_cursor(commit=True) as cursor:
             if status == 'running':
                 cursor.execute(
@@ -34,10 +34,17 @@ class ManualRationaleOrchestrator:
                     (status, datetime.now(), self.job_id, step_number)
                 )
             elif status in ['success', 'failed']:
-                cursor.execute(
-                    "UPDATE job_steps SET status = %s, message = %s, ended_at = %s WHERE job_id = %s AND step_number = %s",
-                    (status, message or '', datetime.now(), self.job_id, step_number)
-                )
+                if output_files:
+                    import json
+                    cursor.execute(
+                        "UPDATE job_steps SET status = %s, message = %s, ended_at = %s, output_files = %s WHERE job_id = %s AND step_number = %s",
+                        (status, message or '', datetime.now(), output_files, self.job_id, step_number)
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE job_steps SET status = %s, message = %s, ended_at = %s WHERE job_id = %s AND step_number = %s",
+                        (status, message or '', datetime.now(), self.job_id, step_number)
+                    )
     
     def run_pipeline(self):
         try:
@@ -62,7 +69,7 @@ class ManualRationaleOrchestrator:
             
             self.update_step_status(3, 'running')
             pdf_path = generate_manual_pdf(self.job_id, self.folder_path, stocks_with_charts)
-            self.update_step_status(3, 'success', 'PDF generated successfully')
+            self.update_step_status(3, 'success', 'PDF generated successfully', output_files=[pdf_path])
             
             # Save PDF filename to payload
             pdf_filename = os.path.basename(pdf_path)

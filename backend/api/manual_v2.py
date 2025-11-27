@@ -57,6 +57,26 @@ def create_job():
         job_id = f"manual-{uuid.uuid4().hex[:8]}"
         folder_path = os.path.join('backend', 'job_files', job_id)
         
+        # Get platform name from channel
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT name FROM channels WHERE id = %s", (channel_id,))
+            channel = cursor.fetchone()
+            platform_name = channel['name'] if channel else 'Unknown'
+        
+        # Format date for title: DD-MM-YYYY
+        try:
+            from datetime import datetime as dt
+            if date:
+                parsed_date = dt.strptime(date, '%Y-%m-%d')
+                formatted_date = parsed_date.strftime('%d-%m-%Y')
+            else:
+                formatted_date = dt.now().strftime('%d-%m-%Y')
+        except:
+            formatted_date = date
+        
+        # Create job title as "Platform Name - DD-MM-YYYY"
+        job_title = f"{platform_name} - {formatted_date}"
+        
         payload = {
             'stocks': enriched_stocks,
             'call_time': call_time,
@@ -68,7 +88,7 @@ def create_job():
             cursor.execute("""
                 INSERT INTO jobs (id, channel_id, title, date, user_id, tool_used, status, folder_path, payload, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (job_id, channel_id, title, date, user_id, 'Manual Rationale', 'pending', folder_path, 
+            """, (job_id, channel_id, job_title, date, user_id, 'Manual Rationale', 'pending', folder_path, 
                   json.dumps(payload), datetime.now(), datetime.now()))
             
             steps = [

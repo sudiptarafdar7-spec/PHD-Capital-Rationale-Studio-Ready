@@ -43,7 +43,7 @@ def fetch_pdf_config(job_id: str):
     try:
         # Fetch job details with channel info (JOIN with channels table)
         cursor.execute("""
-            SELECT c.channel_name, c.channel_logo_path, j.title
+            SELECT c.channel_name, c.channel_logo_path, j.title, j.date
             FROM jobs j
             LEFT JOIN channels c ON j.channel_id = c.id
             WHERE j.id = %s
@@ -52,7 +52,7 @@ def fetch_pdf_config(job_id: str):
         if not job_row:
             raise ValueError(f"Job {job_id} not found")
         
-        channel_name, channel_logo_path_raw, title = job_row
+        channel_name, channel_logo_path_raw, title, input_date = job_row
         
         # Construct full path for channel logo if it exists
         channel_logo_path = None
@@ -119,10 +119,19 @@ def fetch_pdf_config(job_id: str):
                 elif not font_regular_path:
                     font_regular_path = file_path
         
+        # Format input_date as string if it's a date object
+        input_date_str = None
+        if input_date:
+            if hasattr(input_date, 'strftime'):
+                input_date_str = input_date.strftime('%Y-%m-%d')
+            else:
+                input_date_str = str(input_date)
+        
         return {
             'channel_name': channel_name or "Platform",
             'channel_logo_path': channel_logo_path,
             'title': title or "Rationale Report",
+            'input_date': input_date_str,
             'company_name': company_name,
             'registration_details': registration_details,
             'disclaimer_text': disclaimer_text,
@@ -184,11 +193,18 @@ def generate_manual_pdf(job_id: str, job_folder: str, stocks_with_charts):
     print(f"✅ Platform: {config['channel_name']}")
     print(f"✅ Report: {config['title']}")
     
-    # Output PDF path
-    now = datetime.now()
-    date_str = now.strftime("%Y%m%d")
-    time_str = now.strftime("%H%M%S")
-    pdf_filename = f"{sanitize_filename(config['channel_name'])}-{date_str}-{time_str}.pdf"
+    # Output PDF path - use input date from config, not current date
+    input_date = config.get('input_date', '')
+    if input_date:
+        try:
+            parsed_date = datetime.strptime(input_date, '%Y-%m-%d')
+            date_str = parsed_date.strftime('%d-%m-%Y')
+        except:
+            date_str = datetime.now().strftime('%d-%m-%Y')
+    else:
+        date_str = datetime.now().strftime('%d-%m-%Y')
+    
+    pdf_filename = f"{sanitize_filename(config['channel_name'])}-{date_str}.pdf"
     output_pdf = os.path.join(job_folder, "pdf", pdf_filename)
     os.makedirs(os.path.dirname(output_pdf), exist_ok=True)
     
