@@ -53,6 +53,10 @@ export const API_ENDPOINTS = {
     downloadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/media-rationale/job/${jobId}/download-csv`,
     uploadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/media-rationale/job/${jobId}/upload-csv`,
     continuePipeline: (jobId: string) => `${API_BASE_URL}/api/v1/media-rationale/job/${jobId}/continue-pipeline`,
+    step8CsvPreview: (jobId: string) => `${API_BASE_URL}/api/v1/media-rationale/job/${jobId}/step8-csv-preview`,
+    step8DownloadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/media-rationale/job/${jobId}/step8-download-csv`,
+    step8UploadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/media-rationale/job/${jobId}/step8-upload-csv`,
+    step8ContinuePipeline: (jobId: string) => `${API_BASE_URL}/api/v1/media-rationale/job/${jobId}/step8-continue-pipeline`,
   },
   premiumRationale: {
     createJob: `${API_BASE_URL}/api/v1/premium-rationale/create-job`,

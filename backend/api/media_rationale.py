@@ -986,6 +986,200 @@ def continue_pipeline(job_id):
         print(f"Error continuing pipeline: {str(e)}")
         return jsonify({'error': f'Failed to continue pipeline: {str(e)}'}), 500
 
+# ==================== Step 8 CSV Review Endpoints ====================
+
+@media_rationale_bp.route('/job/<job_id>/step8-csv-preview', methods=['GET'])
+@jwt_required()
+def get_step8_csv_preview(job_id):
+    """Get extracted_stocks.csv content for preview after Step 8"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Check authorization
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        csv_path = _job_path(job_id, 'analysis', 'extracted_stocks.csv')
+        
+        if not os.path.exists(csv_path):
+            return jsonify({'error': 'extracted_stocks.csv not found'}), 404
+        
+        # Read CSV and return as JSON
+        import pandas as pd
+        import numpy as np
+        df = pd.read_csv(csv_path)
+        
+        # Convert DataFrame to records, replacing NaN/Infinity with None
+        data = df.to_dict('records')
+        for row in data:
+            for key, value in row.items():
+                if pd.isna(value) or (isinstance(value, (int, float, np.number)) and not np.isfinite(value)):
+                    row[key] = None
+        
+        return jsonify({
+            'success': True,
+            'data': data,
+            'columns': df.columns.tolist()
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting Step 8 CSV preview: {str(e)}")
+        return jsonify({'error': f'Failed to get CSV preview: {str(e)}'}), 500
+
+@media_rationale_bp.route('/job/<job_id>/step8-download-csv', methods=['GET'])
+@jwt_required()
+def download_step8_csv(job_id):
+    """Download extracted_stocks.csv file"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Check authorization
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        csv_path = _job_path(job_id, 'analysis', 'extracted_stocks.csv')
+        
+        if not os.path.exists(csv_path):
+            return jsonify({'error': 'extracted_stocks.csv not found'}), 404
+        
+        return send_file(
+            csv_path,
+            as_attachment=True,
+            download_name='extracted_stocks.csv',
+            mimetype='text/csv'
+        )
+        
+    except Exception as e:
+        print(f"Error downloading Step 8 CSV: {str(e)}")
+        return jsonify({'error': f'Failed to download CSV: {str(e)}'}), 500
+
+@media_rationale_bp.route('/job/<job_id>/step8-upload-csv', methods=['POST'])
+@jwt_required()
+def upload_step8_csv(job_id):
+    """Upload and replace extracted_stocks.csv file"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Check authorization
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Verify it's a CSV file
+        if not file.filename.endswith('.csv'):
+            return jsonify({'error': 'Only CSV files are allowed'}), 400
+        
+        csv_path = _job_path(job_id, 'analysis', 'extracted_stocks.csv')
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+        
+        # Save the uploaded file (replaces existing file)
+        file.save(csv_path)
+        
+        return jsonify({
+            'success': True,
+            'message': 'extracted_stocks.csv uploaded and replaced successfully'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error uploading Step 8 CSV: {str(e)}")
+        return jsonify({'error': f'Failed to upload CSV: {str(e)}'}), 500
+
+@media_rationale_bp.route('/job/<job_id>/step8-continue-pipeline', methods=['POST'])
+@jwt_required()
+def step8_continue_pipeline(job_id):
+    """Continue pipeline execution from Step 9 after Step 8 CSV review"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        # Check authorization
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        # Verify job exists and is in correct status
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT id, status FROM jobs WHERE id = %s", (job_id,))
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            if job['status'] != 'awaiting_step8_review':
+                return jsonify({'error': 'Job is not in awaiting_step8_review status'}), 400
+        
+        # Update job status to processing
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute("""
+                UPDATE jobs 
+                SET status = 'processing', updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), job_id))
+        
+        # Continue pipeline from Step 9 in background thread
+        def run_remaining_steps():
+            try:
+                # Run Steps 9 through 14
+                for step_num in range(9, 15):
+                    success = run_pipeline_step(job_id, step_num)
+                    if not success:
+                        return
+                    
+                    # After Step 12 completes, pause for CSV review
+                    if step_num == 12:
+                        with get_db_cursor(commit=True) as cursor:
+                            cursor.execute("""
+                                UPDATE jobs 
+                                SET status = 'awaiting_csv_review', updated_at = %s
+                                WHERE id = %s
+                            """, (datetime.now(), job_id))
+                        return  # Stop here and wait for user to continue
+                
+                # After Step 14 completes, set status to pdf_ready
+                with get_db_cursor(commit=True) as cursor:
+                    cursor.execute("""
+                        UPDATE jobs 
+                        SET status = 'pdf_ready', progress = 93, updated_at = %s
+                        WHERE id = %s
+                    """, (datetime.now(), job_id))
+                
+            except Exception as e:
+                print(f"Error continuing pipeline from Step 9 for job {job_id}: {str(e)}")
+                with get_db_cursor(commit=True) as cursor:
+                    cursor.execute("""
+                        UPDATE jobs 
+                        SET status = 'failed', updated_at = %s
+                        WHERE id = %s
+                    """, (datetime.now(), job_id))
+        
+        # Start background thread
+        thread = threading.Thread(target=run_remaining_steps)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Pipeline continuation started from Step 9'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error continuing pipeline from Step 8: {str(e)}")
+        return jsonify({'error': f'Failed to continue pipeline: {str(e)}'}), 500
+
+# ==================== End Step 8 CSV Review Endpoints ====================
+
 @media_rationale_bp.route('/job/<job_id>', methods=['DELETE'])
 @jwt_required()
 def delete_job(job_id):
