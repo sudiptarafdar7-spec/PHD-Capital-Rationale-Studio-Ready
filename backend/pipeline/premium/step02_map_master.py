@@ -29,6 +29,7 @@ import re
 import pandas as pd
 import psycopg2
 from rapidfuzz import fuzz, process
+from backend.utils.path_utils import resolve_uploaded_file_path
 
 
 def normalize_text(s):
@@ -55,7 +56,7 @@ def fuzzy_match(value, target_series, threshold=85):
 
 
 def get_master_file_path():
-    """Fetch master file path from database"""
+    """Fetch master file path from database and resolve to current system path"""
     try:
         conn = psycopg2.connect(os.environ['DATABASE_URL'])
         cursor = conn.cursor()
@@ -73,7 +74,11 @@ def get_master_file_path():
         conn.close()
         
         if result:
-            return result[0]
+            db_path = result[0]
+            resolved_path = resolve_uploaded_file_path(db_path)
+            print(f"📂 Master file path from DB: {db_path}")
+            print(f"📂 Resolved to: {resolved_path}")
+            return resolved_path
         else:
             raise ValueError("Master file not found in database. Please upload it first in Settings.")
     

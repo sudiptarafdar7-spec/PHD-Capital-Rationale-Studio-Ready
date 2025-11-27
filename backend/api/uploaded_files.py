@@ -2,6 +2,7 @@ from flask import request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 from backend.utils.database import get_db_cursor
+from backend.utils.path_utils import resolve_uploaded_file_path
 from backend.api import uploaded_files_bp
 from datetime import datetime
 import os
@@ -90,10 +91,11 @@ def get_master_stocks():
             if not result:
                 return jsonify({'error': 'Master CSV file not found'}), 404
             
-            master_csv_path = result['file_path']
+            db_path = result['file_path']
+            master_csv_path = resolve_uploaded_file_path(db_path)
         
-        if not os.path.exists(master_csv_path):
-            return jsonify({'error': 'Master CSV file not found on disk'}), 404
+        if not master_csv_path or not os.path.exists(master_csv_path):
+            return jsonify({'error': f'Master CSV file not found on disk. DB path: {db_path}'}), 404
         
         # Read master CSV and filter EQUITY instruments with ES exchange type
         stocks = []

@@ -4,8 +4,10 @@ import json
 import pandas as pd
 from typing import Dict, List, Optional
 from datetime import datetime
+from backend.utils.path_utils import resolve_uploaded_file_path
 
 def get_master_csv_path() -> Optional[str]:
+    """Fetch master file path from database and resolve to current system path"""
     from backend.utils.database import get_db_cursor
     
     with get_db_cursor() as cursor:
@@ -14,7 +16,11 @@ def get_master_csv_path() -> Optional[str]:
         )
         result = cursor.fetchone()
         if result:
-            return result['file_path']
+            db_path = result['file_path']
+            resolved_path = resolve_uploaded_file_path(db_path)
+            print(f"📂 Master file path from DB: {db_path}")
+            print(f"📂 Resolved to: {resolved_path}")
+            return resolved_path
     return None
 
 def enrich_stocks_with_master_data(stocks: List[Dict]) -> List[Dict]:
