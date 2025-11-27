@@ -22,10 +22,12 @@ def transcribe_audio(job_id, audio_path, assemblyai_api_key):
     aai.settings.api_key = assemblyai_api_key
     
     # Configure transcription with speaker labels and word boost
+    # Using 'nano' model for faster transcription (up to 5x faster than 'best')
+    # while maintaining good accuracy for speaker diarization
     config = aai.TranscriptionConfig(
         speaker_labels=True,
-        speech_model=aai.SpeechModel.best,
-        language_detection=True,
+        speech_model=aai.SpeechModel.nano,
+        language_code="hi",
         punctuate=True,
         format_text=True,
         word_boost=[
@@ -40,6 +42,8 @@ def transcribe_audio(job_id, audio_path, assemblyai_api_key):
         ],
         boost_param=aai.WordBoost.high
     )
+    
+    print(f"⚡ Using fast 'nano' model with Hindi language for optimized transcription")
     
     transcriber = aai.Transcriber(config=config)
     
