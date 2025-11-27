@@ -148,7 +148,7 @@ def init_database():
                 duration VARCHAR(20),
                 user_id VARCHAR(50) REFERENCES users(id),
                 tool_used VARCHAR(50) NOT NULL,
-                status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'awaiting_csv_review', 'pdf_ready', 'completed', 'failed', 'signed')),
+                status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'pdf_ready', 'completed', 'failed', 'signed')),
                 progress INTEGER DEFAULT 0,
                 current_step INTEGER DEFAULT 0,
                 folder_path TEXT,

@@ -85,9 +85,7 @@ SPELLING_CORRECTIONS = {
     "hitachi energy": "Hitachi Energy",
 }
 
-UNCLEAR_STOCKS = [
-    "cera bank", "cerabank", "wari", "niba", "c bank", "cbank"
-]
+UNCLEAR_STOCKS = ["cera bank", "cerabank", "wari", "niba", "c bank", "cbank"]
 
 SYMBOL_NORMALIZATION = {
     "ADANPOWER": "ADANIPOWER",
@@ -149,31 +147,31 @@ def split_into_chunks(lines, pradip_speaker, num_chunks=NUM_CHUNKS):
     """
     if len(lines) < num_chunks:
         return [lines] if lines else []
-    
+
     pradip_lower = pradip_speaker.lower().strip()
     target_size = len(lines) // num_chunks
     chunks = []
     current_chunk = []
     chunk_count = 0
-    
+
     for i, line in enumerate(lines):
         current_chunk.append(line)
-        
+
         is_pradip = line["speaker"].lower().strip() == pradip_lower
         reached_target = len(current_chunk) >= target_size
         not_last_chunk = chunk_count < num_chunks - 1
-        
+
         if is_pradip and reached_target and not_last_chunk:
             chunks.append(current_chunk)
             current_chunk = []
             chunk_count += 1
-    
+
     if current_chunk:
         if chunks and len(current_chunk) < target_size // 2:
             chunks[-1].extend(current_chunk)
         else:
             chunks.append(current_chunk)
-    
+
     if len(chunks) < num_chunks and len(lines) >= num_chunks:
         chunks = []
         chunk_size = len(lines) // num_chunks
@@ -183,7 +181,7 @@ def split_into_chunks(lines, pradip_speaker, num_chunks=NUM_CHUNKS):
                 chunks.append(lines[start_idx:])
             else:
                 chunks.append(lines[start_idx:start_idx + chunk_size])
-    
+
     return chunks
 
 
@@ -199,7 +197,13 @@ def format_chunk_for_analysis(chunk_lines):
     return json.dumps(formatted, indent=2)
 
 
-def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=16384, thinking_budget=4096, max_retries=4):
+def call_gemini_api(prompt,
+                    api_key,
+                    model_name,
+                    temperature=0.1,
+                    max_tokens=16384,
+                    thinking_budget=4096,
+                    max_retries=4):
     """
     Call Gemini 2.5 Pro API via REST with proper thinkingConfig.
     
@@ -216,18 +220,16 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=163
         Text response or None on error
     """
     import time
-    
+
     url = f"{GEMINI_API_URL}/{model_name}:generateContent?key={api_key}"
-    
+
     # Build payload with thinkingConfig for gemini-2.5-pro
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ],
+        "contents": [{
+            "parts": [{
+                "text": prompt
+            }]
+        }],
         "generationConfig": {
             "temperature": temperature,
             "maxOutputTokens": max_tokens,
@@ -236,59 +238,65 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=163
             }
         }
     }
-    
+
     # Longer timeout for thinking model
     timeout = 180
-    
+
     for attempt in range(max_retries):
         try:
             if attempt == 0:
-                print(f"      🤖 Calling {model_name} (thinking: {thinking_budget} tokens)...")
+                print(
+                    f"      🤖 Calling {model_name} (thinking: {thinking_budget} tokens)..."
+                )
             else:
                 # Longer exponential backoff for rate limits: 5, 10, 20, 40 seconds
-                wait_time = 5 * (2 ** attempt)
-                print(f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s...")
+                wait_time = 5 * (2**attempt)
+                print(
+                    f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s..."
+                )
                 time.sleep(wait_time)
-            
+
             response = requests.post(url, json=payload, timeout=timeout)
-            
+
             # Handle rate limiting and server errors with retry
             if response.status_code == 429:
-                print(f"      ⚠️ Rate limited (429), will retry with backoff...")
+                print(
+                    f"      ⚠️ Rate limited (429), will retry with backoff...")
                 continue
             elif response.status_code == 503:
                 print(f"      ⚠️ Service unavailable (503), will retry...")
                 continue
-            
+
             response.raise_for_status()
-            
+
             data = response.json()
-            
+
             if "candidates" in data and len(data["candidates"]) > 0:
                 candidate = data["candidates"][0]
-                
+
                 # Log thinking token usage
                 if "usageMetadata" in data:
-                    thoughts_used = data["usageMetadata"].get("thoughtsTokenCount", 0)
+                    thoughts_used = data["usageMetadata"].get(
+                        "thoughtsTokenCount", 0)
                     if thoughts_used > 0:
                         print(f"      💭 Thinking tokens used: {thoughts_used}")
-                
+
                 # Check for finish reason
                 finish_reason = candidate.get("finishReason", "")
                 if finish_reason == "MAX_TOKENS":
                     print(f"      ⚠️ Response truncated (MAX_TOKENS)")
                 elif finish_reason == "STOP":
                     pass  # Normal completion
-                
+
                 if "content" in candidate and "parts" in candidate["content"]:
                     parts = candidate["content"]["parts"]
-                    
+
                     # Get the text content (skip thought parts)
                     text_content = None
                     for part in parts:
                         if "text" in part and not part.get("thought", False):
                             text_content = part["text"]
-                    
+
                     if text_content:
                         text_content = clean_thinking_response(text_content)
                         return text_content
@@ -296,12 +304,13 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=163
                         # If no non-thought text, try to get any text
                         for part in parts:
                             if "text" in part:
-                                text_content = clean_thinking_response(part["text"])
+                                text_content = clean_thinking_response(
+                                    part["text"])
                                 return text_content
-            
+
             print(f"      ⚠️ Unexpected Gemini response: {str(data)[:500]}")
             return None
-            
+
         except requests.exceptions.RequestException as e:
             error_str = str(e)
             if "429" in error_str or "503" in error_str:
@@ -314,7 +323,7 @@ def call_gemini_api(prompt, api_key, model_name, temperature=0.1, max_tokens=163
         except Exception as e:
             print(f"      ⚠️ Gemini API error: {e}")
             return None
-    
+
     print(f"      ⚠️ All {max_retries} retries exhausted")
     return None
 
@@ -325,18 +334,23 @@ def clean_thinking_response(text):
     Removes thinking/reasoning blocks and extracts final answer.
     """
     import re
-    
+
     # Remove <thinking>...</thinking> blocks if present
     text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
-    
+
     # Remove **Thinking:** or similar headers
-    text = re.sub(r'\*\*(?:Thinking|Reasoning|Analysis):\*\*.*?(?=\[|\{|$)', '', text, flags=re.DOTALL | re.IGNORECASE)
-    
+    text = re.sub(r'\*\*(?:Thinking|Reasoning|Analysis):\*\*.*?(?=\[|\{|$)',
+                  '',
+                  text,
+                  flags=re.DOTALL | re.IGNORECASE)
+
     # If response has "Final Answer:" or similar, extract that part
-    final_match = re.search(r'(?:Final Answer|Output|Result):\s*(\[.*\])', text, flags=re.DOTALL | re.IGNORECASE)
+    final_match = re.search(r'(?:Final Answer|Output|Result):\s*(\[.*\])',
+                            text,
+                            flags=re.DOTALL | re.IGNORECASE)
     if final_match:
         text = final_match.group(1)
-    
+
     return text.strip()
 
 
@@ -353,24 +367,24 @@ def extract_stocks_from_chunk(chunk_lines, chunk_num, api_key, model_name):
             "speaker": line['speaker'],
             "text": line['text']
         })
-    
+
     prompt = f"""**CRITICAL TASK: Stock Name Detection in Financial TV Transcript - Chunk {chunk_num}**
 
 You are an expert at identifying Indian stock names in financial transcripts.
 You have deep knowledge of:
 - All NSE/BSE listed companies and their common abbreviations
-- Common transcription errors and how to correct them
+- Common transcription errors and how to correct them by searching on web
 - The difference between company names and market indices
 
-You are analyzing a transcript from an Indian financial TV show where an analyst discusses stocks.
-Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names mentioned.
+You are analyzing a transcript from an Indian financial TV show where an anchor ask about a stock an analyst Pradip discusses stocks.
+Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names on which analyst pradip has given his analysis. Sometimes the stock name is mentioned in the question by anchor and sometimes in the answer by pradip. and sometimes in both.
 
 **IMPORTANT INSTRUCTIONS:**
 1. Read each line carefully, word by word
-2. Detect ALL company/stock names mentioned by BOTH speakers (Anchor and Analyst)
-3. Include these RECENT IPO STOCKS (often discussed):
+2. Detect ALL company/stock names mentioned by BOTH speakers (Anchor and Analyst) on which analyst pradip has given his analysis.
+3. Include the RECENT IPO STOCKS (often discussed):
    
-4. Use INTELLIGENCE to understand misspelled stock names due to transcription errors:
+4. Use INTELLIGENCE to understand misspelled stock names due to transcription errors: example
    - "Swigee" / "Swigi" → Swiggy
    - "Zometo" / "Zomatto" → Zomato
    - "Relayance" → Reliance
@@ -395,12 +409,11 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
    - Similar phonetic/spelling variations
 
 5. EXCLUDE these indices (NOT stocks):
-   - Nifty, Bank Nifty, Sensex, Nifty 50, Finnifty
-   - Any index references
+   - Nifty, Bank Nifty, Sensex, Nifty 50, Finnifty, PSU Bank, Midcap Nifty, Nifty IT, Nifty Bank
+   - Any index references & Sectors
 
-6. DO NOT skip any stock - even if mentioned briefly or in a question
-7. DO NOT add stocks that were NOT discussed
-8. Use the EXACT timestamp from the input line where the stock is mentioned
+6. DO NOT add stocks that were NOT discussed
+7. Use the EXACT timestamp from the input line where the stock is mentioned
 
 **TRANSCRIPT DATA (JSON format):**
 {json.dumps(chunk_json, indent=2)}
@@ -415,37 +428,41 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
 
     # Use thinking budget for accurate stock detection with spelling correction
     content = call_gemini_api(
-        prompt, 
-        api_key, 
-        model_name, 
-        temperature=0.1, 
+        prompt,
+        api_key,
+        model_name,
+        temperature=0.1,
         max_tokens=8192,
         thinking_budget=4096  # Medium budget for stock detection
     )
-    
+
     if not content:
-        print(f"   ⚠️ Chunk {chunk_num} extraction failed: No response from Gemini")
+        print(
+            f"   ⚠️ Chunk {chunk_num} extraction failed: No response from Gemini"
+        )
         return []
-    
+
     content = content.strip()
-    
+
     if content.startswith("```"):
         content = re.sub(r'^```(?:json)?\n?', '', content)
         content = re.sub(r'\n?```$', '', content)
-    
+
     stocks = []
     try:
         parsed = json.loads(content)
         if isinstance(parsed, list):
             for item in parsed:
-                if isinstance(item, dict) and "time" in item and "stock" in item:
+                if isinstance(item,
+                              dict) and "time" in item and "stock" in item:
                     time_str = item["time"].strip()
                     stock_name = item["stock"].strip()
-                    
-                    is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
+
+                    is_index = any(idx in stock_name.lower()
+                                   for idx in INDICES_TO_EXCLUDE)
                     if not is_index and len(stock_name) > 1:
                         stocks.append((time_str, stock_name))
-            
+
             print(f"      📋 Gemini detected stocks: {[s[1] for s in stocks]}")
     except json.JSONDecodeError as e:
         print(f"      ⚠️ JSON parse error: {e}")
@@ -458,7 +475,8 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
             if match:
                 time_str, stock_name = match.groups()
                 stock_name = stock_name.strip()
-                is_index = any(idx in stock_name.lower() for idx in INDICES_TO_EXCLUDE)
+                is_index = any(idx in stock_name.lower()
+                               for idx in INDICES_TO_EXCLUDE)
                 if not is_index and len(stock_name) > 1:
                     stocks.append((time_str, stock_name))
 
@@ -468,20 +486,20 @@ Your task is to read EVERY LINE, WORD BY WORD, and identify ALL stock names ment
 def merge_and_deduplicate_stocks(all_chunk_stocks):
     """Merge stocks from all chunks and remove duplicates, keeping earliest time."""
     stock_dict = {}
-    
+
     for time_str, stock_name in all_chunk_stocks:
         stock_key = stock_name.lower().strip()
-        
+
         if stock_key not in stock_dict:
             stock_dict[stock_key] = (time_str, stock_name)
         else:
             existing_time = stock_dict[stock_key][0]
             if time_str < existing_time:
                 stock_dict[stock_key] = (time_str, stock_name)
-    
+
     merged = [(v[0], v[1]) for v in stock_dict.values()]
     merged.sort(key=lambda x: x[0])
-    
+
     return merged
 
 
@@ -492,15 +510,11 @@ def get_accurate_symbols(merged_stocks, api_key, model_name):
     """
     if not merged_stocks:
         return []
-    
+
     input_stocks = []
     for i, (time_str, name) in enumerate(merged_stocks):
-        input_stocks.append({
-            "id": i + 1,
-            "time": time_str,
-            "name": name
-        })
-    
+        input_stocks.append({"id": i + 1, "time": time_str, "name": name})
+
     prompt = f"""You are an expert at mapping Indian stock names to their NSE trading symbols.
 You must process EVERY stock in the input - do not skip any.
 Always return valid JSON array format with all stocks.
@@ -579,26 +593,26 @@ For EACH stock in the input, provide the correct NSE trading symbol.
 
     # Use thinking budget for accurate symbol mapping
     content = call_gemini_api(
-        prompt, 
-        api_key, 
-        model_name, 
-        temperature=0, 
+        prompt,
+        api_key,
+        model_name,
+        temperature=0,
         max_tokens=16384,
         thinking_budget=4096  # Medium budget for symbol mapping
     )
-    
+
     if not content:
         print("   ⚠️ Symbol mapping failed: No response from Gemini")
         return []
-    
+
     content = content.strip()
-    
+
     if content.startswith("```"):
         content = re.sub(r'^```(?:json)?\n?', '', content)
         content = re.sub(r'\n?```$', '', content)
-    
+
     print(f"   📄 Gemini returned {len(content)} characters")
-    
+
     results = []
     try:
         parsed = json.loads(content)
@@ -608,23 +622,25 @@ For EACH stock in the input, provide the correct NSE trading symbol.
                     time_str = item.get("time", "").strip()
                     stock_name = item.get("name", "").strip()
                     symbol = item.get("symbol", "").strip().upper()
-                    
+
                     if symbol.endswith('.NS'):
                         symbol = symbol[:-3]
                     elif symbol.endswith('.BO'):
                         symbol = symbol[:-3]
-                    
+
                     if stock_name and symbol and time_str:
                         results.append({
                             "stock_name": stock_name,
                             "stock_symbol": symbol,
                             "start_time": time_str
                         })
-            
+
             print(f"   ✅ Parsed {len(results)} stocks from JSON response")
-            
+
             if len(results) < len(merged_stocks):
-                print(f"   ⚠️ Warning: Only got {len(results)}/{len(merged_stocks)} stocks, using fallback mapping")
+                print(
+                    f"   ⚠️ Warning: Only got {len(results)}/{len(merged_stocks)} stocks, using fallback mapping"
+                )
                 results = fallback_symbol_mapping(merged_stocks)
     except json.JSONDecodeError as e:
         print(f"   ⚠️ JSON parse error: {e}")
@@ -750,26 +766,26 @@ def fallback_symbol_mapping(merged_stocks):
         "hindustan aeronautics": "HAL",
         "hal": "HAL",
     }
-    
+
     results = []
     for time_str, stock_name in merged_stocks:
         name_lower = stock_name.lower().strip()
-        
+
         symbol = None
         for key, sym in SYMBOL_MAP.items():
             if key in name_lower or name_lower in key:
                 symbol = sym
                 break
-        
+
         if not symbol:
             symbol = stock_name.upper().replace(" ", "").replace(".", "")[:15]
-        
+
         results.append({
             "stock_name": stock_name,
             "stock_symbol": symbol,
             "start_time": time_str
         })
-    
+
     return results
 
 
@@ -788,12 +804,12 @@ def correct_stock_name(stock_name, skip_unclear=False):
     Returns corrected name, None if invalid, or 'UNCLEAR' if needs web search.
     """
     name_lower = stock_name.lower().strip()
-    
+
     if is_unclear_stock(stock_name):
         if skip_unclear:
             return None
         return "UNCLEAR"
-    
+
     if name_lower in SPELLING_CORRECTIONS:
         correct = SPELLING_CORRECTIONS[name_lower]
         if correct is None:
@@ -802,7 +818,7 @@ def correct_stock_name(stock_name, skip_unclear=False):
         if correct.lower() != stock_name.lower():
             print(f"      🔧 Correcting: {stock_name} → {correct}")
         return correct
-    
+
     for wrong, correct in SPELLING_CORRECTIONS.items():
         if wrong in name_lower and len(wrong) >= 4:
             if correct is None:
@@ -811,7 +827,7 @@ def correct_stock_name(stock_name, skip_unclear=False):
             if correct.lower() != stock_name.lower():
                 print(f"      🔧 Correcting: {stock_name} → {correct}")
             return correct
-    
+
     return stock_name
 
 
@@ -829,11 +845,16 @@ def resolve_unclear_stocks_with_search(unclear_stocks, api_key):
     """
     if not unclear_stocks:
         return []
-    
-    print(f"\n🔍 Phase 5: Resolving {len(unclear_stocks)} unclear stocks with Google Search...")
-    
-    stock_list = "\n".join([f"- {s['stock_name']} (timestamp: {s['start_time']})" for s in unclear_stocks])
-    
+
+    print(
+        f"\n🔍 Phase 5: Resolving {len(unclear_stocks)} unclear stocks with Google Search..."
+    )
+
+    stock_list = "\n".join([
+        f"- {s['stock_name']} (timestamp: {s['start_time']})"
+        for s in unclear_stocks
+    ])
+
     prompt = f"""You are an expert on Indian stock market (NSE/BSE). I have some unclear stock names from a YouTube video transcript that may be transcription errors.
 
 For each stock name below, search the web to find what actual NSE-listed stock it might refer to. Consider:
@@ -862,13 +883,15 @@ Only return the JSON array, no other text."""
         import time
         model = get_gemini_model()
         url = f"{GEMINI_API_URL}/{model}:generateContent?key={api_key}"
-        
+
         print(f"      🤖 Calling {model} with Google Search grounding...")
-        
+
         # Use thinkingConfig for gemini-2.5-pro with web search
         payload = {
             "contents": [{
-                "parts": [{"text": prompt}]
+                "parts": [{
+                    "text": prompt
+                }]
             }],
             "tools": [{
                 "google_search": {}
@@ -877,66 +900,74 @@ Only return the JSON array, no other text."""
                 "temperature": 0.1,
                 "maxOutputTokens": 16384,
                 "thinkingConfig": {
-                    "thinkingBudget": 8192  # Higher budget for web search tasks
+                    "thinkingBudget":
+                    8192  # Higher budget for web search tasks
                 }
             }
         }
-        
+
         # Retry logic for transient errors with longer backoff
         max_retries = 4
         response = None
         for attempt in range(max_retries):
             if attempt > 0:
-                wait_time = 5 * (2 ** attempt)  # 10, 20, 40 seconds
-                print(f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s...")
+                wait_time = 5 * (2**attempt)  # 10, 20, 40 seconds
+                print(
+                    f"      🔄 Retry {attempt + 1}/{max_retries} after {wait_time}s..."
+                )
                 time.sleep(wait_time)
-            
+
             response = requests.post(url, json=payload, timeout=180)
-            
+
             if response.status_code == 429 or response.status_code == 503:
-                print(f"      ⚠️ Error {response.status_code}, will retry with backoff...")
+                print(
+                    f"      ⚠️ Error {response.status_code}, will retry with backoff..."
+                )
                 continue
             break
-        
+
         if response is None:
             print("   ⚠️ All retries exhausted for Gemini Search")
             return []
-        
+
         if response.status_code != 200:
             print(f"   ⚠️ Gemini Search API error: {response.status_code}")
             print(f"   📄 Response: {response.text[:500]}")
             return []
-        
+
         result = response.json()
-        
+
         if "candidates" not in result or not result["candidates"]:
             print("   ⚠️ No response from Gemini Search")
             return []
-        
+
         # Handle thinking model - get all text parts
         parts = result["candidates"][0]["content"]["parts"]
         text = ""
         for part in parts:
             if "text" in part:
                 text = part["text"]  # Take the last text part (final answer)
-        
+
         # Clean thinking response
         text = clean_thinking_response(text)
         print(f"   📄 Gemini Search returned {len(text)} characters")
-        
+
         if "groundingMetadata" in result["candidates"][0]:
-            queries = result["candidates"][0]["groundingMetadata"].get("webSearchQueries", [])
+            queries = result["candidates"][0]["groundingMetadata"].get(
+                "webSearchQueries", [])
             if queries:
-                print(f"   🔎 Web searches performed: {', '.join(queries[:3])}...")
-        
+                print(
+                    f"   🔎 Web searches performed: {', '.join(queries[:3])}..."
+                )
+
         json_match = re.search(r'\[[\s\S]*\]', text)
         if not json_match:
             print("   ⚠️ Could not parse JSON from response")
             print(f"   📄 Raw response: {text[:300]}...")
             return []
-        
+
         resolved = json.loads(json_match.group())
-        
+
         result_stocks = []
         for item in resolved:
             if item.get("corrected_name") and item.get("nse_symbol"):
@@ -945,24 +976,29 @@ Only return the JSON array, no other text."""
                 symbol = item["nse_symbol"].upper()
                 confidence = item.get("confidence", "medium")
                 reasoning = item.get("reasoning", "")
-                
+
                 for unclear in unclear_stocks:
                     if unclear["stock_name"].lower() == original.lower():
-                        print(f"      ✅ {original} → {corrected} ({symbol}) [{confidence}]")
+                        print(
+                            f"      ✅ {original} → {corrected} ({symbol}) [{confidence}]"
+                        )
                         if reasoning:
                             print(f"         Reason: {reasoning}")
                         result_stocks.append({
-                            "stock_name": corrected,
-                            "stock_symbol": symbol,
-                            "start_time": unclear["start_time"]
+                            "stock_name":
+                            corrected,
+                            "stock_symbol":
+                            symbol,
+                            "start_time":
+                            unclear["start_time"]
                         })
                         break
             else:
                 original = item.get("original", "unknown")
                 print(f"      ❌ {original} → No match found")
-        
+
         return result_stocks
-        
+
     except Exception as e:
         print(f"   ⚠️ Error resolving unclear stocks: {e}")
         import traceback
@@ -973,7 +1009,7 @@ Only return the JSON array, no other text."""
 def normalize_symbol(symbol):
     """Normalize stock symbols to prevent duplicates."""
     symbol_upper = symbol.upper().strip()
-    
+
     return SYMBOL_NORMALIZATION.get(symbol_upper, symbol_upper)
 
 
@@ -988,10 +1024,10 @@ def validate_and_format_csv(stocks, api_key=None):
         return "STOCK NAME,STOCK SYMBOL,START TIME\n"
 
     print("\n   🔍 Applying spelling corrections and validation...")
-    
+
     corrected_stocks = []
     unclear_stocks = []
-    
+
     for stock in stocks:
         corrected_name = correct_stock_name(stock["stock_name"])
         if corrected_name == "UNCLEAR":
@@ -1007,28 +1043,35 @@ def validate_and_format_csv(stocks, api_key=None):
                 "stock_symbol": stock["stock_symbol"],
                 "start_time": stock["start_time"]
             })
-    
+
     if unclear_stocks and api_key:
-        resolved_stocks = resolve_unclear_stocks_with_search(unclear_stocks, api_key)
+        resolved_stocks = resolve_unclear_stocks_with_search(
+            unclear_stocks, api_key)
         corrected_stocks.extend(resolved_stocks)
-        print(f"   ✅ Resolved {len(resolved_stocks)} of {len(unclear_stocks)} unclear stocks")
+        print(
+            f"   ✅ Resolved {len(resolved_stocks)} of {len(unclear_stocks)} unclear stocks"
+        )
     elif unclear_stocks:
-        print(f"   ⚠️ Skipping {len(unclear_stocks)} unclear stocks (no API key for search)")
-    
+        print(
+            f"   ⚠️ Skipping {len(unclear_stocks)} unclear stocks (no API key for search)"
+        )
+
     print(f"\n   📊 Normalizing symbols and removing duplicates...")
-    
+
     seen_normalized = {}
     unique_stocks = []
-    
+
     for stock in corrected_stocks:
         normalized_symbol = normalize_symbol(stock["stock_symbol"])
-        
+
         if normalized_symbol not in seen_normalized:
             seen_normalized[normalized_symbol] = True
             stock["stock_symbol"] = normalized_symbol
             unique_stocks.append(stock)
         else:
-            print(f"      🔄 Removing duplicate: {stock['stock_name']} ({stock['stock_symbol']})")
+            print(
+                f"      🔄 Removing duplicate: {stock['stock_name']} ({stock['stock_symbol']})"
+            )
 
     csv_rows = ["STOCK NAME,STOCK SYMBOL,START TIME"]
     for stock in sorted(unique_stocks, key=lambda x: x["start_time"]):
@@ -1057,15 +1100,24 @@ def run(job_folder):
     print(f"{'='*60}\n")
 
     try:
-        detected_speakers_file = os.path.join(job_folder, "analysis", "detected_speakers.txt")
-        filtered_transcript_file = os.path.join(job_folder, "transcripts", "filtered_transcription.txt")
-        output_csv = os.path.join(job_folder, "analysis", "extracted_stocks.csv")
+        detected_speakers_file = os.path.join(job_folder, "analysis",
+                                              "detected_speakers.txt")
+        filtered_transcript_file = os.path.join(job_folder, "transcripts",
+                                                "filtered_transcription.txt")
+        output_csv = os.path.join(job_folder, "analysis",
+                                  "extracted_stocks.csv")
         chunks_folder = os.path.join(job_folder, "analysis", "stock_chunks")
 
         if not os.path.exists(detected_speakers_file):
-            return {'status': 'failed', 'message': 'Detected speakers file not found'}
+            return {
+                'status': 'failed',
+                'message': 'Detected speakers file not found'
+            }
         if not os.path.exists(filtered_transcript_file):
-            return {'status': 'failed', 'message': 'Filtered transcript file not found'}
+            return {
+                'status': 'failed',
+                'message': 'Filtered transcript file not found'
+            }
 
         print("📖 Reading detected speakers...")
         with open(detected_speakers_file, 'r', encoding='utf-8') as f:
@@ -1086,7 +1138,9 @@ def run(job_folder):
         chunks = split_into_chunks(lines, pradip_speaker, NUM_CHUNKS)
         print(f"✅ Created {len(chunks)} chunks:")
         for i, chunk in enumerate(chunks, 1):
-            print(f"   Chunk {i}: {len(chunk)} lines ({chunk[0]['start_time']} - {chunk[-1]['end_time']})")
+            print(
+                f"   Chunk {i}: {len(chunk)} lines ({chunk[0]['start_time']} - {chunk[-1]['end_time']})"
+            )
         print()
 
         print("🔑 Fetching Gemini API key...")
@@ -1100,35 +1154,44 @@ def run(job_folder):
         conn.close()
 
         if not result:
-            return {'status': 'failed', 'message': 'Gemini API key not found. Please add it in Settings → API Keys → Gemini'}
+            return {
+                'status':
+                'failed',
+                'message':
+                'Gemini API key not found. Please add it in Settings → API Keys → Gemini'
+            }
 
         gemini_api_key = result[0].strip()
         model_name = get_gemini_model()
-        
-        print(f"✅ Gemini API key found (starts with: {gemini_api_key[:10]}...)")
+
+        print(
+            f"✅ Gemini API key found (starts with: {gemini_api_key[:10]}...)")
         print(f"✅ Using Gemini model: {model_name} (REST API)\n")
 
         os.makedirs(chunks_folder, exist_ok=True)
 
-        print("🔍 Phase 1: Extracting stocks from each chunk (word-by-word analysis)...\n")
+        print(
+            "🔍 Phase 1: Extracting stocks from each chunk (word-by-word analysis)...\n"
+        )
         all_chunk_stocks = []
 
         for i, chunk in enumerate(chunks, 1):
             print(f"   📝 Processing Chunk {i}/{len(chunks)}...")
-            
-            stocks = extract_stocks_from_chunk(chunk, i, gemini_api_key, model_name)
-            
+
+            stocks = extract_stocks_from_chunk(chunk, i, gemini_api_key,
+                                               model_name)
+
             chunk_file = os.path.join(chunks_folder, f"chunk_{i}_stocks.txt")
             with open(chunk_file, 'w', encoding='utf-8') as f:
                 for time_str, stock_name in stocks:
                     f.write(f"{time_str} - {stock_name}\n")
-            
+
             print(f"      ✅ Found {len(stocks)} stocks in chunk {i}")
             for time_str, stock_name in stocks[:3]:
                 print(f"         • {time_str} - {stock_name}")
             if len(stocks) > 3:
                 print(f"         ... and {len(stocks) - 3} more")
-            
+
             all_chunk_stocks.extend(stocks)
             print()
 
@@ -1144,11 +1207,13 @@ def run(job_folder):
                 f.write(f"{time_str} - {stock_name}\n")
 
         print("\n🎯 Phase 3: Getting accurate NSE symbols...")
-        final_stocks = get_accurate_symbols(merged_stocks, gemini_api_key, model_name)
+        final_stocks = get_accurate_symbols(merged_stocks, gemini_api_key,
+                                            model_name)
         print(f"✅ Final stocks with symbols: {len(final_stocks)}")
 
         print("\n📝 Phase 4: Validating and formatting final CSV...")
-        csv_content = validate_and_format_csv(final_stocks, api_key=gemini_api_key)
+        csv_content = validate_and_format_csv(final_stocks,
+                                              api_key=gemini_api_key)
 
         os.makedirs(os.path.dirname(output_csv), exist_ok=True)
         with open(output_csv, "w", encoding="utf-8") as f:
@@ -1166,9 +1231,12 @@ def run(job_folder):
                 print(f"   ... and {stock_count - 10} more\n")
 
         return {
-            "status": "success",
-            "message": f"Extracted {stock_count} stocks using intelligent chunk-based detection",
-            "output_files": ["analysis/extracted_stocks.csv", "analysis/stock_chunks/"]
+            "status":
+            "success",
+            "message":
+            f"Extracted {stock_count} stocks using intelligent chunk-based detection",
+            "output_files":
+            ["analysis/extracted_stocks.csv", "analysis/stock_chunks/"]
         }
 
     except Exception as e:
@@ -1179,7 +1247,8 @@ def run(job_folder):
 
 if __name__ == "__main__":
     import sys
-    test_folder = sys.argv[1] if len(sys.argv) > 1 else "backend/job_files/test_job"
+    test_folder = sys.argv[1] if len(
+        sys.argv) > 1 else "backend/job_files/test_job"
     result = run(test_folder)
     print(f"\n{'='*60}")
     print(f"Result: {result['status'].upper()}")
