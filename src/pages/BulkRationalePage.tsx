@@ -40,7 +40,7 @@ interface JobStep {
   ended_at?: string;
 }
 
-type WorkflowStage = 'input' | 'processing' | 'csv-review' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
+type WorkflowStage = 'input' | 'processing' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
 type SaveType = 'save' | 'save-and-sign' | null;
 
 interface BulkRationalePageProps {
@@ -88,11 +88,6 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [selectedRestartStep, setSelectedRestartStep] = useState<number>(1);
   const [isRestarting, setIsRestarting] = useState(false);
-  const [csvPreviewHtml, setCsvPreviewHtml] = useState<string>('');
-  const [csvRowCount, setCsvRowCount] = useState<number>(0);
-  const [isUploadingCsv, setIsUploadingCsv] = useState(false);
-  const [isContinuing, setIsContinuing] = useState(false);
-  const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadChannels();
@@ -160,9 +155,6 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
         if (data.status === 'processing') {
           setWorkflowStage('processing');
           startPolling(jobId);
-        } else if (data.status === 'awaiting_csv_review') {
-          setWorkflowStage('csv-review');
-          await fetchCsvPreview(jobId);
         } else if (data.status === 'failed') {
           setWorkflowStage('processing');
         } else if (data.status === 'pdf_ready' && data.pdfPath) {
@@ -252,15 +244,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
             setJobSteps(mappedSteps);
           }
 
-          if (data.status === 'awaiting_csv_review') {
-            if (pollingIntervalRef.current) {
-              clearInterval(pollingIntervalRef.current);
-            }
-            setWorkflowStage('csv-review');
-            await fetchCsvPreview(jobId);
-            playCompletionBell();
-            toast.success('Step 4 completed! Please review the CSV before continuing.');
-          } else if (data.status === 'pdf_ready' && data.pdfPath) {
+          if (data.status === 'pdf_ready' && data.pdfPath) {
             if (data.pdfPath !== lastNotifiedPdfPathRef.current || workflowStage !== 'pdf-preview') {
               lastNotifiedPdfPathRef.current = data.pdfPath;
               if (pollingIntervalRef.current) {
@@ -306,116 +290,6 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
       }
     } catch (error) {
       console.error('Error fetching PDF:', error);
-    }
-  };
-
-  const fetchCsvPreview = async (jobId: string) => {
-    try {
-      const response = await fetch(API_ENDPOINTS.bulkRationale.csvPreview(jobId), {
-        headers: getAuthHeaders(token),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setCsvPreviewHtml(data.html);
-          setCsvRowCount(data.rowCount);
-        }
-      } else {
-        console.error('Failed to fetch CSV preview');
-      }
-    } catch (error) {
-      console.error('Error fetching CSV preview:', error);
-    }
-  };
-
-  const handleDownloadAnalysisCsv = async () => {
-    if (!currentJobId) return;
-
-    try {
-      const response = await fetch(API_ENDPOINTS.bulkRationale.downloadAnalysisCsv(currentJobId), {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'bulk-input-analysis.csv';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        toast.success('CSV downloaded');
-      } else {
-        toast.error('Failed to download CSV');
-      }
-    } catch (error) {
-      console.error('Error downloading CSV:', error);
-      toast.error('Failed to download CSV');
-    }
-  };
-
-  const handleUploadAnalysisCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !currentJobId) return;
-
-    setIsUploadingCsv(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch(API_ENDPOINTS.bulkRationale.uploadAnalysisCsv(currentJobId), {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        toast.success('CSV uploaded', { description: 'Re-running Step 4 with updated data...' });
-        setWorkflowStage('processing');
-        startPolling(currentJobId);
-      } else {
-        toast.error(data.error || 'Failed to upload CSV');
-      }
-    } catch (error) {
-      console.error('Error uploading CSV:', error);
-      toast.error('Failed to upload CSV');
-    } finally {
-      setIsUploadingCsv(false);
-      if (csvFileInputRef.current) {
-        csvFileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleContinuePipeline = async () => {
-    if (!currentJobId) return;
-
-    setIsContinuing(true);
-    try {
-      const response = await fetch(API_ENDPOINTS.bulkRationale.continuePipeline(currentJobId), {
-        method: 'POST',
-        headers: getAuthHeaders(token),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        toast.success('Continuing pipeline', { description: 'Processing Steps 5-7...' });
-        setWorkflowStage('processing');
-        startPolling(currentJobId);
-      } else {
-        toast.error(data.error || 'Failed to continue pipeline');
-      }
-    } catch (error) {
-      console.error('Error continuing pipeline:', error);
-      toast.error('Failed to continue pipeline');
-    } finally {
-      setIsContinuing(false);
     }
   };
 
@@ -560,8 +434,6 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     setPdfBlobUrl(null);
     setInputText('');
     setYoutubeUrl('');
-    setCsvPreviewHtml('');
-    setCsvRowCount(0);
     lastNotifiedPdfPathRef.current = null;
   };
 
@@ -591,78 +463,6 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
             <p className="text-slate-700">Processing your bulk rationale...</p>
             <p className="text-sm text-slate-500 mt-2">{jobStatus}</p>
           </div>
-        </div>
-      );
-    }
-
-    if (workflowStage === 'csv-review') {
-      return (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-800">Review Mapped CSV</h3>
-            <span className="text-sm text-slate-500">{csvRowCount} stocks</span>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-            <div 
-              className="w-full h-[400px] overflow-auto"
-              dangerouslySetInnerHTML={{ __html: csvPreviewHtml }}
-            />
-          </div>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-sm text-amber-800">
-              <strong>Review the mapped data above.</strong> You can download and edit the analysis CSV, 
-              then upload it to re-run Step 4. When ready, click Continue to proceed with price fetch, 
-              chart generation, and PDF creation.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              onClick={handleDownloadAnalysisCsv}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Download Analysis CSV
-            </Button>
-            
-            <div className="relative">
-              <input
-                ref={csvFileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleUploadAnalysisCsv}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                disabled={isUploadingCsv}
-              />
-              <Button
-                className="w-full bg-amber-600 hover:bg-amber-700 text-white"
-                disabled={isUploadingCsv}
-              >
-                {isUploadingCsv ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="w-4 h-4 mr-2" />
-                )}
-                Upload Edited CSV
-              </Button>
-            </div>
-          </div>
-
-          <Button
-            onClick={handleContinuePipeline}
-            disabled={isContinuing}
-            className="w-full bg-green-600 hover:bg-green-700 text-white"
-            size="lg"
-          >
-            {isContinuing ? (
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            ) : (
-              <Play className="w-5 h-5 mr-2" />
-            )}
-            Continue to Steps 5-7
-          </Button>
         </div>
       );
     }
@@ -1007,7 +807,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
                 </div>
 
                 {/* New Analysis Button */}
-                {(workflowStage === 'csv-review' || workflowStage === 'pdf-preview' || workflowStage === 'completed' || workflowStage === 'saved') && (
+                {(workflowStage === 'pdf-preview' || workflowStage === 'completed' || workflowStage === 'saved') && (
                   <Button
                     variant="outline"
                     onClick={handleReset}
