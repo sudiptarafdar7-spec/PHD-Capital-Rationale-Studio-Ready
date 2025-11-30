@@ -243,7 +243,8 @@ def get_job(job_id):
             
             pdf_path = None
             if job['status'] in ['pdf_ready', 'completed', 'signed']:
-                pdf_folder = os.path.join(job['folder_path'], 'pdf')
+                resolved_folder = resolve_job_folder_path(job['folder_path'])
+                pdf_folder = os.path.join(resolved_folder, 'pdf')
                 if os.path.exists(pdf_folder):
                     pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf') and not f.startswith('bulk_rationale_signed')]
                     if pdf_files:
@@ -409,15 +410,21 @@ def download_pdf(job_id):
                 return jsonify({'error': 'Job not found'}), 404
         
         resolved_folder = resolve_job_folder_path(job['folder_path'])
-        pdf_path = os.path.join(resolved_folder, 'pdf', 'bulk_rationale.pdf')
+        pdf_folder = os.path.join(resolved_folder, 'pdf')
         
-        if not os.path.exists(pdf_path):
+        pdf_path = None
+        if os.path.exists(pdf_folder):
+            pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf') and not f.startswith('bulk_rationale_signed')]
+            if pdf_files:
+                pdf_path = os.path.join(pdf_folder, pdf_files[0])
+        
+        if not pdf_path or not os.path.exists(pdf_path):
             return jsonify({'error': 'PDF not found'}), 404
         
         return send_file(
             pdf_path,
             as_attachment=False,
-            download_name=f'{job_id}_bulk_rationale.pdf',
+            download_name=os.path.basename(pdf_path),
             mimetype='application/pdf'
         )
         
