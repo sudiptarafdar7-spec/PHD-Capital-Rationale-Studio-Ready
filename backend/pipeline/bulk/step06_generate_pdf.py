@@ -538,6 +538,8 @@ def run(job_folder, template_config=None):
             ]))
             return card_table
         
+        story.append(PageBreak())
+        
         print("📋 Adding Contact Details section...")
         story.append(heading("Contact Details"))
         story.append(Spacer(1, 14))
