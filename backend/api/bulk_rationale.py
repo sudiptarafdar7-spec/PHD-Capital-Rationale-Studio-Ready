@@ -24,8 +24,16 @@ BULK_STEPS = [
 ]
 
 
-def run_bulk_pipeline(job_id, job_folder, call_date, call_time):
-    """Run the bulk rationale pipeline in background"""
+def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
+    """Run the bulk rationale pipeline in background
+    
+    Args:
+        job_id: Job identifier
+        job_folder: Path to job folder
+        call_date: Date of the call
+        call_time: Time of the call
+        start_step: Step number to start from (default 1)
+    """
     from backend.pipeline.bulk import (
         step01_translate,
         step02_convert_csv,
@@ -46,6 +54,9 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time):
     
     try:
         for step_num, step_name, step_func, step_args in steps:
+            if step_num < start_step:
+                print(f"⏭️ Skipping Step {step_num}: {step_name} (already completed)")
+                continue
             with get_db_cursor(commit=True) as cursor:
                 cursor.execute("""
                     UPDATE job_steps 
@@ -512,7 +523,7 @@ def restart_step(job_id, step_number):
         
         thread = threading.Thread(
             target=run_bulk_pipeline,
-            args=(job_id, job['folder_path'], call_date, call_time)
+            args=(job_id, job['folder_path'], call_date, call_time, step_number)
         )
         thread.daemon = True
         thread.start()
