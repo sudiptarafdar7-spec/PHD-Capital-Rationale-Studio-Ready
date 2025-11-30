@@ -99,7 +99,11 @@ def get_stock_autocomplete(query: str, limit: int = 10) -> List[Dict]:
             results.append({
                 'symbol': str(row['SEM_TRADING_SYMBOL']) if pd.notna(row['SEM_TRADING_SYMBOL']) else '',
                 'name': str(row['SM_SYMBOL_NAME']) if pd.notna(row['SM_SYMBOL_NAME']) else '',
-                'exchange': str(row['SEM_EXM_EXCH_ID']) if pd.notna(row['SEM_EXM_EXCH_ID']) else ''
+                'securityId': str(row['SEM_SMST_SECURITY_ID']) if pd.notna(row['SEM_SMST_SECURITY_ID']) else '',
+                'listedName': str(row['SM_SYMBOL_NAME']) if pd.notna(row['SM_SYMBOL_NAME']) else '',
+                'shortName': str(row['SEM_CUSTOM_SYMBOL']) if pd.notna(row['SEM_CUSTOM_SYMBOL']) else '',
+                'exchange': str(row['SEM_EXM_EXCH_ID']) if pd.notna(row['SEM_EXM_EXCH_ID']) else '',
+                'instrument': str(row['SEM_INSTRUMENT_NAME']) if pd.notna(row['SEM_INSTRUMENT_NAME']) else ''
             })
         
         return results
