@@ -493,12 +493,9 @@ def run(job_folder, template_config=None):
             story.append(Spacer(1, 10))
             
             analysis_text = str(row.get("ANALYSIS", "") or "—").strip()
-            under_rationale = [
-                Paragraph("<b>OUR GENERAL VIEW</b>", label_style),
-                Spacer(1, 2),
-                Paragraph(analysis_text, body_style),
-            ]
-            story.append(padded_block(under_rationale))
+            story.append(Paragraph("<b>OUR GENERAL VIEW</b>", label_style))
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(analysis_text, body_style))
             
             story.append(PageBreak())
             
