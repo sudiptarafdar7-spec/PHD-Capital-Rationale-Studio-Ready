@@ -171,10 +171,6 @@ def run(job_folder):
             stock_name = row['STOCK NAME']
             date = row.get('DATE', '')
             time = row.get('TIME', '')
-            call = row.get('CALL', row.get('ACTION', ''))
-            targets = row.get('TARGETS', row.get('TARGET', ''))
-            stop_loss = row.get('STOP LOSS', row.get('STOPLOSS', ''))
-            holding_period = row.get('HOLDING PERIOD', '')
             analysis = row.get('ANALYSIS', row.get('RATIONALE', ''))
             chart_type = row.get('CHART TYPE', 'Daily')
             
@@ -230,10 +226,6 @@ def run(job_folder):
                     "DATE": date,
                     "TIME": time,
                     "STOCK NAME": stock_name,
-                    "CALL": call,
-                    "TARGETS": targets,
-                    "STOP LOSS": stop_loss,
-                    "HOLDING PERIOD": holding_period,
                     "ANALYSIS": analysis,
                     "CHART TYPE": chart_type,
                     "STOCK SYMBOL": stock_symbol,
@@ -251,10 +243,6 @@ def run(job_folder):
                     "DATE": date,
                     "TIME": time,
                     "STOCK NAME": stock_name,
-                    "CALL": call,
-                    "TARGETS": targets,
-                    "STOP LOSS": stop_loss,
-                    "HOLDING PERIOD": holding_period,
                     "ANALYSIS": analysis,
                     "CHART TYPE": chart_type,
                     "STOCK SYMBOL": "",
