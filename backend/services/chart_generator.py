@@ -16,7 +16,6 @@ import mplfinance as mpf
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from backend.utils.database import get_db_cursor
-from backend.utils.encryption import decrypt_api_key
 
 IST = pytz.timezone("Asia/Kolkata")
 BASE_URL = "https://api.dhan.co/v2"
@@ -38,7 +37,7 @@ class ChartGeneratorService:
                 cursor.execute("SELECT key_value FROM api_keys WHERE provider = 'dhan'")
                 result = cursor.fetchone()
                 if result and result['key_value']:
-                    return decrypt_api_key(result['key_value'])
+                    return result['key_value']
         except Exception as e:
             print(f"Error getting Dhan API key: {e}")
         return None

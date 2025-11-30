@@ -113,6 +113,13 @@ export const API_ENDPOINTS = {
     getAll: `${API_BASE_URL}/api/v1/activity-logs`,
     create: `${API_BASE_URL}/api/v1/activity-logs`,
   },
+  generateChart: {
+    stocks: (query: string) => `${API_BASE_URL}/api/v1/generate-chart/stocks?q=${encodeURIComponent(query)}`,
+    stockDetails: (symbol: string) => `${API_BASE_URL}/api/v1/generate-chart/stock-details?symbol=${encodeURIComponent(symbol)}`,
+    generate: `${API_BASE_URL}/api/v1/generate-chart/generate`,
+    view: (chartId: string) => `${API_BASE_URL}/api/v1/generate-chart/view/${chartId}`,
+    download: (chartId: string) => `${API_BASE_URL}/api/v1/generate-chart/download/${chartId}`,
+  },
 };
 
 export const getAuthHeaders = (token?: string) => {
