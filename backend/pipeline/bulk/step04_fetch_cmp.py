@@ -59,6 +59,59 @@ def normalize_date_format(date_str):
     return None
 
 
+def normalize_time_format(time_str):
+    """
+    Normalize time to HH:MM:SS format.
+    Handles Excel-corrupted formats like:
+    - 21.09.00 → 21:09:00 (Excel converts colons to periods)
+    - 21:09 → 21:09:00
+    - 21.09 → 21:09:00
+    - 9:30:00 AM → 09:30:00
+    
+    Returns time in HH:MM:SS format or default '10:00:00' if parsing fails.
+    """
+    if not time_str or pd.isna(time_str):
+        return '10:00:00'
+    
+    time_str = str(time_str).strip()
+    
+    # Already in correct format HH:MM:SS
+    if re.match(r'^\d{1,2}:\d{2}:\d{2}$', time_str):
+        return time_str
+    
+    # Excel converts colons to periods: 21.09.00 → 21:09:00
+    if re.match(r'^\d{1,2}\.\d{2}\.\d{2}$', time_str):
+        parts = time_str.split('.')
+        return f"{int(parts[0]):02d}:{parts[1]}:{parts[2]}"
+    
+    # Handle HH:MM format (no seconds)
+    if re.match(r'^\d{1,2}:\d{2}$', time_str):
+        return f"{time_str}:00"
+    
+    # Handle HH.MM format (no seconds, with periods)
+    if re.match(r'^\d{1,2}\.\d{2}$', time_str):
+        parts = time_str.split('.')
+        return f"{int(parts[0]):02d}:{parts[1]}:00"
+    
+    # Try common time formats with AM/PM
+    time_formats = [
+        '%I:%M:%S %p',  # 9:30:00 AM
+        '%I:%M %p',      # 9:30 AM
+        '%H:%M:%S',      # 21:09:00
+        '%H:%M',         # 21:09
+    ]
+    
+    for fmt in time_formats:
+        try:
+            dt = datetime.strptime(time_str, fmt)
+            return dt.strftime('%H:%M:%S')
+        except ValueError:
+            continue
+    
+    # Default fallback
+    return '10:00:00'
+
+
 def get_dhan_api_key():
     """Get Dhan API key from database"""
     with get_db_cursor() as cursor:
@@ -205,7 +258,7 @@ def run(job_folder):
             
             exchange = str(row.get('EXCHANGE', 'NSE')).strip()
             raw_date = str(row.get('DATE', '')).strip()
-            time_str = str(row.get('TIME', '10:00:00')).strip()
+            raw_time = str(row.get('TIME', '10:00:00')).strip()
             
             # Normalize date format to YYYY-MM-DD
             date_str = normalize_date_format(raw_date)
@@ -214,9 +267,12 @@ def run(job_folder):
                 failed_count += 1
                 continue
             
-            # Log if date was converted
-            if raw_date != date_str:
-                print(f"  📅 Date converted: {raw_date} → {date_str}")
+            # Normalize time format to HH:MM:SS (handles Excel's period format)
+            time_str = normalize_time_format(raw_time)
+            
+            # Log if date or time was converted
+            if raw_date != date_str or raw_time != time_str:
+                print(f"  📅 Normalized: {raw_date} {raw_time} → {date_str} {time_str}")
             
             cmp = fetch_cmp_for_stock(security_id, exchange, date_str, time_str, headers)
             
