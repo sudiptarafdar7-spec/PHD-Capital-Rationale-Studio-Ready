@@ -393,7 +393,7 @@ def run(job_folder, template_config=None):
             c.setFont(BASE_BLD, 9)
             c.drawString(cur_x, baseline_y + 4, config['channel_name'])
             c.setFont(BASE_REG, 8)
-            c.drawString(cur_x, baseline_y - 7, "Trading Platform")
+            c.drawString(cur_x, baseline_y - 7, "Youtube Channel")
         
         def on_first_page(c: pdfcanvas.Canvas, d: SimpleDocTemplate):
             draw_letterhead(c)
