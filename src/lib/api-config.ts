@@ -120,6 +120,12 @@ export const API_ENDPOINTS = {
     view: (chartId: string) => `${API_BASE_URL}/api/v1/generate-chart/view/${chartId}`,
     download: (chartId: string) => `${API_BASE_URL}/api/v1/generate-chart/download/${chartId}`,
   },
+  youtubeCaption: {
+    languages: `${API_BASE_URL}/api/v1/youtube-caption/languages`,
+    fetch: `${API_BASE_URL}/api/v1/youtube-caption/fetch`,
+    download: (captionId: string) => `${API_BASE_URL}/api/v1/youtube-caption/download/${captionId}`,
+    clear: (captionId: string) => `${API_BASE_URL}/api/v1/youtube-caption/clear/${captionId}`,
+  },
 };
 
 export const getAuthHeaders = (token?: string) => {

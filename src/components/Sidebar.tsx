@@ -6,6 +6,7 @@ import {
   PenTool, 
   Layers,
   BarChart3,
+  Captions,
   FileText, 
   User, 
   Key, 
@@ -58,6 +59,7 @@ export default function Sidebar({ isOpen, onClose, currentPage, onNavigate, isCo
         { id: 'manual-rationale', label: 'Manual Rationale', icon: <PenTool className="w-5 h-5" /> },
         { id: 'bulk-rationale', label: 'Bulk Rationale', icon: <Layers className="w-5 h-5" /> },
         { id: 'generate-chart', label: 'Generate Chart', icon: <BarChart3 className="w-5 h-5" /> },
+        { id: 'youtube-caption', label: 'Youtube Caption', icon: <Captions className="w-5 h-5" /> },
       ],
     },
     {
