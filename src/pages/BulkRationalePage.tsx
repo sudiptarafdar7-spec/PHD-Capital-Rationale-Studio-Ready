@@ -159,9 +159,12 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
           setWorkflowStage('processing');
         } else if (data.status === 'pdf_ready' && data.pdfPath) {
           setWorkflowStage('pdf-preview');
-          await fetchPdfForPreview(data.pdfPath);
+          await fetchPdfForPreview(data.pdfPath, data.jobId);
         } else if (data.status === 'completed' || data.status === 'signed') {
           setWorkflowStage('completed');
+          if (data.pdfPath) {
+            await fetchPdfForPreview(data.pdfPath, data.jobId);
+          }
         }
         
         toast.info('Job loaded', { description: data.title });
@@ -248,7 +251,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
                 clearInterval(pollingIntervalRef.current);
               }
               setWorkflowStage('pdf-preview');
-              await fetchPdfForPreview(data.pdfPath);
+              await fetchPdfForPreview(data.pdfPath, jobId);
               playCompletionBell();
               toast.success('PDF generated successfully!');
             }
@@ -265,9 +268,15 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     }, 2000);
   };
 
-  const fetchPdfForPreview = async (pdfFilePath: string) => {
+  const fetchPdfForPreview = async (pdfFilePath: string, jobId?: string) => {
+    const targetJobId = jobId || currentJobId;
+    if (!targetJobId) {
+      console.error('No job ID available for PDF fetch');
+      return;
+    }
+    
     try {
-      const response = await fetch(API_ENDPOINTS.bulkRationale.downloadPdf(currentJobId!), {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.downloadPdf(targetJobId), {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -276,6 +285,8 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
         const url = window.URL.createObjectURL(blob);
         setPdfBlobUrl(url);
         setPdfPath(pdfFilePath);
+      } else {
+        console.error('Failed to fetch PDF:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error fetching PDF:', error);

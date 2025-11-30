@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.api import bulk_rationale_bp
 from backend.utils.database import get_db_cursor
 from backend.api.activity_logs import create_activity_log
+from backend.utils.path_utils import resolve_job_folder_path
 from datetime import datetime
 import os
 import uuid
@@ -395,14 +396,15 @@ def download_pdf(job_id):
             if not job:
                 return jsonify({'error': 'Job not found'}), 404
         
-        pdf_path = os.path.join(job['folder_path'], 'pdf', 'bulk_rationale.pdf')
+        resolved_folder = resolve_job_folder_path(job['folder_path'])
+        pdf_path = os.path.join(resolved_folder, 'pdf', 'bulk_rationale.pdf')
         
         if not os.path.exists(pdf_path):
             return jsonify({'error': 'PDF not found'}), 404
         
         return send_file(
             pdf_path,
-            as_attachment=True,
+            as_attachment=False,
             download_name=f'{job_id}_bulk_rationale.pdf',
             mimetype='application/pdf'
         )
