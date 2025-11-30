@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { 
   Layers, Play, Download, Save, FileSignature, Trash2, 
   ArrowLeft, Upload, CheckCircle2, XCircle, Loader2, Clock,
-  RefreshCw
+  RefreshCw, RotateCcw
 } from 'lucide-react';
 import SignedFileUpload from '@/components/SignedFileUpload';
 
@@ -86,6 +86,8 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
   
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [selectedRestartStep, setSelectedRestartStep] = useState<number>(1);
+  const [isRestarting, setIsRestarting] = useState(false);
 
   useEffect(() => {
     loadChannels();
@@ -376,22 +378,33 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
   const handleRestartStep = async (stepNumber: number) => {
     if (!currentJobId) return;
 
+    setIsRestarting(true);
     try {
       const response = await fetch(API_ENDPOINTS.bulkRationale.restartStep(currentJobId, stepNumber), {
         method: 'POST',
         headers: getAuthHeaders(token),
       });
 
-      if (response.ok) {
-        toast.success(`Restarting from step ${stepNumber}`);
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        toast.info(`Restarting from Step ${stepNumber}`, {
+          description: 'All subsequent steps will be re-executed',
+        });
         setWorkflowStage('processing');
         startPolling(currentJobId);
       } else {
-        toast.error('Failed to restart step');
+        toast.error('Failed to restart step', {
+          description: data.error || 'Please try again',
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error restarting step:', error);
-      toast.error('Failed to restart step');
+      toast.error('Failed to restart step', {
+        description: error.message || 'Please try again',
+      });
+    } finally {
+      setIsRestarting(false);
     }
   };
 
@@ -547,11 +560,47 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
                   <span>Progress</span>
                   <span>{progress}%</span>
                 </div>
-                <div className="w-full bg-slate-200 rounded-full h-3">
-                  <div 
-                    className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                    style={{ width: `${progress}%` }}
-                  />
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-slate-200 rounded-full h-3">
+                    <div 
+                      className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={selectedRestartStep.toString()}
+                      onValueChange={(value) => setSelectedRestartStep(parseInt(value, 10))}
+                      disabled={isRestarting}
+                    >
+                      <SelectTrigger className="w-[100px] h-9">
+                        <SelectValue placeholder="Step" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {jobSteps.filter(s => s.status === 'success' || s.status === 'failed' || s.status === 'running').map((step) => (
+                          <SelectItem key={step.step_number} value={step.step_number.toString()}>
+                            Step {step.step_number}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    <Button
+                      onClick={() => handleRestartStep(selectedRestartStep)}
+                      disabled={isRestarting || jobSteps.filter(s => s.status !== 'pending').length === 0}
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-3 bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 hover:border-purple-400"
+                      title={`Restart from step ${selectedRestartStep}`}
+                    >
+                      {isRestarting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -580,9 +629,22 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
                         variant="outline" 
                         size="sm"
                         onClick={() => handleRestartStep(step.step_number)}
+                        disabled={isRestarting}
                       >
                         <RefreshCw className="h-4 w-4 mr-1" />
                         Retry
+                      </Button>
+                    )}
+                    {step.status === 'success' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleRestartStep(step.step_number)}
+                        disabled={isRestarting}
+                        className="text-slate-500 hover:text-purple-600"
+                      >
+                        <RotateCcw className="h-4 w-4 mr-1" />
+                        Reload
                       </Button>
                     )}
                   </div>
