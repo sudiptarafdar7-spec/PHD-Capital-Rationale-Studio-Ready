@@ -11,6 +11,7 @@ import re
 import json
 import openai
 import pandas as pd
+from rapidfuzz import fuzz
 from backend.utils.database import get_db_cursor
 
 
@@ -66,6 +67,89 @@ def parse_bulk_input(input_text):
             entries.append((stock_line, analysis_text))
     
     return entries
+
+
+def deduplicate_stocks(corrected_entries, entries):
+    """
+    Remove duplicate stocks, keeping the single entry version.
+    Example: If "HYUNDAI MOTORS" (grouped) and "HYUNDAI MOTOR INDIA LTD" (single) exist,
+    keep "HYUNDAI MOTOR INDIA LTD" and remove the grouped version.
+    
+    Args:
+        corrected_entries: List of validated stock entries with index
+        entries: Original entries list to check if stock was single or grouped
+        
+    Returns:
+        List of deduplicated entries
+    """
+    from difflib import SequenceMatcher
+    
+    def similarity(a, b):
+        return SequenceMatcher(None, a.upper(), b.upper()).ratio()
+    
+    # Track which entries were single vs grouped
+    single_entries = set()
+    grouped_entries = set()
+    
+    for idx, (stock_line, _) in enumerate(entries):
+        stock_names = [s.strip() for s in stock_line.split(',')]
+        if len(stock_names) == 1:
+            single_entries.add(idx)
+        else:
+            grouped_entries.add(idx)
+    
+    # Build a map of stock names to their entries
+    stock_map = {}
+    for entry in corrected_entries:
+        idx = entry['index']
+        stock_name = entry['stock_name']
+        if stock_name not in stock_map:
+            stock_map[stock_name] = {'entry': entry, 'is_single': idx in single_entries}
+        else:
+            # If this stock already exists
+            existing = stock_map[stock_name]
+            # Prefer single entries over grouped entries
+            if (idx in single_entries) and not existing['is_single']:
+                stock_map[stock_name] = {'entry': entry, 'is_single': True}
+    
+    # Find similar stocks (potential duplicates)
+    unique_stocks = list(stock_map.keys())
+    duplicates_to_remove = set()
+    
+    for i, stock1 in enumerate(unique_stocks):
+        if stock1 in duplicates_to_remove:
+            continue
+        for stock2 in unique_stocks[i+1:]:
+            if stock2 in duplicates_to_remove:
+                continue
+            
+            sim_score = similarity(stock1, stock2)
+            if sim_score >= 0.85:  # High similarity threshold
+                # Keep the correct/longer one, remove the shorter one
+                existing1 = stock_map[stock1]
+                existing2 = stock_map[stock2]
+                
+                # Prefer single entries
+                if existing1['is_single'] and not existing2['is_single']:
+                    duplicates_to_remove.add(stock2)
+                elif existing2['is_single'] and not existing1['is_single']:
+                    duplicates_to_remove.add(stock1)
+                # If both single or both grouped, keep the longer name
+                elif len(stock1) > len(stock2):
+                    duplicates_to_remove.add(stock2)
+                else:
+                    duplicates_to_remove.add(stock1)
+    
+    # Return only non-duplicate entries
+    result = []
+    seen_stocks = set()
+    for entry in corrected_entries:
+        stock_name = entry['stock_name']
+        if stock_name not in duplicates_to_remove and stock_name not in seen_stocks:
+            result.append(entry)
+            seen_stocks.add(stock_name)
+    
+    return result, duplicates_to_remove
 
 
 def validate_stocks_with_openai(client, entries):
@@ -231,6 +315,13 @@ def run(job_folder, call_date, call_time):
                     clean_name = re.sub(r'\s*\((?:CALL|BUY|SELL|HOLD)\)\s*$', '', name, flags=re.IGNORECASE).strip().upper()
                     if clean_name:
                         corrected_entries.append({"index": idx, "stock_name": clean_name})
+        
+        print("\n🔍 Removing duplicate stocks...")
+        corrected_entries, duplicates_removed = deduplicate_stocks(corrected_entries, entries)
+        if duplicates_removed:
+            print(f"✅ Removed {len(duplicates_removed)} duplicate(s):")
+            for dup in duplicates_removed:
+                print(f"  - {dup}")
         
         print("\n📋 Validated stock names:")
         print("-" * 60)
