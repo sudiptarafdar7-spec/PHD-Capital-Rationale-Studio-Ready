@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, CheckCircle2, XCircle, Eye, Download, Plus, Search, Calendar, Video, FileSpreadsheet, PenTool, ExternalLink, Clock, X, ChevronLeft, ChevronRight, PlayCircle, FileSignature, Loader2 } from 'lucide-react';
+import { FileText, CheckCircle2, XCircle, Eye, Download, Plus, Search, Calendar, Video, FileSpreadsheet, PenTool, ExternalLink, Clock, X, ChevronLeft, ChevronRight, PlayCircle, FileSignature, Loader2, Layers } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -127,6 +127,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         return <FileSpreadsheet className="w-4 h-4" />;
       case 'Manual Rationale':
         return <PenTool className="w-4 h-4" />;
+      case 'Bulk Rationale':
+        return <Layers className="w-4 h-4" />;
       default:
         return <FileText className="w-4 h-4" />;
     }
@@ -140,6 +142,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
       case 'Manual Rationale':
         return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'Bulk Rationale':
+        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
       default:
         return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
     }
@@ -179,6 +183,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       onNavigate('premium-rationale', jobId);
     } else if (normalizedTool === 'manual_rationale' || jobId.startsWith('manual-')) {
       onNavigate('manual-rationale', jobId);
+    } else if (normalizedTool === 'bulk_rationale' || jobId.startsWith('bulk-')) {
+      onNavigate('bulk-rationale', jobId);
     } else {
       // Default to media-rationale
       onNavigate('media-rationale', jobId);
@@ -383,6 +389,12 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <div className="flex items-center gap-2">
                       <PenTool className="w-4 h-4 text-green-500" />
                       Manual Rationale
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="bulk" className="text-foreground focus:bg-accent focus:text-accent-foreground">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-orange-500" />
+                      Bulk Rationale
                     </div>
                   </SelectItem>
                 </SelectContent>
