@@ -55,10 +55,31 @@ def get_words(s):
 
 
 def word_match_score(search_words, target_words):
-    """Calculate word match score between two word lists."""
+    """
+    Calculate word match score between two word lists.
+    IMPORTANT: First word must match for a valid score.
+    This prevents "SERVOTECH POWER SYSTEMS" matching "SMARTEN POWER SYSTEMS"
+    just because they share "POWER SYSTEMS".
+    """
     if not search_words or not target_words:
         return 0
     
+    # First word (company name) MUST match
+    first_word = search_words[0]
+    first_word_matched = False
+    
+    # Check if first word matches any target word at the beginning
+    # or is a substring of the first target word (for abbreviations)
+    if first_word in target_words:
+        first_word_matched = True
+    elif target_words and (first_word.startswith(target_words[0]) or target_words[0].startswith(first_word)):
+        first_word_matched = True
+    
+    # If first word doesn't match, return 0 (no match)
+    if not first_word_matched:
+        return 0
+    
+    # Count total matched words
     matched = sum(1 for w in search_words if w in target_words)
     return matched / max(len(search_words), 1) * 100
 
