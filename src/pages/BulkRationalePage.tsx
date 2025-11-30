@@ -451,6 +451,144 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     }
   };
 
+  const renderRightPanel = () => {
+    if (workflowStage === 'processing') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-slate-800">Processing Job</h3>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
+            <Loader2 className="w-16 h-16 mx-auto mb-4 text-purple-500 animate-spin" />
+            <p className="text-slate-700">Processing your bulk rationale...</p>
+            <p className="text-sm text-slate-500 mt-2">{jobStatus}</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (workflowStage === 'pdf-preview') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-slate-800">Generated PDF Report</h3>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            {pdfBlobUrl ? (
+              <iframe
+                src={pdfBlobUrl}
+                className="w-full h-[500px]"
+                title="PDF Report Preview"
+              />
+            ) : (
+              <div className="w-full h-[500px] flex items-center justify-center bg-slate-100">
+                <p className="text-slate-500">Loading PDF...</p>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              onClick={() => {
+                if (pdfBlobUrl) {
+                  const a = document.createElement('a');
+                  a.href = pdfBlobUrl;
+                  a.download = `${currentJobId}_bulk_rationale.pdf`;
+                  a.click();
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download
+            </Button>
+            <Button
+              onClick={handleSave}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              Save
+            </Button>
+            <Button
+              onClick={handleSaveAndSign}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <FileSignature className="w-4 h-4 mr-2" />
+              Save & Sign
+            </Button>
+            <Button
+              onClick={handleDelete}
+              variant="outline"
+              className="border-red-500/50 text-red-500 hover:bg-red-600 hover:text-white hover:border-red-600"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (workflowStage === 'upload-signed') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-slate-800">Upload Signed PDF</h3>
+          </div>
+          
+          <div className="bg-white border border-slate-200 rounded-lg p-6">
+            {currentJobId && (
+              <SignedFileUpload
+                jobId={currentJobId}
+                uploadEndpoint={API_ENDPOINTS.bulkRationale.uploadSigned(currentJobId)}
+                onUploadComplete={handleSignedUploadComplete}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (workflowStage === 'completed' || workflowStage === 'saved') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-green-600 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Job Completed
+            </h3>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            {pdfBlobUrl ? (
+              <iframe
+                src={pdfBlobUrl}
+                className="w-full h-[500px]"
+                title="PDF Report Preview"
+              />
+            ) : (
+              <div className="w-full h-[500px] flex items-center justify-center bg-slate-100">
+                <p className="text-slate-500">PDF saved to Saved Rationale</p>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button onClick={() => onNavigate('saved-rationale')} className="bg-purple-600 hover:bg-purple-700 text-white">
+              View Saved Rationale
+            </Button>
+            <Button variant="outline" onClick={handleReset}>
+              Start New Analysis
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
       <div className="max-w-6xl mx-auto">
@@ -557,204 +695,135 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
           </Card>
         )}
 
-        {workflowStage === 'processing' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Processing: {rationaleTitle}</CardTitle>
-              <CardDescription>
-                Job ID: {currentJobId} | Status: {jobStatus}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-6">
-                <div className="flex justify-between text-sm text-slate-600 mb-2">
-                  <span>Progress</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 bg-slate-200 rounded-full h-3">
-                    <div 
-                      className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={selectedRestartStep.toString()}
-                      onValueChange={(value) => setSelectedRestartStep(parseInt(value, 10))}
-                      disabled={isRestarting}
-                    >
-                      <SelectTrigger className="w-[100px] h-9">
-                        <SelectValue placeholder="Step" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {jobSteps.filter(s => s.status === 'success' || s.status === 'failed' || s.status === 'running').map((step) => (
-                          <SelectItem key={step.step_number} value={step.step_number.toString()}>
-                            Step {step.step_number}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    
-                    <Button
-                      onClick={() => handleRestartStep(selectedRestartStep)}
-                      disabled={isRestarting || jobSteps.filter(s => s.status !== 'pending').length === 0}
-                      variant="outline"
-                      size="sm"
-                      className="h-9 px-3 bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 hover:border-purple-400"
-                      title={`Restart from step ${selectedRestartStep}`}
-                    >
-                      {isRestarting ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RotateCcw className="w-4 h-4" />
-                      )}
-                    </Button>
+        {currentJobId && jobSteps.length > 0 && workflowStage !== 'input' && (
+          <Card className="shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+              {/* Left Column: 6-Step Pipeline */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-800">6-Step Pipeline</h3>
+                    <p className="text-sm text-slate-500">Job ID: {currentJobId}</p>
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-3">
-                {jobSteps.map((step) => (
-                  <div 
-                    key={step.step_number}
-                    className={`flex items-center justify-between p-4 rounded-lg border ${
-                      step.status === 'running' ? 'bg-blue-50 border-blue-200' :
-                      step.status === 'success' ? 'bg-green-50 border-green-200' :
-                      step.status === 'failed' ? 'bg-red-50 border-red-200' :
-                      'bg-slate-50 border-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {renderStepStatus(step)}
-                      <div>
-                        <p className="font-medium">Step {step.step_number}: {step.name || step.step_name}</p>
-                        {step.message && (
-                          <p className="text-sm text-slate-600">{step.message}</p>
-                        )}
-                      </div>
+                {/* Progress Bar with Restart Selector */}
+                <div className="mb-4">
+                  <div className="flex justify-between text-sm text-slate-600 mb-2">
+                    <span>Progress</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-slate-200 rounded-full h-3">
+                      <div 
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${progress}%` }}
+                      />
                     </div>
-                    {step.status === 'failed' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleRestartStep(step.step_number)}
+                    
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={selectedRestartStep.toString()}
+                        onValueChange={(value) => setSelectedRestartStep(parseInt(value, 10))}
                         disabled={isRestarting}
                       >
-                        <RefreshCw className="h-4 w-4 mr-1" />
-                        Retry
-                      </Button>
-                    )}
-                    {step.status === 'success' && (
-                      <Button 
-                        variant="ghost" 
+                        <SelectTrigger className="w-[100px] h-9">
+                          <SelectValue placeholder="Step" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {jobSteps.filter(s => s.status === 'success' || s.status === 'failed' || s.status === 'running').map((step) => (
+                            <SelectItem key={step.step_number} value={step.step_number.toString()}>
+                              Step {step.step_number}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      
+                      <Button
+                        onClick={() => handleRestartStep(selectedRestartStep)}
+                        disabled={isRestarting || jobSteps.filter(s => s.status !== 'pending').length === 0}
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleRestartStep(step.step_number)}
-                        disabled={isRestarting}
-                        className="text-slate-500 hover:text-purple-600"
+                        className="h-9 px-3 bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 hover:border-purple-400"
+                        title={`Restart from step ${selectedRestartStep}`}
                       >
-                        <RotateCcw className="h-4 w-4 mr-1" />
-                        Reload
+                        {isRestarting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-4 h-4" />
+                        )}
                       </Button>
-                    )}
+                    </div>
                   </div>
-                ))}
+                </div>
+
+                {/* Steps List */}
+                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+                  {jobSteps.map((step) => (
+                    <div 
+                      key={step.step_number}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        step.status === 'running' ? 'bg-blue-50 border-blue-200' :
+                        step.status === 'success' ? 'bg-green-50 border-green-200' :
+                        step.status === 'failed' ? 'bg-red-50 border-red-200' :
+                        'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {renderStepStatus(step)}
+                        <div>
+                          <p className="font-medium text-sm">Step {step.step_number}: {step.name || step.step_name}</p>
+                          {step.message && (
+                            <p className="text-xs text-slate-600">{step.message}</p>
+                          )}
+                        </div>
+                      </div>
+                      {step.status === 'failed' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleRestartStep(step.step_number)}
+                          disabled={isRestarting}
+                          className="h-7 text-xs"
+                        >
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Retry
+                        </Button>
+                      )}
+                      {step.status === 'success' && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleRestartStep(step.step_number)}
+                          disabled={isRestarting}
+                          className="h-7 text-xs text-slate-500 hover:text-purple-600"
+                        >
+                          <RotateCcw className="h-3 w-3 mr-1" />
+                          Reload
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* New Analysis Button */}
+                {(workflowStage === 'pdf-preview' || workflowStage === 'completed' || workflowStage === 'saved') && (
+                  <Button
+                    variant="outline"
+                    onClick={handleReset}
+                    className="w-full mt-4 border-purple-500/50 text-purple-600 hover:bg-purple-50"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    New Analysis
+                  </Button>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {workflowStage === 'pdf-preview' && pdfBlobUrl && (
-          <Card>
-            <CardHeader>
-              <CardTitle>PDF Preview: {rationaleTitle}</CardTitle>
-              <CardDescription>
-                Review the generated PDF and save or sign it
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-6 border rounded-lg overflow-hidden bg-slate-100">
-                <iframe
-                  src={pdfBlobUrl}
-                  className="w-full h-[600px]"
-                  title="PDF Preview"
-                />
+              {/* Right Column: Dynamic Content Based on Workflow Stage */}
+              <div className="space-y-4">
+                {renderRightPanel()}
               </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => {
-                  const a = document.createElement('a');
-                  a.href = pdfBlobUrl;
-                  a.download = `${currentJobId}_bulk_rationale.pdf`;
-                  a.click();
-                }}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download PDF
-                </Button>
-
-                <Button onClick={handleSave} variant="default">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
-                </Button>
-
-                <Button onClick={handleSaveAndSign} variant="secondary">
-                  <FileSignature className="h-4 w-4 mr-2" />
-                  Save & Sign
-                </Button>
-
-                <Button onClick={handleDelete} variant="destructive">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {workflowStage === 'upload-signed' && currentJobId && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload Signed PDF</CardTitle>
-              <CardDescription>
-                Upload the signed version of the PDF
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SignedFileUpload
-                jobId={currentJobId}
-                uploadEndpoint={API_ENDPOINTS.bulkRationale.uploadSigned(currentJobId)}
-                onUploadComplete={handleSignedUploadComplete}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        {workflowStage === 'completed' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-green-600 flex items-center gap-2">
-                <CheckCircle2 className="h-6 w-6" />
-                Job Completed
-              </CardTitle>
-              <CardDescription>
-                {rationaleTitle}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-slate-600">
-                Your bulk rationale has been saved successfully. You can view it in the Saved Rationale section.
-              </p>
-
-              <div className="flex gap-3">
-                <Button onClick={() => onNavigate('saved-rationale')}>
-                  View Saved Rationale
-                </Button>
-                <Button variant="outline" onClick={handleReset}>
-                  Start New Analysis
-                </Button>
-              </div>
-            </CardContent>
+            </div>
           </Card>
         )}
       </div>
