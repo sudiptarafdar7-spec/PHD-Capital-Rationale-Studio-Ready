@@ -269,8 +269,8 @@ def run(job_folder, template_config=None):
             stock_elements.append(Spacer(1, 0.1*inch))
             
             chart_path = row.get('CHART PATH', '')
-            if chart_path:
-                full_chart_path = os.path.join(job_folder, chart_path)
+            if chart_path and pd.notna(chart_path) and isinstance(chart_path, str) and chart_path.strip():
+                full_chart_path = os.path.join(job_folder, str(chart_path).strip())
                 if os.path.exists(full_chart_path):
                     try:
                         img = Image(full_chart_path, width=6.5*inch, height=4*inch)
