@@ -1,168 +1,296 @@
 """
 Bulk Rationale Step 3: Map Master File
-Maps stock names to master file data for symbols and security IDs
+
+Maps stock names from Step 2 CSV to the master reference file to get:
+- Stock Symbol (SEM_TRADING_SYMBOL)
+- Listed Name (SM_SYMBOL_NAME)
+- Short Name (SEM_CUSTOM_SYMBOL)
+- Security ID (SEM_SMST_SECURITY_ID)
+- Exchange (SEM_EXM_EXCH_ID)
+- Instrument (SEM_INSTRUMENT_NAME)
+
+Matching Logic (same as Premium Rationale):
+1. Filter master data → only EQUITY rows
+2. Match STOCK NAME sequentially:
+   - Primary: SEM_CUSTOM_SYMBOL (exact → fuzzy >= 85%)
+   - Secondary: SEM_TRADING_SYMBOL (exact → fuzzy >= 85%)
+   - Tertiary: SM_SYMBOL_NAME (exact → fuzzy >= 85%)
+3. If both NSE and BSE found → Prefer NSE
+
+Input:
+  - analysis/bulk-input.csv (from Step 2)
+  - Master CSV from uploaded_files
+Output:
+  - analysis/mapped_master_file.csv
 """
 
 import os
+import re
 import pandas as pd
+import psycopg2
 from rapidfuzz import fuzz, process
-from backend.utils.database import get_db_cursor
 from backend.utils.path_utils import resolve_uploaded_file_path
 
 
+def normalize_text(s):
+    """Clean text for matching (remove special chars, multiple spaces)."""
+    if not isinstance(s, str):
+        s = str(s)
+    s = re.sub(r"[^A-Z0-9]", "", s.upper())
+    return s.strip()
+
+
+def fuzzy_match(value, target_series, threshold=85):
+    """Return best fuzzy match index or None if below threshold."""
+    if not value or not isinstance(value, str):
+        return None
+    value_norm = normalize_text(value)
+    choices = target_series.tolist()
+    result = process.extractOne(value_norm, choices, scorer=fuzz.token_sort_ratio)
+    if result and result[1] >= threshold:
+        matched_value = result[0]
+        idx_list = target_series[target_series == matched_value].index
+        if len(idx_list) > 0:
+            return idx_list[0]
+    return None
+
+
 def get_master_file_path():
-    """Get master file path from database"""
-    with get_db_cursor() as cursor:
+    """Fetch master file path from database and resolve to current system path"""
+    try:
+        conn = psycopg2.connect(os.environ['DATABASE_URL'])
+        cursor = conn.cursor()
+        
         cursor.execute("""
-            SELECT file_path FROM uploaded_files 
-            WHERE file_type = 'masterFile' 
-            ORDER BY uploaded_at DESC LIMIT 1
+            SELECT file_path 
+            FROM uploaded_files 
+            WHERE file_type = 'masterFile'
+            ORDER BY uploaded_at DESC
+            LIMIT 1
         """)
+        
         result = cursor.fetchone()
-        if result and result['file_path']:
-            return resolve_uploaded_file_path(result['file_path'])
-    return None
-
-
-def fuzzy_match_stock(stock_name, master_df, threshold=75):
-    """
-    Match stock name against master file using fuzzy matching
-    """
-    stock_name_clean = str(stock_name).strip().upper()
+        cursor.close()
+        conn.close()
+        
+        if result:
+            db_path = result[0]
+            resolved_path = resolve_uploaded_file_path(db_path)
+            print(f"📂 Master file path from DB: {db_path}")
+            print(f"📂 Resolved to: {resolved_path}")
+            return resolved_path
+        else:
+            raise ValueError("Master file not found in database. Please upload it first in Settings.")
     
-    search_columns = ['STOCK NAME', 'LISTED NAME', 'SHORT NAME', 'STOCK SYMBOL']
-    available_cols = [col for col in search_columns if col in master_df.columns]
-    
-    if not available_cols:
-        return None
-    
-    all_candidates = []
-    for col in available_cols:
-        candidates = master_df[col].dropna().astype(str).str.upper().tolist()
-        all_candidates.extend([(c, col, i) for i, c in enumerate(candidates)])
-    
-    if not all_candidates:
-        return None
-    
-    best_match = None
-    best_score = 0
-    best_idx = None
-    
-    for candidate, col, idx in all_candidates:
-        score = fuzz.ratio(stock_name_clean, candidate)
-        if score > best_score and score >= threshold:
-            best_score = score
-            best_match = candidate
-            col_values = master_df[col].astype(str).str.upper().tolist()
-            if candidate in col_values:
-                best_idx = col_values.index(candidate)
-    
-    if best_idx is not None:
-        return master_df.iloc[best_idx].to_dict()
-    
-    return None
+    except Exception as e:
+        raise Exception(f"Failed to fetch master file path: {str(e)}")
 
 
 def run(job_folder):
     """
-    Map stocks to master file data
+    Match stocks to master file and add symbol/exchange data
     
     Args:
-        job_folder: Path to job directory
-        
+        job_folder: Path to job folder
+    
     Returns:
-        dict: {
-            'success': bool,
-            'output_file': str,
-            'error': str or None
-        }
+        dict: Status, message, and output files
     """
-    print("\n" + "=" * 60)
-    print("BULK STEP 3: MAP MASTER FILE")
+    print("\n" + "="*60)
+    print("BULK STEP 3: MAP MASTER FILE (SYMBOL MAPPING)")
     print(f"{'='*60}\n")
     
     try:
         analysis_folder = os.path.join(job_folder, 'analysis')
-        input_file = os.path.join(analysis_folder, 'bulk-input.csv')
-        output_file = os.path.join(analysis_folder, 'mapped_master_file.csv')
+        input_csv = os.path.join(analysis_folder, 'bulk-input.csv')
+        output_csv = os.path.join(analysis_folder, 'mapped_master_file.csv')
         
-        if not os.path.exists(input_file):
+        if not os.path.exists(input_csv):
             return {
                 'success': False,
-                'error': f'Input CSV not found: {input_file}'
+                'error': f'Bulk input CSV not found: {input_csv}'
             }
         
-        master_path = get_master_file_path()
-        if not master_path or not os.path.exists(master_path):
+        print("🔑 Retrieving master file path from database...")
+        master_file_path = get_master_file_path()
+        
+        if not os.path.exists(master_file_path):
             return {
                 'success': False,
-                'error': 'Master file not found. Please upload a master file in Settings.'
+                'error': f'Master file not found at: {master_file_path}'
             }
         
-        print(f"📖 Loading input CSV: {input_file}")
-        df = pd.read_csv(input_file)
-        print(f"✅ Loaded {len(df)} stocks")
+        print(f"✅ Master file found: {master_file_path}\n")
         
-        print(f"📖 Loading master file: {master_path}")
-        master_df = pd.read_csv(master_path)
-        print(f"✅ Master file has {len(master_df)} entries")
+        print("📖 Loading master file...")
+        df_master = pd.read_csv(master_file_path, low_memory=False)
+        print(f"✅ Loaded {len(df_master)} records from master file\n")
         
-        new_columns = ['STOCK SYMBOL', 'SHORT NAME', 'LISTED NAME', 'SECURITY ID', 'EXCHANGE', 'INSTRUMENT']
-        for col in new_columns:
-            df[col] = ''
+        print("🔍 Filtering for EQUITY instruments...")
+        df_master = df_master[df_master["SEM_INSTRUMENT_NAME"].astype(str).str.upper() == "EQUITY"].copy()
+        print(f"✅ {len(df_master)} EQUITY records found\n")
         
-        print("\n🔄 Mapping stocks to master file...")
+        print("🔧 Normalizing master file fields...")
+        for col in ["SEM_TRADING_SYMBOL", "SEM_CUSTOM_SYMBOL", "SM_SYMBOL_NAME", "SEM_EXM_EXCH_ID"]:
+            if col in df_master.columns:
+                df_master[col] = df_master[col].astype(str).str.strip().str.upper()
+            else:
+                df_master[col] = ""
+        
+        df_master["SEM_CUSTOM_SYMBOL_NORM"] = df_master["SEM_CUSTOM_SYMBOL"].apply(normalize_text)
+        df_master["SEM_TRADING_SYMBOL_NORM"] = df_master["SEM_TRADING_SYMBOL"].apply(normalize_text)
+        df_master["SM_SYMBOL_NAME_NORM"] = df_master["SM_SYMBOL_NAME"].apply(normalize_text)
+        
+        df_master["exchange_priority"] = df_master["SEM_EXM_EXCH_ID"].apply(
+            lambda x: 1 if x == "NSE" else (2 if x == "BSE" else 3)
+        )
+        print("✅ Master file normalized\n")
+        
+        print("📖 Loading bulk input stocks...")
+        df_input = pd.read_csv(input_csv)
+        df_input.columns = df_input.columns.str.strip().str.upper()
+        
+        if 'STOCK NAME' not in df_input.columns:
+            return {
+                'success': False,
+                'error': 'STOCK NAME column not found in bulk-input.csv'
+            }
+        
+        df_input['STOCK NAME'] = df_input['STOCK NAME'].astype(str).str.strip().str.upper()
+        df_input["STOCK_NAME_NORM"] = df_input['STOCK NAME'].apply(normalize_text)
+        
+        print(f"✅ Loaded {len(df_input)} stocks to map\n")
+        
+        print("🔗 Starting stock matching process...")
         print("-" * 60)
         
-        matched = 0
-        unmatched = 0
+        results = []
+        matched_count = 0
         
-        for i, row in df.iterrows():
-            stock_name = row.get('STOCK NAME', '')
-            if not stock_name:
-                unmatched += 1
-                continue
+        for idx, row in df_input.iterrows():
+            stock_name = row['STOCK NAME']
+            date = row.get('DATE', '')
+            time = row.get('TIME', '')
+            call = row.get('CALL', row.get('ACTION', ''))
+            targets = row.get('TARGETS', row.get('TARGET', ''))
+            stop_loss = row.get('STOP LOSS', row.get('STOPLOSS', ''))
+            holding_period = row.get('HOLDING PERIOD', '')
+            rationale = row.get('RATIONALE', row.get('ANALYSIS', ''))
+            chart_type = row.get('CHART TYPE', 'Daily')
             
-            match = fuzzy_match_stock(stock_name, master_df)
+            match = None
+            match_source = ""
+            candidates = pd.DataFrame()
             
-            if match:
-                df.at[i, 'STOCK SYMBOL'] = match.get('STOCK SYMBOL', match.get('SYMBOL', ''))
-                df.at[i, 'SHORT NAME'] = match.get('SHORT NAME', '')
-                df.at[i, 'LISTED NAME'] = match.get('LISTED NAME', match.get('STOCK NAME', ''))
-                df.at[i, 'SECURITY ID'] = match.get('SECURITY ID', match.get('SECURITYID', ''))
-                df.at[i, 'EXCHANGE'] = match.get('EXCHANGE', 'NSE')
-                df.at[i, 'INSTRUMENT'] = match.get('INSTRUMENT', 'EQUITY')
-                matched += 1
-                print(f"  ✓ {stock_name:30} → {df.at[i, 'STOCK SYMBOL']} ({df.at[i, 'LISTED NAME']})")
+            candidates = df_master[df_master["SEM_CUSTOM_SYMBOL"] == stock_name]
+            if not candidates.empty:
+                match_source = "SEM_CUSTOM_SYMBOL (exact)"
+            
+            if candidates.empty:
+                candidates = df_master[df_master["SEM_TRADING_SYMBOL"] == stock_name]
+                if not candidates.empty:
+                    match_source = "SEM_TRADING_SYMBOL (exact)"
+            
+            if candidates.empty:
+                candidates = df_master[df_master["SM_SYMBOL_NAME"] == stock_name]
+                if not candidates.empty:
+                    match_source = "SM_SYMBOL_NAME (exact)"
+            
+            if candidates.empty:
+                idx_match = fuzzy_match(stock_name, df_master["SEM_CUSTOM_SYMBOL_NORM"], threshold=85)
+                if idx_match is not None:
+                    candidates = df_master.loc[[idx_match]]
+                    match_source = "SEM_CUSTOM_SYMBOL (fuzzy >= 85%)"
+            
+            if candidates.empty:
+                idx_match = fuzzy_match(stock_name, df_master["SEM_TRADING_SYMBOL_NORM"], threshold=85)
+                if idx_match is not None:
+                    candidates = df_master.loc[[idx_match]]
+                    match_source = "SEM_TRADING_SYMBOL (fuzzy >= 85%)"
+            
+            if candidates.empty:
+                idx_match = fuzzy_match(stock_name, df_master["SM_SYMBOL_NAME_NORM"], threshold=85)
+                if idx_match is not None:
+                    candidates = df_master.loc[[idx_match]]
+                    match_source = "SM_SYMBOL_NAME (fuzzy >= 85%)"
+            
+            if not candidates.empty:
+                candidates = candidates.sort_values(by="exchange_priority")
+                match = candidates.iloc[0]
+            
+            if match is not None:
+                stock_symbol = match.get("SEM_TRADING_SYMBOL", "")
+                listed_name = match.get("SM_SYMBOL_NAME", "")
+                short_name = match.get("SEM_CUSTOM_SYMBOL", "")
+                security_id = match.get("SEM_SMST_SECURITY_ID", "")
+                exchange = match.get("SEM_EXM_EXCH_ID", "")
+                instrument = match.get("SEM_INSTRUMENT_NAME", "")
+                
+                results.append({
+                    "DATE": date,
+                    "TIME": time,
+                    "STOCK NAME": stock_name,
+                    "CALL": call,
+                    "TARGETS": targets,
+                    "STOP LOSS": stop_loss,
+                    "HOLDING PERIOD": holding_period,
+                    "RATIONALE": rationale,
+                    "CHART TYPE": chart_type,
+                    "STOCK SYMBOL": stock_symbol,
+                    "LISTED NAME": listed_name,
+                    "SHORT NAME": short_name,
+                    "SECURITY ID": security_id,
+                    "EXCHANGE": exchange,
+                    "INSTRUMENT": instrument
+                })
+                matched_count += 1
+                print(f"✅ {stock_name:25} → {stock_symbol:15} | {match_source:35} ({exchange})")
             else:
-                unmatched += 1
-                print(f"  ✗ {stock_name:30} → No match found")
+                print(f"❌ {stock_name:25} → No match found")
+                results.append({
+                    "DATE": date,
+                    "TIME": time,
+                    "STOCK NAME": stock_name,
+                    "CALL": call,
+                    "TARGETS": targets,
+                    "STOP LOSS": stop_loss,
+                    "HOLDING PERIOD": holding_period,
+                    "RATIONALE": rationale,
+                    "CHART TYPE": chart_type,
+                    "STOCK SYMBOL": "",
+                    "LISTED NAME": "",
+                    "SHORT NAME": "",
+                    "SECURITY ID": "",
+                    "EXCHANGE": "",
+                    "INSTRUMENT": ""
+                })
         
-        final_columns = ['DATE', 'TIME', 'STOCK NAME', 'STOCK SYMBOL', 'SHORT NAME', 
-                        'LISTED NAME', 'SECURITY ID', 'EXCHANGE', 'INSTRUMENT', 'ANALYSIS']
+        print("-" * 60)
+        print(f"\n📊 Mapping Summary:")
+        print(f"   Total stocks: {len(df_input)}")
+        print(f"   Matched: {matched_count}")
+        print(f"   Unmatched: {len(df_input) - matched_count}\n")
         
-        for col in final_columns:
-            if col not in df.columns:
-                df[col] = ''
+        print(f"💾 Saving mapped data to: {output_csv}")
+        final_df = pd.DataFrame(results)
         
-        df = df[final_columns]
+        os.makedirs(os.path.dirname(output_csv), exist_ok=True)
         
-        df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        final_df.to_csv(output_csv, index=False, encoding='utf-8-sig')
         
-        print(f"\n📊 Mapping Results:")
-        print(f"   ✓ Matched: {matched}")
-        print(f"   ✗ Unmatched: {unmatched}")
-        print(f"\n💾 Saved to: {output_file}")
+        print(f"✅ Saved {len(final_df)} records")
+        print(f"✅ Output: analysis/mapped_master_file.csv\n")
         
         return {
             'success': True,
-            'output_file': output_file,
-            'matched': matched,
-            'unmatched': unmatched
+            'output_file': output_csv,
+            'matched_count': matched_count,
+            'total_stocks': len(df_input),
+            'error': None
         }
-        
+    
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"\n❌ Error: {str(e)}")
         import traceback
         traceback.print_exc()
         return {
