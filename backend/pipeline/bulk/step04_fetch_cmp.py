@@ -4,11 +4,59 @@ Fetches Current Market Price using Dhan API
 """
 
 import os
+import re
 import time
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from backend.utils.database import get_db_cursor
+
+
+def normalize_date_format(date_str):
+    """
+    Normalize date to YYYY-MM-DD format.
+    Handles multiple input formats:
+    - YYYY-MM-DD (already correct)
+    - DD/MM/YYYY
+    - DD-MM-YYYY
+    - MM/DD/YYYY
+    - YYYY/MM/DD
+    
+    Returns date in YYYY-MM-DD format or None if parsing fails.
+    """
+    if not date_str or pd.isna(date_str):
+        return None
+    
+    date_str = str(date_str).strip()
+    
+    # Already in YYYY-MM-DD format
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        return date_str
+    
+    # Try common date formats
+    date_formats = [
+        ('%d/%m/%Y', 'DD/MM/YYYY'),
+        ('%d-%m-%Y', 'DD-MM-YYYY'),
+        ('%Y/%m/%d', 'YYYY/MM/DD'),
+        ('%m/%d/%Y', 'MM/DD/YYYY'),
+        ('%d.%m.%Y', 'DD.MM.YYYY'),
+    ]
+    
+    for fmt, name in date_formats:
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            return dt.strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    
+    # Try pandas to_datetime as last resort
+    try:
+        dt = pd.to_datetime(date_str, dayfirst=True)
+        return dt.strftime('%Y-%m-%d')
+    except:
+        pass
+    
+    return None
 
 
 def get_dhan_api_key():
@@ -156,8 +204,19 @@ def run(job_folder):
                 continue
             
             exchange = str(row.get('EXCHANGE', 'NSE')).strip()
-            date_str = str(row.get('DATE', '')).strip()
+            raw_date = str(row.get('DATE', '')).strip()
             time_str = str(row.get('TIME', '10:00:00')).strip()
+            
+            # Normalize date format to YYYY-MM-DD
+            date_str = normalize_date_format(raw_date)
+            if not date_str:
+                print(f"  ⚠️ {stock_name:30} | Invalid date format: {raw_date}, skipping")
+                failed_count += 1
+                continue
+            
+            # Log if date was converted
+            if raw_date != date_str:
+                print(f"  📅 Date converted: {raw_date} → {date_str}")
             
             cmp = fetch_cmp_for_stock(security_id, exchange, date_str, time_str, headers)
             
