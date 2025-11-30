@@ -102,7 +102,9 @@ def run(job_folder):
     
     try:
         analysis_folder = os.path.join(job_folder, 'analysis')
-        input_csv = os.path.join(analysis_folder, 'bulk-input.csv')
+        polished_csv = os.path.join(analysis_folder, 'bulk-input-analysis.csv')
+        original_csv = os.path.join(analysis_folder, 'bulk-input.csv')
+        input_csv = polished_csv if os.path.exists(polished_csv) else original_csv
         output_csv = os.path.join(analysis_folder, 'mapped_master_file.csv')
         
         if not os.path.exists(input_csv):

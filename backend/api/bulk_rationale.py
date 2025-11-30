@@ -17,10 +17,11 @@ import threading
 BULK_STEPS = [
     {"step_number": 1, "name": "Translate", "description": "Translate input text to English"},
     {"step_number": 2, "name": "Convert to CSV", "description": "Convert text to structured CSV"},
-    {"step_number": 3, "name": "Map Master File", "description": "Map stocks to master data"},
-    {"step_number": 4, "name": "Fetch CMP", "description": "Fetch current market prices"},
-    {"step_number": 5, "name": "Generate Charts", "description": "Generate stock charts"},
-    {"step_number": 6, "name": "Generate PDF", "description": "Create final PDF report"},
+    {"step_number": 3, "name": "Polish Analysis", "description": "Polish analysis text professionally"},
+    {"step_number": 4, "name": "Map Master File", "description": "Map stocks to master data"},
+    {"step_number": 5, "name": "Fetch CMP", "description": "Fetch current market prices"},
+    {"step_number": 6, "name": "Generate Charts", "description": "Generate stock charts"},
+    {"step_number": 7, "name": "Generate PDF", "description": "Create final PDF report"},
 ]
 
 
@@ -37,6 +38,7 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
     from backend.pipeline.bulk import (
         step01_translate,
         step02_convert_csv,
+        step02b_polish_analysis,
         step03_map_master,
         step04_fetch_cmp,
         step05_generate_charts,
@@ -46,10 +48,11 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
     steps = [
         (1, "Translate", step01_translate.run, [job_folder]),
         (2, "Convert to CSV", step02_convert_csv.run, [job_folder, call_date, call_time]),
-        (3, "Map Master File", step03_map_master.run, [job_folder]),
-        (4, "Fetch CMP", step04_fetch_cmp.run, [job_folder]),
-        (5, "Generate Charts", step05_generate_charts.run, [job_folder]),
-        (6, "Generate PDF", step06_generate_pdf.run, [job_folder]),
+        (3, "Polish Analysis", step02b_polish_analysis.run, [job_folder]),
+        (4, "Map Master File", step03_map_master.run, [job_folder]),
+        (5, "Fetch CMP", step04_fetch_cmp.run, [job_folder]),
+        (6, "Generate Charts", step05_generate_charts.run, [job_folder]),
+        (7, "Generate PDF", step06_generate_pdf.run, [job_folder]),
     ]
     
     try:
@@ -67,7 +70,7 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
                 cursor.execute("""
                     UPDATE jobs SET current_step = %s, progress = %s, updated_at = %s
                     WHERE id = %s
-                """, (step_num, int((step_num - 1) / 6 * 100), datetime.now(), job_id))
+                """, (step_num, int((step_num - 1) / 7 * 100), datetime.now(), job_id))
             
             print(f"\n{'='*60}")
             print(f"Running Step {step_num}: {step_name}")
@@ -107,7 +110,7 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("""
                 UPDATE jobs 
-                SET status = 'pdf_ready', progress = 100, current_step = 6, updated_at = %s
+                SET status = 'pdf_ready', progress = 100, current_step = 7, updated_at = %s
                 WHERE id = %s
             """, (datetime.now(), job_id))
         
