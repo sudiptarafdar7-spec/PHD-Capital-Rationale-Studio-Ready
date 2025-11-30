@@ -1,7 +1,7 @@
 """
-Bulk Rationale Step 3: Map Master File
+Bulk Rationale Step 4: Map Master File
 
-Maps stock names from Step 2 CSV to the master reference file to get:
+Maps stock names from Step 2/3 CSV to the master reference file to get:
 - Stock Symbol (SEM_TRADING_SYMBOL)
 - Listed Name (SM_SYMBOL_NAME)
 - Short Name (SEM_CUSTOM_SYMBOL)
@@ -9,16 +9,21 @@ Maps stock names from Step 2 CSV to the master reference file to get:
 - Exchange (SEM_EXM_EXCH_ID)
 - Instrument (SEM_INSTRUMENT_NAME)
 
-Matching Logic (same as Premium Rationale):
+Matching Logic (same as Media Rationale):
 1. Filter master data → only EQUITY rows
 2. Match STOCK NAME sequentially:
-   - Primary: SEM_CUSTOM_SYMBOL (exact → fuzzy >= 85%)
-   - Secondary: SEM_TRADING_SYMBOL (exact → fuzzy >= 85%)
-   - Tertiary: SM_SYMBOL_NAME (exact → fuzzy >= 85%)
+   - Primary: Short name column (SEM_CUSTOM_SYMBOL) exact match
+   - Secondary: Symbol column (SEM_TRADING_SYMBOL) exact match
+   - Tertiary: Name column (SM_SYMBOL_NAME) exact match
+   - Fuzzy on SEM_CUSTOM_SYMBOL (>= 80%)
+   - Fuzzy on SEM_TRADING_SYMBOL (>= 80%)
+   - Fuzzy on SM_SYMBOL_NAME (>= 80%)
+   - Word matching on SEM_TRADING_SYMBOL
+   - Word matching on SM_SYMBOL_NAME
 3. If both NSE and BSE found → Prefer NSE
 
 Input:
-  - analysis/bulk-input.csv (from Step 2)
+  - analysis/bulk-input-analysis.csv (from Step 3) or analysis/bulk-input.csv (from Step 2)
   - Master CSV from uploaded_files
 Output:
   - analysis/mapped_master_file.csv
@@ -40,7 +45,25 @@ def normalize_text(s):
     return s.strip()
 
 
-def fuzzy_match(value, target_series, threshold=85):
+def get_words(s):
+    """Extract meaningful words from stock name for word matching."""
+    if not isinstance(s, str):
+        s = str(s)
+    words = re.sub(r"[^A-Z0-9\s]", "", s.upper()).split()
+    stop_words = {'LTD', 'LIMITED', 'PVT', 'PRIVATE', 'INC', 'CORP', 'CORPORATION', 'AND', 'THE', 'OF', 'INDIA'}
+    return [w for w in words if w and w not in stop_words and len(w) > 1]
+
+
+def word_match_score(search_words, target_words):
+    """Calculate word match score between two word lists."""
+    if not search_words or not target_words:
+        return 0
+    
+    matched = sum(1 for w in search_words if w in target_words)
+    return matched / max(len(search_words), 1) * 100
+
+
+def fuzzy_match(value, target_series, threshold=80):
     """Return best fuzzy match index or None if below threshold."""
     if not value or not isinstance(value, str):
         return None
@@ -53,6 +76,29 @@ def fuzzy_match(value, target_series, threshold=85):
         if len(idx_list) > 0:
             return idx_list[0]
     return None
+
+
+def word_match(search_name, df_master, column, threshold=60):
+    """Find best word-based match in a column."""
+    search_words = get_words(search_name)
+    if not search_words:
+        return None
+    
+    best_score = 0
+    best_idx = None
+    
+    for idx, row in df_master.iterrows():
+        target_value = row.get(column, "")
+        if not target_value:
+            continue
+        target_words = get_words(target_value)
+        score = word_match_score(search_words, target_words)
+        
+        if score > best_score and score >= threshold:
+            best_score = score
+            best_idx = idx
+    
+    return best_idx
 
 
 def get_master_file_path():
@@ -97,7 +143,7 @@ def run(job_folder):
         dict: Status, message, and output files
     """
     print("\n" + "="*60)
-    print("BULK STEP 3: MAP MASTER FILE (SYMBOL MAPPING)")
+    print("BULK STEP 4: MAP MASTER FILE (SYMBOL MAPPING)")
     print(f"{'='*60}\n")
     
     try:
@@ -171,6 +217,7 @@ def run(job_folder):
         
         for idx, row in df_input.iterrows():
             stock_name = row['STOCK NAME']
+            stock_name_norm = row['STOCK_NAME_NORM']
             date = row.get('DATE', '')
             time = row.get('TIME', '')
             analysis = row.get('ANALYSIS', row.get('RATIONALE', ''))
@@ -180,38 +227,66 @@ def run(job_folder):
             match_source = ""
             candidates = pd.DataFrame()
             
+            # 1. Exact match on SEM_CUSTOM_SYMBOL (short name)
             candidates = df_master[df_master["SEM_CUSTOM_SYMBOL"] == stock_name]
             if not candidates.empty:
                 match_source = "SEM_CUSTOM_SYMBOL (exact)"
             
+            # 2. Exact match on SEM_TRADING_SYMBOL
             if candidates.empty:
                 candidates = df_master[df_master["SEM_TRADING_SYMBOL"] == stock_name]
                 if not candidates.empty:
                     match_source = "SEM_TRADING_SYMBOL (exact)"
             
+            # 3. Exact match on SM_SYMBOL_NAME
             if candidates.empty:
                 candidates = df_master[df_master["SM_SYMBOL_NAME"] == stock_name]
                 if not candidates.empty:
                     match_source = "SM_SYMBOL_NAME (exact)"
             
+            # 4. Fuzzy match on SEM_CUSTOM_SYMBOL
             if candidates.empty:
-                idx_match = fuzzy_match(stock_name, df_master["SEM_CUSTOM_SYMBOL_NORM"], threshold=85)
+                idx_match = fuzzy_match(stock_name, df_master["SEM_CUSTOM_SYMBOL_NORM"], threshold=80)
                 if idx_match is not None:
                     candidates = df_master.loc[[idx_match]]
-                    match_source = "SEM_CUSTOM_SYMBOL (fuzzy >= 85%)"
+                    match_source = "SEM_CUSTOM_SYMBOL (fuzzy >= 80%)"
             
+            # 5. Fuzzy match on SEM_TRADING_SYMBOL
             if candidates.empty:
-                idx_match = fuzzy_match(stock_name, df_master["SEM_TRADING_SYMBOL_NORM"], threshold=85)
+                idx_match = fuzzy_match(stock_name, df_master["SEM_TRADING_SYMBOL_NORM"], threshold=80)
                 if idx_match is not None:
                     candidates = df_master.loc[[idx_match]]
-                    match_source = "SEM_TRADING_SYMBOL (fuzzy >= 85%)"
+                    match_source = "SEM_TRADING_SYMBOL (fuzzy >= 80%)"
             
+            # 6. Fuzzy match on SM_SYMBOL_NAME
             if candidates.empty:
-                idx_match = fuzzy_match(stock_name, df_master["SM_SYMBOL_NAME_NORM"], threshold=85)
+                idx_match = fuzzy_match(stock_name, df_master["SM_SYMBOL_NAME_NORM"], threshold=80)
                 if idx_match is not None:
                     candidates = df_master.loc[[idx_match]]
-                    match_source = "SM_SYMBOL_NAME (fuzzy >= 85%)"
+                    match_source = "SM_SYMBOL_NAME (fuzzy >= 80%)"
             
+            # 7. Word matching on SEM_TRADING_SYMBOL
+            if candidates.empty:
+                idx_match = word_match(stock_name, df_master, "SEM_TRADING_SYMBOL", threshold=60)
+                if idx_match is not None:
+                    candidates = df_master.loc[[idx_match]]
+                    match_source = "SEM_TRADING_SYMBOL (word match)"
+            
+            # 8. Word matching on SM_SYMBOL_NAME
+            if candidates.empty:
+                idx_match = word_match(stock_name, df_master, "SM_SYMBOL_NAME", threshold=60)
+                if idx_match is not None:
+                    candidates = df_master.loc[[idx_match]]
+                    match_source = "SM_SYMBOL_NAME (word match)"
+            
+            # 9. Normalized exact match fallback
+            if candidates.empty:
+                idx_list = df_master[df_master["SEM_TRADING_SYMBOL_NORM"] == stock_name_norm].index
+                if len(idx_list) > 0:
+                    candidates = df_master.loc[idx_list]
+                    match_source = "SEM_TRADING_SYMBOL (normalized fallback)"
+            
+            # Pick best match (NSE preferred)
             if not candidates.empty:
                 candidates = candidates.sort_values(by="exchange_priority")
                 match = candidates.iloc[0]
@@ -238,9 +313,9 @@ def run(job_folder):
                     "INSTRUMENT": instrument
                 })
                 matched_count += 1
-                print(f"✅ {stock_name:25} → {stock_symbol:15} | {match_source:35} ({exchange})")
+                print(f"✅ {stock_name:30} → {stock_symbol:15} | {match_source:35} ({exchange})")
             else:
-                print(f"❌ {stock_name:25} → No match found")
+                print(f"❌ {stock_name:30} → No match found")
                 results.append({
                     "DATE": date,
                     "TIME": time,
