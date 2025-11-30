@@ -13,9 +13,9 @@ BEGIN
         ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_status_check;
     END IF;
     
-    -- Add new constraint with all status values
+    -- Add new constraint with all status values (including awaiting_step4_review for Bulk Rationale)
     ALTER TABLE jobs ADD CONSTRAINT jobs_status_check 
-        CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'pdf_ready', 'completed', 'failed', 'signed'));
+        CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'awaiting_step4_review', 'pdf_ready', 'completed', 'failed', 'signed'));
 EXCEPTION
     WHEN others THEN
         RAISE NOTICE 'Could not update jobs_status_check constraint: %', SQLERRM;

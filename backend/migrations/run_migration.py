@@ -35,9 +35,10 @@ def run_migration():
             cursor.execute("ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_status_check")
             cursor.execute("""
                 ALTER TABLE jobs ADD CONSTRAINT jobs_status_check 
-                CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'pdf_ready', 'completed', 'failed', 'signed'))
+                CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'awaiting_step4_review', 'pdf_ready', 'completed', 'failed', 'signed'))
             """)
-            print("   ✓ Status constraint updated")
+            conn.commit()
+            print("   ✓ Status constraint updated (includes awaiting_step4_review)")
         except Exception as e:
             print(f"   ! Warning: {e}")
             conn.rollback()
