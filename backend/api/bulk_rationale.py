@@ -12,6 +12,8 @@ from datetime import datetime
 import os
 import uuid
 import threading
+import pandas as pd
+import numpy as np
 
 
 BULK_STEPS = [
@@ -25,7 +27,7 @@ BULK_STEPS = [
 ]
 
 
-def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
+def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1, end_step=None):
     """Run the bulk rationale pipeline in background
     
     Args:
@@ -34,6 +36,7 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
         call_date: Date of the call
         call_time: Time of the call
         start_step: Step number to start from (default 1)
+        end_step: Step number to end at (optional, for pausing at checkpoints)
     """
     from backend.pipeline.bulk import (
         step01_translate,
@@ -60,6 +63,11 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
             if step_num < start_step:
                 print(f"⏭️ Skipping Step {step_num}: {step_name} (already completed)")
                 continue
+            
+            if end_step is not None and step_num > end_step:
+                print(f"⏸️ Pausing before Step {step_num}: {step_name}")
+                break
+                
             with get_db_cursor(commit=True) as cursor:
                 cursor.execute("""
                     UPDATE job_steps 
@@ -89,6 +97,17 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
                             message = %s
                         WHERE job_id = %s AND step_number = %s
                     """, (datetime.now(), output_files, f"Step {step_num} completed", job_id, step_num))
+                
+                # After Step 4 completes, pause for CSV review
+                if step_num == 4:
+                    with get_db_cursor(commit=True) as cursor:
+                        cursor.execute("""
+                            UPDATE jobs 
+                            SET status = 'awaiting_step4_review', progress = 57, updated_at = %s
+                            WHERE id = %s
+                        """, (datetime.now(), job_id))
+                    print(f"Job {job_id}: Paused after Step 4 for mapped master file CSV review")
+                    return
             else:
                 with get_db_cursor(commit=True) as cursor:
                     cursor.execute("""
@@ -107,14 +126,16 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
                 print(f"❌ Step {step_num} failed: {result.get('error')}")
                 return
         
-        with get_db_cursor(commit=True) as cursor:
-            cursor.execute("""
-                UPDATE jobs 
-                SET status = 'pdf_ready', progress = 100, current_step = 7, updated_at = %s
-                WHERE id = %s
-            """, (datetime.now(), job_id))
-        
-        print(f"\n✅ Bulk Rationale pipeline completed for job {job_id}")
+        # Only mark as pdf_ready if we completed all steps
+        if end_step is None or end_step >= 7:
+            with get_db_cursor(commit=True) as cursor:
+                cursor.execute("""
+                    UPDATE jobs 
+                    SET status = 'pdf_ready', progress = 100, current_step = 7, updated_at = %s
+                    WHERE id = %s
+                """, (datetime.now(), job_id))
+            
+            print(f"\n✅ Bulk Rationale pipeline completed for job {job_id}")
         
     except Exception as e:
         print(f"❌ Pipeline error: {str(e)}")
@@ -126,6 +147,29 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
                 UPDATE jobs SET status = 'failed', updated_at = %s
                 WHERE id = %s
             """, (datetime.now(), job_id))
+
+
+def _job_path(job_id, *path_parts):
+    """Helper to get path within job folder"""
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT folder_path FROM jobs WHERE id = %s", (job_id,))
+        result = cursor.fetchone()
+        if result:
+            folder_path = resolve_job_folder_path(result['folder_path'])
+            return os.path.join(folder_path, *path_parts)
+    return None
+
+
+def check_job_access(job_id, user_id):
+    """Check if user has access to job"""
+    with get_db_cursor() as cursor:
+        cursor.execute("""
+            SELECT id FROM jobs WHERE id = %s AND user_id = %s
+        """, (job_id, user_id))
+        job = cursor.fetchone()
+        if not job:
+            return False, "Job not found or access denied"
+    return True, None
 
 
 @bulk_rationale_bp.route('/create-job', methods=['POST'])
@@ -546,4 +590,173 @@ def restart_step(job_id, step_number):
         
     except Exception as e:
         print(f"Error restarting step: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== Step 4 CSV Review Endpoints ====================
+
+@bulk_rationale_bp.route('/jobs/<job_id>/step4-csv-preview', methods=['GET'])
+@jwt_required()
+def get_step4_csv_preview(job_id):
+    """Get mapped_master_file.csv content for preview after Step 4"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        csv_path = _job_path(job_id, 'analysis', 'mapped_master_file.csv')
+        
+        if not csv_path or not os.path.exists(csv_path):
+            return jsonify({'error': 'mapped_master_file.csv not found'}), 404
+        
+        df = pd.read_csv(csv_path)
+        
+        data = df.to_dict('records')
+        for row in data:
+            for key, value in row.items():
+                if pd.isna(value) or (isinstance(value, (int, float, np.number)) and not np.isfinite(value)):
+                    row[key] = None
+        
+        return jsonify({
+            'success': True,
+            'data': data,
+            'columns': df.columns.tolist()
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting Step 4 CSV preview: {str(e)}")
+        return jsonify({'error': f'Failed to get CSV preview: {str(e)}'}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/step4-download-csv', methods=['GET'])
+@jwt_required()
+def download_step4_csv(job_id):
+    """Download mapped_master_file.csv file"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        csv_path = _job_path(job_id, 'analysis', 'mapped_master_file.csv')
+        
+        if not csv_path or not os.path.exists(csv_path):
+            return jsonify({'error': 'mapped_master_file.csv not found'}), 404
+        
+        return send_file(
+            csv_path,
+            as_attachment=True,
+            download_name='mapped_master_file.csv',
+            mimetype='text/csv'
+        )
+        
+    except Exception as e:
+        print(f"Error downloading Step 4 CSV: {str(e)}")
+        return jsonify({'error': f'Failed to download CSV: {str(e)}'}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/step4-upload-csv', methods=['POST'])
+@jwt_required()
+def upload_step4_csv(job_id):
+    """Upload and replace mapped_master_file.csv file"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({'error': 'Only CSV files are allowed'}), 400
+        
+        csv_path = _job_path(job_id, 'analysis', 'mapped_master_file.csv')
+        
+        if not csv_path:
+            return jsonify({'error': 'Job folder not found'}), 404
+        
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+        
+        file.save(csv_path)
+        
+        return jsonify({
+            'success': True,
+            'message': 'mapped_master_file.csv uploaded and replaced successfully'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error uploading Step 4 CSV: {str(e)}")
+        return jsonify({'error': f'Failed to upload CSV: {str(e)}'}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/step4-continue-pipeline', methods=['POST'])
+@jwt_required()
+def step4_continue_pipeline(job_id):
+    """Continue pipeline execution from Step 5 after Step 4 CSV review"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT id, status, folder_path, date, time FROM jobs WHERE id = %s", (job_id,))
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            if job['status'] != 'awaiting_step4_review':
+                return jsonify({'error': 'Job is not in awaiting_step4_review status'}), 400
+        
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute("""
+                UPDATE jobs 
+                SET status = 'processing', current_step = 5, updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), job_id))
+        
+        call_date = str(job['date']) if job['date'] else datetime.now().strftime('%Y-%m-%d')
+        call_time = str(job['time']) if job['time'] else '10:00:00'
+        
+        def run_remaining_steps():
+            try:
+                run_bulk_pipeline(
+                    job_id, 
+                    resolve_job_folder_path(job['folder_path']), 
+                    call_date, 
+                    call_time, 
+                    start_step=5
+                )
+            except Exception as e:
+                print(f"Error continuing pipeline from Step 5 for job {job_id}: {str(e)}")
+                with get_db_cursor(commit=True) as cursor:
+                    cursor.execute("""
+                        UPDATE jobs 
+                        SET status = 'failed', updated_at = %s
+                        WHERE id = %s
+                    """, (datetime.now(), job_id))
+        
+        thread = threading.Thread(target=run_remaining_steps)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Pipeline continuing from Step 5'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error continuing pipeline from Step 4: {str(e)}")
         return jsonify({'error': str(e)}), 500

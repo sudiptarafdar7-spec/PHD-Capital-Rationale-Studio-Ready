@@ -40,7 +40,7 @@ interface JobStep {
   ended_at?: string;
 }
 
-type WorkflowStage = 'input' | 'processing' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
+type WorkflowStage = 'input' | 'processing' | 'step4-review' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
 type SaveType = 'save' | 'save-and-sign' | null;
 
 interface BulkRationalePageProps {
@@ -88,6 +88,13 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [selectedRestartStep, setSelectedRestartStep] = useState<number>(1);
   const [isRestarting, setIsRestarting] = useState(false);
+  
+  // Step 4 CSV Review state
+  const [step4CsvData, setStep4CsvData] = useState<any[]>([]);
+  const [step4CsvColumns, setStep4CsvColumns] = useState<string[]>([]);
+  const [isUploadingStep4Csv, setIsUploadingStep4Csv] = useState(false);
+  const step4CsvFileInputRef = useRef<HTMLInputElement>(null);
+  const workflowStageRef = useRef<WorkflowStage>('input');
 
   useEffect(() => {
     loadChannels();
@@ -154,14 +161,21 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
         
         if (data.status === 'processing') {
           setWorkflowStage('processing');
+          workflowStageRef.current = 'processing';
           startPolling(jobId);
+        } else if (data.status === 'awaiting_step4_review') {
+          setWorkflowStage('step4-review');
+          workflowStageRef.current = 'step4-review';
+          fetchStep4CsvData(jobId);
         } else if (data.status === 'failed') {
           setWorkflowStage('processing');
         } else if (data.status === 'pdf_ready' && data.pdfPath) {
           setWorkflowStage('pdf-preview');
+          workflowStageRef.current = 'pdf-preview';
           await fetchPdfForPreview(data.pdfPath, data.jobId);
         } else if (data.status === 'completed' || data.status === 'signed') {
           setWorkflowStage('completed');
+          workflowStageRef.current = 'completed';
           if (data.pdfPath) {
             await fetchPdfForPreview(data.pdfPath, data.jobId);
           }
@@ -244,13 +258,34 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
             setJobSteps(mappedSteps);
           }
 
-          if (data.status === 'pdf_ready' && data.pdfPath) {
+          // Check for Step 4 CSV review checkpoint
+          if (data.status === 'awaiting_step4_review') {
+            const currentWorkflowStage = workflowStageRef.current;
+            if (currentWorkflowStage !== 'step4-review') {
+              if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+              }
+              setWorkflowStage('step4-review');
+              workflowStageRef.current = 'step4-review';
+              
+              // Fetch Step 4 CSV data
+              fetchStep4CsvData(jobId).catch((error) => {
+                console.error('Failed to fetch Step 4 CSV data:', error);
+              });
+              
+              playCompletionBell();
+              toast.success('Step 4 Complete - Review Mapped Master File', {
+                description: 'Review the stock symbol mapping before continuing',
+              });
+            }
+          } else if (data.status === 'pdf_ready' && data.pdfPath) {
             if (data.pdfPath !== lastNotifiedPdfPathRef.current || workflowStage !== 'pdf-preview') {
               lastNotifiedPdfPathRef.current = data.pdfPath;
               if (pollingIntervalRef.current) {
                 clearInterval(pollingIntervalRef.current);
               }
               setWorkflowStage('pdf-preview');
+              workflowStageRef.current = 'pdf-preview';
               await fetchPdfForPreview(data.pdfPath, jobId);
               playCompletionBell();
               toast.success('PDF generated successfully!');
@@ -419,6 +454,108 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     }
   };
 
+  // Step 4 CSV Review functions
+  const fetchStep4CsvData = async (jobId: string) => {
+    try {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.step4CsvPreview(jobId), {
+        headers: getAuthHeaders(token),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setStep4CsvData(data.data);
+        setStep4CsvColumns(data.columns);
+      }
+    } catch (error) {
+      toast.error('Failed to load Step 4 CSV data');
+      console.error('Step 4 CSV fetch error:', error);
+    }
+  };
+
+  const handleDownloadStep4Csv = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.step4DownloadCsv(currentJobId), {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mapped_master_file.csv';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast.success('CSV downloaded successfully');
+      } else {
+        toast.error('Failed to download CSV');
+      }
+    } catch (error) {
+      console.error('Step 4 CSV download error:', error);
+      toast.error('Failed to download CSV');
+    }
+  };
+
+  const handleUploadStep4Csv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !currentJobId) return;
+    
+    setIsUploadingStep4Csv(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.step4UploadCsv(currentJobId), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      
+      if (response.ok) {
+        toast.success('Mapped master file CSV uploaded and replaced successfully');
+        await fetchStep4CsvData(currentJobId);
+      } else {
+        toast.error('Failed to upload CSV');
+      }
+    } catch (error) {
+      toast.error('Upload failed');
+      console.error('Step 4 CSV upload error:', error);
+    } finally {
+      setIsUploadingStep4Csv(false);
+      if (step4CsvFileInputRef.current) {
+        step4CsvFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleStep4ContinuePipeline = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.step4ContinuePipeline(currentJobId), {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        toast.success('Continuing pipeline from Step 5');
+        setWorkflowStage('processing');
+        workflowStageRef.current = 'processing';
+        startPolling(currentJobId);
+      } else {
+        toast.error(data.error || 'Failed to continue pipeline');
+      }
+    } catch (error) {
+      toast.error('Failed to continue pipeline');
+      console.error('Continue pipeline error:', error);
+    }
+  };
+
   const handleReset = () => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -426,6 +563,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     setCurrentJobId(null);
     setProgress(0);
     setWorkflowStage('input');
+    workflowStageRef.current = 'input';
     setJobStatus('');
     setJobSteps([]);
     setRationaleTitle('');
@@ -434,6 +572,8 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     setPdfBlobUrl(null);
     setInputText('');
     setYoutubeUrl('');
+    setStep4CsvData([]);
+    setStep4CsvColumns([]);
     lastNotifiedPdfPathRef.current = null;
   };
 
@@ -463,6 +603,116 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
             <p className="text-slate-700">Processing your bulk rationale...</p>
             <p className="text-sm text-slate-500 mt-2">{jobStatus}</p>
           </div>
+        </div>
+      );
+    }
+
+    // Step 4 CSV Review Stage
+    if (workflowStage === 'step4-review') {
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-purple-600 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" />
+              Step 4 Complete - Review Mapped Master File
+            </h3>
+          </div>
+          
+          <p className="text-slate-600">
+            Review the stock symbol mapping below. You can download the CSV, make corrections, and upload the edited file before continuing.
+          </p>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
+            <Button 
+              onClick={handleDownloadStep4Csv} 
+              variant="outline" 
+              className="border-blue-500/50 text-blue-500 hover:bg-blue-500/10"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download CSV
+            </Button>
+            <Button 
+              onClick={() => step4CsvFileInputRef.current?.click()} 
+              variant="outline"
+              disabled={isUploadingStep4Csv}
+              className="border-purple-500/50 text-purple-500 hover:bg-purple-500/10"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {isUploadingStep4Csv ? 'Uploading...' : 'Upload Edited CSV'}
+            </Button>
+            <input
+              ref={step4CsvFileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleUploadStep4Csv}
+              style={{ display: 'none' }}
+            />
+            <Button 
+              onClick={handleStep4ContinuePipeline} 
+              className="bg-green-600 hover:bg-green-700 text-white ml-auto"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Continue to Step 5
+            </Button>
+          </div>
+          
+          {/* Table Section */}
+          {step4CsvData.length > 0 ? (
+            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+              <div className="overflow-x-auto" style={{ maxHeight: '500px' }}>
+                <table className="w-full text-sm border-collapse">
+                  <thead className="bg-slate-100 sticky top-0 z-10">
+                    <tr>
+                      {step4CsvColumns.map(col => (
+                        <th 
+                          key={col} 
+                          className="px-4 py-3 text-left font-semibold text-slate-700 border-b-2 border-slate-200 whitespace-nowrap"
+                          style={{ 
+                            minWidth: col === 'STOCK NAME' ? '180px' : 
+                                     col === 'ANALYSIS' ? '300px' : 
+                                     col === 'LISTED NAME' ? '200px' : '120px' 
+                          }}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    {step4CsvData.map((row, idx) => (
+                      <tr 
+                        key={idx} 
+                        className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                      >
+                        {step4CsvColumns.map(col => (
+                          <td 
+                            key={col} 
+                            className="px-4 py-3 text-slate-700 align-top"
+                          >
+                            {col === 'ANALYSIS' ? (
+                              <div className="max-w-xs truncate" title={row[col] || ''}>
+                                {row[col] || '-'}
+                              </div>
+                            ) : (
+                              <span className={!row[col] && col === 'STOCK SYMBOL' ? 'text-red-500 font-medium' : ''}>
+                                {row[col] || (col === 'STOCK SYMBOL' ? 'NO MATCH' : '-')}
+                              </span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-lg p-12 text-center">
+              <Loader2 className="w-8 h-8 mx-auto mb-4 text-purple-500 animate-spin" />
+              <p className="text-slate-600">Loading mapped master file data...</p>
+            </div>
+          )}
         </div>
       );
     }

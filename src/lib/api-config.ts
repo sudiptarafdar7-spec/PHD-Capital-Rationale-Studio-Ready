@@ -97,6 +97,10 @@ export const API_ENDPOINTS = {
     uploadSigned: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/upload-signed`,
     downloadPdf: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/download`,
     restartStep: (jobId: string, stepNumber: number) => `${API_BASE_URL}/api/v1/bulk-rationale/restart-step/${jobId}/${stepNumber}`,
+    step4CsvPreview: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-csv-preview`,
+    step4DownloadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-download-csv`,
+    step4UploadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-upload-csv`,
+    step4ContinuePipeline: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-continue-pipeline`,
   },
   savedRationale: {
     getAll: `${API_BASE_URL}/api/v1/saved-rationale`,
