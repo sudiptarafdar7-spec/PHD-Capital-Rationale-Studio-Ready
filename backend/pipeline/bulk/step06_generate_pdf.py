@@ -518,6 +518,77 @@ def run(job_folder, template_config=None):
             story.append(Paragraph(disclosure_content, indented_body))
             story.append(Spacer(1, 35))
         
+        contact_card_heading = PS("contact_card_heading", fontSize=10, leading=13, 
+                                  textColor=BLUE, fontName=BASE_BLD, spaceAfter=4)
+        contact_card_body = PS("contact_card_body", fontSize=9.5, leading=13, 
+                               textColor=colors.black, fontName=BASE_REG)
+        
+        def make_contact_card(title, name, email, phone):
+            """Create a styled contact card"""
+            card_content = [
+                Paragraph(f"<b>{title}</b>", contact_card_heading),
+                Paragraph(f"<b>Name:</b> {name}", contact_card_body),
+                Paragraph(f"<b>Email:</b> {email}", contact_card_body),
+                Paragraph(f"<b>Contact:</b> {phone}", contact_card_body),
+            ]
+            card_table = Table([[c] for c in card_content], colWidths=[(PAGE_W - M_L - M_R - 20) / 2])
+            card_table.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (0, 0), 8),
+                ("BOTTOMPADDING", (-1, -1), (-1, -1), 8),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8f9fa")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#dee2e6")),
+            ]))
+            return card_table
+        
+        print("📋 Adding Contact Details section...")
+        story.append(heading("Contact Details"))
+        story.append(Spacer(1, 14))
+        
+        compliance_card = make_contact_card(
+            "Compliance Officer Details",
+            "Pradip Halder",
+            "compliance@phdcapital.in",
+            "+91 3216 297 100"
+        )
+        principal_card = make_contact_card(
+            "Principal Officer Details",
+            "Pritam Sardar",
+            "pritam@phdcapital.in",
+            "+91 8371 887 303"
+        )
+        grievance_card = make_contact_card(
+            "Grievance Officer Details",
+            "Pradip Halder",
+            "compliance@phdcapital.in",
+            "+91 3216 297 100"
+        )
+        general_card = make_contact_card(
+            "General Contact Details",
+            "PHD Capital",
+            "support@phdcapital.in",
+            "+91 3216 297 100"
+        )
+        
+        col_width = (PAGE_W - M_L - M_R - 10) / 2
+        contact_grid = Table([
+            [compliance_card, principal_card],
+            [grievance_card, general_card]
+        ], colWidths=[col_width, col_width], rowHeights=[None, None])
+        
+        contact_grid.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        
+        story.append(contact_grid)
+        story.append(Spacer(1, 35))
+        
         print("🔨 Building PDF...")
         doc.build(story, onFirstPage=on_first_page, onLaterPages=on_later_pages)
         
