@@ -1,46 +1,35 @@
 """
-Bulk Rationale Step 6: Generate PDF Report
-Creates professional PDF report with premium blue design (matching Manual Rationale)
+Bulk Rationale Step 6: Generate PDF
+
+Creates a professional PDF report from stocks_with_charts.csv with premium blue theme
+(Same design as Manual Rationale)
 """
 
 import os
 import re
 import pandas as pd
-from datetime import datetime
-from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY, TA_RIGHT
+from reportlab.lib import colors
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    Image, PageBreak, Flowable
+    SimpleDocTemplate, Paragraph, Spacer, Image, PageBreak,
+    Table, TableStyle, Flowable
 )
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas as pdfcanvas
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from PIL import Image as PILImage, ImageDraw
-from backend.utils.database import get_db_cursor
-from backend.utils.path_utils import resolve_uploaded_file_path
+from datetime import datetime
+import psycopg2
 from backend.utils.reportlab_html import extract_html_content
 
 
-BLUE = colors.HexColor("#1a5490")
-PAGE_W, PAGE_H = A4
-M_L, M_R, M_T, M_B = 44, 44, 96, 52
-
-
-def safe_str(val):
-    """Convert value to safe string without special characters"""
-    if pd.isna(val) or val is None:
-        return ""
-    s = str(val)
-    s = s.replace('₹', 'Rs.')
-    s = s.replace('–', '-')
-    s = s.replace('—', '-')
-    s = s.replace('"', '"').replace('"', '"')
-    s = s.replace(''', "'").replace(''', "'")
-    return s
+def get_db_connection():
+    """Get database connection"""
+    import os
+    return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
 def sanitize_filename(s: str) -> str:
@@ -48,93 +37,106 @@ def sanitize_filename(s: str) -> str:
     return str(s).strip().replace(" ", "_").replace(":", "-").replace("/", "-").replace("\\", "-")
 
 
-def fetch_pdf_config(job_id):
-    """Fetch PDF configuration from database"""
-    config = {
-        'channel_name': 'Channel',
-        'channel_logo_path': None,
-        'channel_url': '',
-        'title': 'Bulk Rationale Report',
-        'input_date': None,
-        'company_name': 'PHD CAPITAL PVT LTD',
-        'registration_details': 'SEBI Regd No - INH000016126  |  AMFI Regd No - ARN-301724',
-        'disclaimer_text': '',
-        'disclosure_text': '',
-        'company_data': '',
-        'company_logo_path': None,
-        'font_regular_path': None,
-        'font_bold_path': None
-    }
+def fetch_pdf_config(job_id: str):
+    """Fetch PDF configuration from database tables"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
     
     try:
-        with get_db_cursor() as cursor:
-            cursor.execute("""
-                SELECT j.channel_id, j.title, j.date, c.channel_name, c.channel_logo_path, c.channel_url
-                FROM jobs j
-                LEFT JOIN channels c ON j.channel_id = c.id
-                WHERE j.id = %s
-            """, (job_id,))
-            job = cursor.fetchone()
-            
-            if job:
-                config['channel_name'] = job.get('channel_name') or 'Channel'
-                config['title'] = job.get('title') or 'Bulk Rationale Report'
-                config['channel_url'] = job.get('channel_url') or ''
+        cursor.execute("""
+            SELECT c.channel_name, c.channel_logo_path, j.title, j.date
+            FROM jobs j
+            LEFT JOIN channels c ON j.channel_id = c.id
+            WHERE j.id = %s
+        """, (job_id,))
+        job_row = cursor.fetchone()
+        if not job_row:
+            raise ValueError(f"Job {job_id} not found")
+        
+        channel_name, channel_logo_path_raw, title, input_date = job_row
+        
+        channel_logo_path = None
+        if channel_logo_path_raw:
+            if os.path.isabs(channel_logo_path_raw):
+                channel_logo_path = channel_logo_path_raw
+            else:
+                possible_paths = [
+                    f"/home/runner/workspace/backend/uploaded_files/{channel_logo_path_raw}",
+                    f"backend/uploaded_files/{channel_logo_path_raw}",
+                    channel_logo_path_raw
+                ]
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        channel_logo_path = path
+                        print(f"✅ Found channel logo at: {path}")
+                        break
                 
-                channel_logo_raw = job.get('channel_logo_path')
-                if channel_logo_raw:
-                    possible_paths = [
-                        f"/home/runner/workspace/backend/uploaded_files/{channel_logo_raw}",
-                        f"backend/uploaded_files/{channel_logo_raw}",
-                        channel_logo_raw
-                    ]
-                    for path in possible_paths:
-                        if os.path.exists(path):
-                            config['channel_logo_path'] = path
-                            break
-                
-                input_date = job.get('date')
-                if input_date:
-                    if hasattr(input_date, 'strftime'):
-                        config['input_date'] = input_date.strftime('%Y-%m-%d')
-                    else:
-                        config['input_date'] = str(input_date)
-            
-            cursor.execute("""
-                SELECT company_name, registration_details, disclaimer_text, disclosure_text, company_data
-                FROM pdf_template ORDER BY id DESC LIMIT 1
-            """)
-            template = cursor.fetchone()
-            if template:
-                config['company_name'] = template.get('company_name') or config['company_name']
-                config['registration_details'] = template.get('registration_details') or config['registration_details']
-                config['disclaimer_text'] = template.get('disclaimer_text') or ''
-                config['disclosure_text'] = template.get('disclosure_text') or ''
-                config['company_data'] = template.get('company_data') or ''
-            
-            cursor.execute("""
-                SELECT file_type, file_path, file_name FROM uploaded_files 
-                WHERE file_type IN ('companyLogo', 'customFont')
-                ORDER BY uploaded_at DESC
-            """)
-            files = cursor.fetchall()
-            for f in files:
-                file_type = f['file_type']
-                file_path = f['file_path']
-                file_name = f.get('file_name', '')
-                
-                if file_type == 'companyLogo' and not config['company_logo_path']:
-                    config['company_logo_path'] = file_path
-                elif file_type == 'customFont':
-                    if 'bold' in file_name.lower() and not config['font_bold_path']:
-                        config['font_bold_path'] = file_path
-                    elif not config['font_regular_path']:
-                        config['font_regular_path'] = file_path
-                        
-    except Exception as e:
-        print(f"⚠️ Error fetching config: {e}")
+                if not channel_logo_path:
+                    print(f"⚠️ Channel logo file not found: {channel_logo_path_raw}")
+                    print(f"   Tried paths: {possible_paths}")
+        
+        cursor.execute("""
+            SELECT company_name, registration_details, disclaimer_text, disclosure_text, company_data
+            FROM pdf_template
+            ORDER BY id DESC
+            LIMIT 1
+        """)
+        template_row = cursor.fetchone()
+        if template_row:
+            company_name, registration_details, disclaimer_text, disclosure_text, company_data = template_row
+        else:
+            company_name = "PHD CAPITAL PVT LTD"
+            registration_details = "SEBI Regd No - INH000016126  |  AMFI Regd No - ARN-301724  |  APMI Regd No - APRN00865\nBSE Regd No - 6152  |  CIN No.- U67190WB2020PTC237908"
+            disclaimer_text = None
+            disclosure_text = None
+            company_data = None
+        
+        cursor.execute("""
+            SELECT file_type, file_path, file_name
+            FROM uploaded_files
+            WHERE file_type IN ('companyLogo', 'customFont')
+            ORDER BY uploaded_at DESC
+        """)
+        uploaded_files = cursor.fetchall()
+        
+        company_logo_path = None
+        font_regular_path = None
+        font_bold_path = None
+        
+        for file_type, file_path, file_name in uploaded_files:
+            if file_type == 'companyLogo' and not company_logo_path:
+                company_logo_path = file_path
+            elif file_type == 'customFont':
+                if 'bold' in file_name.lower() and not font_bold_path:
+                    font_bold_path = file_path
+                elif not font_regular_path:
+                    font_regular_path = file_path
+        
+        input_date_str = None
+        if input_date:
+            if hasattr(input_date, 'strftime'):
+                input_date_str = input_date.strftime('%Y-%m-%d')
+            else:
+                input_date_str = str(input_date)
+        
+        return {
+            'channel_name': channel_name or "Platform",
+            'channel_logo_path': channel_logo_path,
+            'title': title or "Rationale Report",
+            'input_date': input_date_str,
+            'company_name': company_name,
+            'registration_details': registration_details,
+            'disclaimer_text': disclaimer_text,
+            'disclosure_text': disclosure_text,
+            'company_data': company_data,
+            'company_logo_path': company_logo_path,
+            'font_regular_path': font_regular_path,
+            'font_bold_path': font_bold_path
+        }
     
-    return config
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def make_round_logo(src_path, diameter_px=360):
@@ -150,7 +152,7 @@ def make_round_logo(src_path, diameter_px=360):
         draw.ellipse((0, 0, diameter_px, diameter_px), fill=255)
         out = PILImage.new("RGBA", (diameter_px, diameter_px), (255, 255, 255, 0))
         out.paste(im, (0, 0), mask=mask)
-        tmp_path = os.path.join(os.path.dirname(src_path), "_round_bulk_logo.png")
+        tmp_path = os.path.join(os.path.dirname(src_path), "_round_platform_logo.png")
         out.save(tmp_path, "PNG")
         return tmp_path
     except Exception as e:
@@ -158,75 +160,44 @@ def make_round_logo(src_path, diameter_px=360):
         return src_path
 
 
-class RoundedHeading(Flowable):
-    """Premium heading with blue background banner"""
-    def __init__(self, text, fontName="Helvetica-Bold", fontSize=14.5, pad_x=14, pad_y=11,
-                radius=0, bg=BLUE, fg=colors.white, width=None, align="left"):
-        Flowable.__init__(self)
-        self.text = text
-        self.fontName = fontName
-        self.fontSize = fontSize
-        self.pad_x = pad_x
-        self.pad_y = pad_y
-        self.radius = radius
-        self.bg = bg
-        self.fg = fg
-        self.width = width
-        self.align = align
-    
-    def wrap(self, availWidth, availHeight):
-        self.eff_width = self.width or availWidth
-        self.eff_height = self.fontSize + 2*self.pad_y
-        return self.eff_width, self.eff_height
-    
-    def draw(self):
-        c = self.canv
-        w, h = self.eff_width, self.eff_height
-        
-        c.saveState()
-        c.setFillColor(self.bg)
-        c.setStrokeColor(self.bg)
-        c.rect(0, 0, w, h, fill=1, stroke=0)
-        
-        c.setFillColor(self.fg)
-        c.setFont(self.fontName, self.fontSize)
-        tx = self.pad_x
-        ty = (h - self.fontSize) / 2.0
-        c.drawString(tx, ty, self.text)
-        c.restoreState()
-
-
 def run(job_folder, template_config=None):
     """
-    Generate PDF report from stocks_with_charts.csv
-    Matches Manual Rationale PDF design exactly
+    Generate professional PDF report from stocks_with_charts.csv
+    
+    Args:
+        job_folder: Path to job directory
+        template_config: Optional PDF template configuration (unused, kept for compatibility)
+    
+    Returns:
+        dict: {
+            'success': bool,
+            'output_file': str,
+            'error': str or None
+        }
     """
     print("\n" + "=" * 60)
-    print("BULK STEP 6: GENERATE PDF REPORT")
-    print(f"{'='*60}\n")
+    print("BULK RATIONALE STEP 6: GENERATE PDF")
+    print("=" * 60 + "\n")
     
     try:
         job_id = os.path.basename(job_folder)
         
-        analysis_folder = os.path.join(job_folder, 'analysis')
-        pdf_folder = os.path.join(job_folder, 'pdf')
-        os.makedirs(pdf_folder, exist_ok=True)
+        stocks_csv = os.path.join(job_folder, "analysis/stocks_with_charts.csv")
         
-        stocks_csv = os.path.join(analysis_folder, 'stocks_with_charts.csv')
         if not os.path.exists(stocks_csv):
             return {
                 'success': False,
-                'error': f'Stocks CSV not found: {stocks_csv}'
+                'error': f'Input file not found: {stocks_csv}'
             }
         
-        print("📖 Loading stocks data...")
-        df = pd.read_csv(stocks_csv, encoding='utf-8')
-        print(f"✅ Loaded {len(df)} stocks\n")
+        print(f"📊 Loading stocks from {stocks_csv}...")
+        df = pd.read_csv(stocks_csv, encoding="utf-8-sig")
+        print(f"✅ Loaded {len(df)} stocks")
         
-        print("🔑 Fetching PDF configuration...")
+        print("🔑 Fetching PDF configuration from database...")
         config = fetch_pdf_config(job_id)
-        print(f"✅ Channel: {config['channel_name']}")
-        print(f"✅ Company: {config['company_name']}")
+        print(f"✅ Platform: {config['channel_name']}")
+        print(f"✅ Report: {config['title']}")
         
         input_date = config.get('input_date', '')
         if input_date:
@@ -239,27 +210,27 @@ def run(job_folder, template_config=None):
             date_str = datetime.now().strftime('%d-%m-%Y')
         
         pdf_filename = f"{sanitize_filename(config['channel_name'])}-{date_str}.pdf"
-        output_pdf = os.path.join(pdf_folder, pdf_filename)
-        print(f"📄 Output: {output_pdf}\n")
+        output_pdf = os.path.join(job_folder, "pdf", pdf_filename)
+        os.makedirs(os.path.dirname(output_pdf), exist_ok=True)
         
-        BASE_REG = "Helvetica"
-        BASE_BLD = "Helvetica-Bold"
+        print(f"📄 Output: {output_pdf}")
+        
+        BASE_REG = "NotoSans"
+        BASE_BLD = "NotoSans-Bold"
         
         if config['font_regular_path'] and os.path.exists(config['font_regular_path']):
-            try:
-                pdfmetrics.registerFont(TTFont("NotoSans", config['font_regular_path']))
-                BASE_REG = "NotoSans"
-                print(f"✅ Loaded custom font (regular)")
-            except:
-                pass
+            pdfmetrics.registerFont(TTFont(BASE_REG, config['font_regular_path']))
+        else:
+            BASE_REG = "Helvetica"
         
         if config['font_bold_path'] and os.path.exists(config['font_bold_path']):
-            try:
-                pdfmetrics.registerFont(TTFont("NotoSans-Bold", config['font_bold_path']))
-                BASE_BLD = "NotoSans-Bold"
-                print(f"✅ Loaded custom font (bold)")
-            except:
-                pass
+            pdfmetrics.registerFont(TTFont(BASE_BLD, config['font_bold_path']))
+        else:
+            BASE_BLD = "Helvetica-Bold"
+        
+        BLUE = colors.HexColor("#1a5490")
+        PAGE_W, PAGE_H = A4
+        M_L, M_R, M_T, M_B = 44, 44, 96, 52
         
         styles = getSampleStyleSheet()
         
@@ -281,8 +252,44 @@ def run(job_folder, template_config=None):
         indented_body = PS("indented_body", fontSize=10.8, leading=15.6, spaceAfter=10,
                           alignment=TA_JUSTIFY, leftIndent=10, rightIndent=10)
         
+        class RoundedHeading(Flowable):
+            def __init__(self, text, fontName=BASE_BLD, fontSize=14.5, pad_x=14, pad_y=11,
+                        radius=0, bg=BLUE, fg=colors.white, width=None, align="left"):
+                Flowable.__init__(self)
+                self.text = text
+                self.fontName = fontName
+                self.fontSize = fontSize
+                self.pad_x = pad_x
+                self.pad_y = pad_y
+                self.radius = radius
+                self.bg = bg
+                self.fg = fg
+                self.width = width
+                self.align = align
+            
+            def wrap(self, availWidth, availHeight):
+                self.eff_width = self.width or availWidth
+                self.eff_height = self.fontSize + 2*self.pad_y
+                return self.eff_width, self.eff_height
+            
+            def draw(self):
+                c = self.canv
+                w, h = self.eff_width, self.eff_height
+                
+                c.saveState()
+                c.setFillColor(self.bg)
+                c.setStrokeColor(self.bg)
+                c.rect(0, 0, w, h, fill=1, stroke=0)
+                
+                c.setFillColor(self.fg)
+                c.setFont(self.fontName, self.fontSize)
+                tx = self.pad_x
+                ty = (h - self.fontSize) / 2.0
+                c.drawString(tx, ty, self.text)
+                c.restoreState()
+        
         def heading(text):
-            return RoundedHeading(text, fontName=BASE_BLD, width=(PAGE_W - M_L - M_R), align="left")
+            return RoundedHeading(text, width=(PAGE_W - M_L - M_R), align="left")
         
         ROUND_LOGO = None
         if config['channel_logo_path'] and os.path.exists(config['channel_logo_path']):
@@ -363,6 +370,7 @@ def run(job_folder, template_config=None):
             c.drawCentredString(PAGE_W/2.0, 16, f"Page {c.getPageNumber()}")
             
             total_w = PAGE_W - M_L - M_R
+            col_w = total_w / 2.0
             left_x = M_L
             baseline_y = 30
             
@@ -411,7 +419,7 @@ def run(job_folder, template_config=None):
             right_w = total_w - left_w
             
             left_chip = RoundedHeading(
-                "Positional", fontName=BASE_BLD, fontSize=13.5, pad_x=12, pad_y=10, radius=8,
+                "Positional", fontSize=13.5, pad_x=12, pad_y=10, radius=8,
                 bg=BLUE, fg=colors.white, width=left_w, align="left"
             )
             
@@ -449,14 +457,14 @@ def run(job_folder, template_config=None):
         
         print(f"📝 Generating {len(df)} stock pages...")
         for idx, row in df.iterrows():
-            date_val = safe_str(row.get("DATE", "")).strip()
-            time_val = safe_str(row.get("TIME", "")).strip()
+            date_val = str(row.get("DATE", "") or "").strip()
+            time_val = str(row.get("TIME", "") or "").strip()
             
             story.append(positional_date_time(date_val, time_val))
             story.append(Spacer(1, 10))
             
-            listed = safe_str(row.get("LISTED NAME", row.get("STOCK NAME", ""))).strip()
-            symbol = safe_str(row.get("STOCK SYMBOL", "")).strip()
+            listed = str(row.get("LISTED NAME", row.get("STOCK NAME", "")) or "").strip()
+            symbol = str(row.get("STOCK SYMBOL", "") or "").strip()
             title_line = f"{listed} ({symbol})" if symbol else listed
             story.append(Paragraph(title_line, subheading_style))
             story.append(Spacer(1, 8))
@@ -484,7 +492,7 @@ def run(job_folder, template_config=None):
             story.append(heading("Rationale"))
             story.append(Spacer(1, 10))
             
-            analysis_text = safe_str(row.get("ANALYSIS", "")).strip() or "—"
+            analysis_text = str(row.get("ANALYSIS", "") or "—").strip()
             under_rationale = [
                 Paragraph("<b>OUR GENERAL VIEW</b>", label_style),
                 Spacer(1, 2),
@@ -516,7 +524,7 @@ def run(job_folder, template_config=None):
         print("🔨 Building PDF...")
         doc.build(story, onFirstPage=on_first_page, onLaterPages=on_later_pages)
         
-        print(f"\n✅ PDF generated successfully!")
+        print(f"✅ PDF generated successfully!")
         print(f"📄 Output: {output_pdf}")
         print(f"📊 Total pages: {len(df)} stocks + disclaimers\n")
         
