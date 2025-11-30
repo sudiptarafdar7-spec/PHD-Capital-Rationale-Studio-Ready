@@ -173,62 +173,49 @@ def validate_stocks_with_openai(client, entries):
         })
     
     prompt = f"""You are an expert in Indian stock markets (NSE/BSE). 
-Your task is to validate and correct stock names from a list of entries.
+Your task is to clean and validate stock names from a list of entries.
 
 INPUT ENTRIES:
 {json.dumps(entries_for_ai, indent=2)}
 
 CRITICAL RULES:
-1. **FIX SPELLING ERRORS & WRONG NAMES**: Correct stock names to their OFFICIAL NSE/BSE names.
+1. **CLEAN STOCK NAMES**: Keep the stock name as close to original as possible, just clean it up:
+   - Remove suffixes: (CALL), (BUY), (SELL), (HOLD)
+   - Remove: LTD, LIMITED, PVT, PRIVATE at the end
+   - Fix obvious typos only
+   - Keep the FULL company name, do NOT convert to short symbols
+   
    Examples:
-   - "Suzuelon" → "SUZLON"
-   - "INFOSIS" → "INFOSYS"  
-   - "Maruthi" → "MARUTI"
-   - "SERVOTECH POWER SYSTEMS" → "SERVOTECH POWER SYSTEMS" (keep if correct)
-   - "SERVOTECH RENEWABLE" → "SERVOTECH POWER SYSTEMS"
-   - "HYUNDAI MOTORS" → "HYUNDAI MOTOR INDIA"
+   - "MARKSANS PHARMA (CALL)" → "MARKSANS PHARMA"
    - "HYUNDAI MOTOR INDIA LTD" → "HYUNDAI MOTOR INDIA"
-   
-2. **USE CORRECT FULL NAMES**: 
-   - "UNION BANK" → "UNIONBANK" (NOT "CITY UNION BANK" - that's different!)
-   - "CANARA BANK" → "CANBK"
-   - "PNB" → "PNB"
-   - "SBI" → "SBIN"
-   - "PUNJAB AND SIND BANK" → "PSB"
-   - "STATE BANK" → "SBIN"
-   
-3. **USE NSE TRADING SYMBOLS**: Always convert to the NSE trading symbol format:
-   - "PUNJAB AND SIND BANK" → "PSB"
-   - "PUNJAB NATIONAL BANK" → "PNB"
-   - "HDFC BANK" → "HDFCBANK"
-   - "ICICI BANK" → "ICICIBANK"
-   - "AXIS BANK" → "AXISBANK"
-   - "KOTAK MAHINDRA BANK" → "KOTAKBANK"
-   - "TATA MOTORS" → "TATAMOTORS"
-   - "TATA STEEL" → "TATASTEEL"
-   - "RELIANCE INDUSTRIES" → "RELIANCE"
-   - "INFOSYS" → "INFY"
-   - "TCS" → "TCS"
-   - "BHARTI AIRTEL" → "BHARTIARTL"
-   - "MARUTI SUZUKI" → "MARUTI"
-   
-4. **SPLIT MULTI-STOCK ENTRIES**: If stock_line contains multiple stocks separated by comma:
-   - "HFCL, PUNJAB AND SIND BANK" → Two entries: "HFCL" and "PSB"
+   - "UNITED SPIRITS LTD" → "UNITED SPIRITS"
+   - "SUZLON ENERGY" → "SUZLON ENERGY"
+   - "INFOSIS" → "INFOSYS" (fix typo)
+   - "Maruthi Suzuki" → "MARUTI SUZUKI" (fix typo)
+
+2. **DO NOT CONVERT TO TRADING SYMBOLS**: Keep full company names, do NOT use short symbols.
+   - WRONG: "UNITED SPIRITS" → "UNITDSPR" (DON'T do this!)
+   - CORRECT: "UNITED SPIRITS" → "UNITED SPIRITS" (keep as is)
+   - WRONG: "HDFC BANK" → "HDFCBANK" (DON'T do this!)
+   - CORRECT: "HDFC BANK" → "HDFC BANK" (keep as is)
+
+3. **SPLIT MULTI-STOCK ENTRIES**: If stock_line contains multiple stocks separated by comma:
+   - "HFCL, PUNJAB AND SIND BANK" → Two entries: "HFCL" and "PUNJAB AND SIND BANK"
    - Each stock gets its own entry with the same index
    
-5. **REMOVE SUFFIXES**: Remove (CALL), (BUY), (SELL), (HOLD), LTD, LIMITED from stock names
-   - "MARKSANS PHARMA (CALL)" → "MARKSANS"
-   - "HYUNDAI MOTOR INDIA LTD" → "HYUNDAI MOTOR INDIA"
+4. **DIFFERENTIATE SIMILAR NAMES**:
+   - "UNION BANK" means "UNION BANK OF INDIA" (NOT "CITY UNION BANK")
+   - Keep the name as user wrote it, just clean it
 
-6. **DO NOT INVENT STOCKS**: Only process stocks that are mentioned.
+5. **DO NOT INVENT STOCKS**: Only process stocks that are mentioned.
 
-7. **DO NOT SKIP STOCKS**: Process ALL entries.
+6. **DO NOT SKIP STOCKS**: Process ALL entries.
 
 Return a JSON array with corrected entries:
 [
-  {{"index": 0, "stock_name": "NSE_TRADING_SYMBOL"}},
+  {{"index": 0, "stock_name": "CLEANED_STOCK_NAME"}},
   {{"index": 0, "stock_name": "SECOND_STOCK_IF_MULTI"}},
-  {{"index": 1, "stock_name": "NSE_TRADING_SYMBOL"}}
+  {{"index": 1, "stock_name": "CLEANED_STOCK_NAME"}}
 ]
 
 Return ONLY valid JSON, no other text."""
