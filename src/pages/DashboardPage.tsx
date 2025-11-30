@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileText, CheckCircle2, XCircle, Eye, Download, Plus, Search, Calendar, Video, FileSpreadsheet, PenTool, ExternalLink, Clock, X, ChevronLeft, ChevronRight, PlayCircle, FileSignature, Loader2, Layers } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -20,6 +20,8 @@ interface DashboardPageProps {
   onNavigate: (page: string, jobId?: string) => void;
 }
 
+const JOBS_PER_PAGE = 20;
+
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [toolFilter, setToolFilter] = useState('all');
@@ -29,6 +31,11 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [jobs, setJobs] = useState<Job[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [totalJobs, setTotalJobs] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
   const [stats, setStats] = useState<DashboardStats>({
     total_jobs: 0,
     completed_jobs: 0,
@@ -38,9 +45,18 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
     failed_change: '+ 0% from last month'
   });
 
-  const fetchDashboardData = useCallback(async () => {
+  const hasMore = jobs.length < totalJobs;
+
+  const fetchDashboardData = useCallback(async (loadMore: boolean = false) => {
     try {
       const token = localStorage.getItem('token');
+      const currentOffset = loadMore ? offset : 0;
+      
+      if (loadMore) {
+        setIsLoadingMore(true);
+      } else {
+        setIsInitialLoading(true);
+      }
       
       // Build query parameters
       const params = new URLSearchParams();
@@ -49,8 +65,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (dateFrom) params.append('date_from', dateFrom.toISOString().split('T')[0]);
       if (dateTo) params.append('date_to', dateTo.toISOString().split('T')[0]);
-      params.append('limit', '20');
-      params.append('offset', '0');
+      params.append('limit', JOBS_PER_PAGE.toString());
+      params.append('offset', currentOffset.toString());
 
       const response = await fetch(`/api/v1/dashboard?${params.toString()}`, {
         headers: {
@@ -61,7 +77,14 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       if (response.ok) {
         const data = await response.json();
-        setJobs(data.jobs || []);
+        
+        if (loadMore) {
+          setJobs(prev => [...prev, ...(data.jobs || [])]);
+        } else {
+          setJobs(data.jobs || []);
+        }
+        
+        setTotalJobs(data.total || 0);
         setStats(data.stats || {
           total_jobs: 0,
           completed_jobs: 0,
@@ -75,13 +98,48 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+    } finally {
+      setIsLoadingMore(false);
+      setIsInitialLoading(false);
     }
+  }, [searchQuery, toolFilter, statusFilter, dateFrom, dateTo, offset]);
+
+  // Initial load and filter changes
+  useEffect(() => {
+    setOffset(0);
+    fetchDashboardData(false);
   }, [searchQuery, toolFilter, statusFilter, dateFrom, dateTo]);
 
-  // Fetch dashboard data from API
+  // Load more when offset changes (but not on initial load)
   useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+    if (offset > 0) {
+      fetchDashboardData(true);
+    }
+  }, [offset]);
+
+  const handleLoadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore) {
+      setOffset(prev => prev + JOBS_PER_PAGE);
+    }
+  }, [isLoadingMore, hasMore]);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore && !isInitialLoading) {
+          handleLoadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, isInitialLoading, handleLoadMore]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -625,7 +683,12 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
         {/* Jobs List */}
         <div className="divide-y divide-border">
-          {filteredJobs.length === 0 ? (
+          {isInitialLoading ? (
+            <div className="p-12 text-center text-muted-foreground">
+              <Loader2 className="w-12 h-12 mx-auto mb-4 animate-spin text-blue-500" />
+              <p>Loading jobs...</p>
+            </div>
+          ) : filteredJobs.length === 0 ? (
             <div className="p-12 text-center text-muted-foreground">
               <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
               <p>No jobs found</p>
@@ -786,6 +849,35 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                 </div>
               </div>
             ))
+          )}
+          
+          {/* Infinite Scroll Trigger & Load More */}
+          {!isInitialLoading && filteredJobs.length > 0 && (
+            <div ref={loadMoreRef} className="p-6 text-center">
+              {isLoadingMore ? (
+                <div className="flex items-center justify-center gap-3 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                  <span>Loading more jobs...</span>
+                </div>
+              ) : hasMore ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {jobs.length} of {totalJobs} jobs
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={handleLoadMore}
+                    className="border-blue-500/50 text-blue-500 hover:bg-blue-500 hover:text-white"
+                  >
+                    Load More Jobs
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Showing all {totalJobs} jobs
+                </p>
+              )}
+            </div>
           )}
         </div>
       </Card>
