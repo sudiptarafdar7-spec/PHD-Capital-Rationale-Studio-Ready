@@ -247,8 +247,6 @@ def run(job_folder, template_config=None):
                         textColor=BLUE, fontName=BASE_BLD)
         date_bold = PS("date_bold", fontSize=11, leading=13.5, alignment=TA_RIGHT,
                       textColor=colors.black, fontName=BASE_BLD)
-        time_small = PS("time_small", fontSize=9.6, leading=11.5, alignment=TA_RIGHT,
-                       textColor=colors.HexColor("#666666"))
         indented_body = PS("indented_body", fontSize=10.8, leading=15.6, spaceAfter=10,
                           alignment=TA_JUSTIFY, leftIndent=10, rightIndent=10)
         
@@ -413,7 +411,7 @@ def run(job_folder, template_config=None):
         
         story = []
         
-        def positional_date_time(date_text: str, time_text: str):
+        def positional_date_header(date_text: str):
             total_w = PAGE_W - M_L - M_R
             left_w = total_w * 0.40
             right_w = total_w - left_w
@@ -426,8 +424,6 @@ def run(job_folder, template_config=None):
             right_bits = []
             if date_text:
                 right_bits.append(Paragraph(f"<b>Date:</b> {date_text}", date_bold))
-            if time_text:
-                right_bits.append(Paragraph(f"Time: {time_text}", time_small))
             
             right_stack = Table([[b] for b in right_bits] or [[Spacer(1,0)]], colWidths=[right_w])
             right_stack.setStyle(TableStyle([
@@ -458,9 +454,8 @@ def run(job_folder, template_config=None):
         print(f"📝 Generating {len(df)} stock pages...")
         for idx, row in df.iterrows():
             date_val = str(row.get("DATE", "") or "").strip()
-            time_val = str(row.get("TIME", "") or "").strip()
             
-            story.append(positional_date_time(date_val, time_val))
+            story.append(positional_date_header(date_val))
             story.append(Spacer(1, 10))
             
             listed = str(row.get("LISTED NAME", row.get("STOCK NAME", "")) or "").strip()
