@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import MediaRationalePage from './pages/MediaRationalePage';
 import PremiumRationalePage from './pages/PremiumRationalePage';
 import ManualRationalePage from './pages/ManualRationalePage';
+import BulkRationalePage from './pages/BulkRationalePage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import SavedRationalePage from './pages/SavedRationalePage';
 import ProfilePage from './pages/ProfilePage';
@@ -22,6 +23,7 @@ type PageType =
   | 'media-rationale'
   | 'premium-rationale'
   | 'manual-rationale'
+  | 'bulk-rationale'
   | 'activity-log'
   | 'saved-rationale'
   | 'profile'
@@ -61,6 +63,8 @@ function AppContent() {
         return <PremiumRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
       case 'manual-rationale':
         return <ManualRationalePage key={selectedJobId} selectedJobId={selectedJobId} onNavigate={handleNavigate} />;
+      case 'bulk-rationale':
+        return <BulkRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
       case 'activity-log':
         return <ActivityLogPage />;
       case 'saved-rationale':

@@ -4,6 +4,7 @@ import {
   Video, 
   FileSpreadsheet, 
   PenTool, 
+  Layers,
   FileText, 
   User, 
   Key, 
@@ -54,6 +55,7 @@ export default function Sidebar({ isOpen, onClose, currentPage, onNavigate, isCo
         { id: 'media-rationale', label: 'Media Rationale', icon: <Video className="w-5 h-5" /> },
         { id: 'premium-rationale', label: 'Premium Rationale', icon: <FileSpreadsheet className="w-5 h-5" /> },
         { id: 'manual-rationale', label: 'Manual Rationale', icon: <PenTool className="w-5 h-5" /> },
+        { id: 'bulk-rationale', label: 'Bulk Rationale', icon: <Layers className="w-5 h-5" /> },
       ],
     },
     {
