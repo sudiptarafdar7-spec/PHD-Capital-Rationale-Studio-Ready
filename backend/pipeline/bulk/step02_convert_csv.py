@@ -78,38 +78,59 @@ INPUT TEXT:
 CALL DATE: {call_date}
 CALL TIME: {call_time}
 
-Extract each stock mentioned with its analysis. Return ONLY a valid JSON array with this exact structure:
+The input text is structured as:
+- Each entry starts with a STOCK NAME line (header) followed by an ANALYSIS paragraph
+- Some headers may contain MULTIPLE STOCKS separated by comma (e.g., "UNION BANK, CANARA BANK")
+
+CRITICAL RULES:
+1. **MULTI-STOCK HEADERS**: If a header contains multiple stocks separated by comma (e.g., "UNION BANK, CANARA BANK"), create SEPARATE entries for EACH stock. Each stock gets its own row with the SAME EXACT analysis text.
+2. **PRESERVE EXACT ANALYSIS**: Copy the analysis paragraph EXACTLY as written - do not modify, summarize, or paraphrase.
+3. **CLEAN STOCK NAMES**: Remove suffixes like "(CALL)", "(BUY)", "(SELL)" from stock names. Keep only the clean stock name.
+   - Example: "MARKSANS PHARMA (CALL)" → "MARKSANS PHARMA"
+   - Example: "UNION BANK, CANARA BANK" → Create 2 separate entries: "UNION BANK" and "CANARA BANK"
+4. Use the provided DATE and TIME for all entries.
+5. Return ONLY a valid JSON array, no other text.
+
+Return ONLY a valid JSON array with this exact structure:
 [
   {{
     "DATE": "{call_date}",
     "TIME": "{call_time}",
-    "STOCK NAME": "exact stock name mentioned",
-    "ANALYSIS": "complete analysis/rationale for this stock including targets, stop loss, recommendations"
+    "STOCK NAME": "clean stock name only",
+    "ANALYSIS": "EXACT analysis text copied verbatim from input"
   }}
 ]
 
-Rules:
-1. Use the provided DATE and TIME for all entries
-2. Extract the complete analysis/rationale for each stock
-3. Include all price targets, stop loss levels, holding period mentioned
-4. If multiple stocks are mentioned, create separate entries
-5. Stock names should be clean company names (e.g., "Reliance Industries", "HDFC Bank")
-6. Return ONLY the JSON array, no other text"""
+EXAMPLE - For input:
+```
+UNION BANK, CANARA BANK
+We gave a call on Union Bank and Canara Bank. Both are looking good.
+
+VEDANTA
+The trend is positive for Vedanta.
+```
+
+Output should be 3 entries:
+[
+  {{"DATE": "...", "TIME": "...", "STOCK NAME": "UNION BANK", "ANALYSIS": "We gave a call on Union Bank and Canara Bank. Both are looking good."}},
+  {{"DATE": "...", "TIME": "...", "STOCK NAME": "CANARA BANK", "ANALYSIS": "We gave a call on Union Bank and Canara Bank. Both are looking good."}},
+  {{"DATE": "...", "TIME": "...", "STOCK NAME": "VEDANTA", "ANALYSIS": "The trend is positive for Vedanta."}}
+]"""
 
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a financial data extraction expert. Always return valid JSON arrays only."
+                    "content": "You are a financial data extraction expert. Your task is to parse structured stock call data. CRITICAL: 1) If a header line contains multiple stocks separated by comma, create SEPARATE entries for each stock with the SAME analysis. 2) Preserve analysis text EXACTLY as written - copy verbatim, no modifications. 3) Clean stock names by removing suffixes like (CALL), (BUY), (SELL). Always return valid JSON arrays only."
                 },
                 {
                     "role": "user",
                     "content": prompt
                 }
             ],
-            temperature=0.1,
-            max_tokens=4096
+            temperature=0.0,
+            max_tokens=8192
         )
         
         response_text = response.choices[0].message.content.strip()
