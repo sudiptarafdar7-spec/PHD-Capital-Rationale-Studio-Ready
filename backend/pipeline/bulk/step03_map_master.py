@@ -175,7 +175,7 @@ def run(job_folder):
             targets = row.get('TARGETS', row.get('TARGET', ''))
             stop_loss = row.get('STOP LOSS', row.get('STOPLOSS', ''))
             holding_period = row.get('HOLDING PERIOD', '')
-            rationale = row.get('RATIONALE', row.get('ANALYSIS', ''))
+            analysis = row.get('ANALYSIS', row.get('RATIONALE', ''))
             chart_type = row.get('CHART TYPE', 'Daily')
             
             match = None
@@ -234,7 +234,7 @@ def run(job_folder):
                     "TARGETS": targets,
                     "STOP LOSS": stop_loss,
                     "HOLDING PERIOD": holding_period,
-                    "RATIONALE": rationale,
+                    "ANALYSIS": analysis,
                     "CHART TYPE": chart_type,
                     "STOCK SYMBOL": stock_symbol,
                     "LISTED NAME": listed_name,
@@ -255,7 +255,7 @@ def run(job_folder):
                     "TARGETS": targets,
                     "STOP LOSS": stop_loss,
                     "HOLDING PERIOD": holding_period,
-                    "RATIONALE": rationale,
+                    "ANALYSIS": analysis,
                     "CHART TYPE": chart_type,
                     "STOCK SYMBOL": "",
                     "LISTED NAME": "",
