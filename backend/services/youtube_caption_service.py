@@ -112,6 +112,17 @@ def fetch_available_languages_rapidapi(video_url: str, rapidapi_key: str) -> dic
         available_langs = video_info.get("available_languages", [])
         selected_lang = video_info.get("selected_language", "auto")
         
+        name_to_code = {
+            'hindi': 'hi', 'english': 'en', 'tamil': 'ta', 'telugu': 'te',
+            'marathi': 'mr', 'gujarati': 'gu', 'kannada': 'kn', 'malayalam': 'ml',
+            'punjabi': 'pa', 'bengali': 'bn', 'urdu': 'ur', 'odia': 'or',
+            'assamese': 'as', 'nepali': 'ne', 'sinhala': 'si',
+            'japanese': 'ja', 'korean': 'ko', 'chinese': 'zh', 'arabic': 'ar',
+            'french': 'fr', 'german': 'de', 'spanish': 'es', 'portuguese': 'pt',
+            'russian': 'ru', 'italian': 'it', 'dutch': 'nl', 'polish': 'pl',
+            'turkish': 'tr', 'thai': 'th', 'vietnamese': 'vi', 'indonesian': 'id'
+        }
+        
         languages = []
         if available_langs:
             for lang in available_langs:
@@ -121,25 +132,34 @@ def fetch_available_languages_rapidapi(video_url: str, rapidapi_key: str) -> dic
                         'name': lang.get('name', lang.get('code', 'Unknown'))
                     })
                 elif isinstance(lang, str):
-                    lang_names = {
-                        'hi': 'Hindi', 'en': 'English', 'ta': 'Tamil', 'te': 'Telugu',
-                        'mr': 'Marathi', 'gu': 'Gujarati', 'kn': 'Kannada', 'ml': 'Malayalam',
-                        'pa': 'Punjabi', 'bn': 'Bengali', 'ur': 'Urdu', 'or': 'Odia',
-                        'as': 'Assamese', 'ne': 'Nepali', 'si': 'Sinhala',
-                        'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic',
-                        'fr': 'French', 'de': 'German', 'es': 'Spanish', 'pt': 'Portuguese',
-                        'ru': 'Russian', 'it': 'Italian', 'nl': 'Dutch', 'pl': 'Polish',
-                        'tr': 'Turkish', 'th': 'Thai', 'vi': 'Vietnamese', 'id': 'Indonesian'
-                    }
-                    languages.append({
-                        'code': lang,
-                        'name': lang_names.get(lang.split('-')[0], lang.upper())
-                    })
+                    lang_lower = lang.lower()
+                    detected_code = None
+                    for name, code in name_to_code.items():
+                        if name in lang_lower:
+                            detected_code = code
+                            break
+                    
+                    if detected_code:
+                        languages.append({
+                            'code': detected_code,
+                            'name': lang
+                        })
+                    else:
+                        languages.append({
+                            'code': lang,
+                            'name': lang
+                        })
         
         if not languages and selected_lang:
+            lang_lower = selected_lang.lower()
+            detected_code = None
+            for name, code in name_to_code.items():
+                if name in lang_lower:
+                    detected_code = code
+                    break
             languages.append({
-                'code': selected_lang,
-                'name': 'Auto-detected'
+                'code': detected_code or selected_lang,
+                'name': selected_lang
             })
         
         return {
