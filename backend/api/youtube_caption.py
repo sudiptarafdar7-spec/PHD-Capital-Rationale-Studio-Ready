@@ -109,6 +109,7 @@ def download_caption(caption_id):
     Download caption file as .txt
     Deletes the file after download
     """
+    import os
     try:
         file_path = caption_service.get_caption_file(caption_id)
         
@@ -118,8 +119,16 @@ def download_caption(caption_id):
                 'error': 'Caption file not found or already downloaded'
             }), 404
         
+        abs_path = os.path.abspath(file_path)
+        
+        if not os.path.exists(abs_path):
+            return jsonify({
+                'success': False,
+                'error': 'Caption file not found on server'
+            }), 404
+        
         response = send_file(
-            file_path,
+            abs_path,
             mimetype='text/plain',
             as_attachment=True,
             download_name=f'youtube_caption_{caption_id}.txt'
@@ -132,6 +141,8 @@ def download_caption(caption_id):
         return response
         
     except Exception as e:
+        import traceback
+        print(f"Download error: {traceback.format_exc()}")
         return jsonify({
             'success': False,
             'error': str(e)

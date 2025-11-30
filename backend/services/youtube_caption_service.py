@@ -115,11 +115,28 @@ def fetch_available_languages_rapidapi(video_url: str, rapidapi_key: str) -> dic
         languages = []
         if available_langs:
             for lang in available_langs:
-                languages.append({
-                    'code': lang.get('code', 'unknown'),
-                    'name': lang.get('name', lang.get('code', 'Unknown'))
-                })
-        else:
+                if isinstance(lang, dict):
+                    languages.append({
+                        'code': lang.get('code', 'unknown'),
+                        'name': lang.get('name', lang.get('code', 'Unknown'))
+                    })
+                elif isinstance(lang, str):
+                    lang_names = {
+                        'hi': 'Hindi', 'en': 'English', 'ta': 'Tamil', 'te': 'Telugu',
+                        'mr': 'Marathi', 'gu': 'Gujarati', 'kn': 'Kannada', 'ml': 'Malayalam',
+                        'pa': 'Punjabi', 'bn': 'Bengali', 'ur': 'Urdu', 'or': 'Odia',
+                        'as': 'Assamese', 'ne': 'Nepali', 'si': 'Sinhala',
+                        'ja': 'Japanese', 'ko': 'Korean', 'zh': 'Chinese', 'ar': 'Arabic',
+                        'fr': 'French', 'de': 'German', 'es': 'Spanish', 'pt': 'Portuguese',
+                        'ru': 'Russian', 'it': 'Italian', 'nl': 'Dutch', 'pl': 'Polish',
+                        'tr': 'Turkish', 'th': 'Thai', 'vi': 'Vietnamese', 'id': 'Indonesian'
+                    }
+                    languages.append({
+                        'code': lang,
+                        'name': lang_names.get(lang.split('-')[0], lang.upper())
+                    })
+        
+        if not languages and selected_lang:
             languages.append({
                 'code': selected_lang,
                 'name': 'Auto-detected'
