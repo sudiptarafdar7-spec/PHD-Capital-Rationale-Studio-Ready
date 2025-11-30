@@ -1,7 +1,7 @@
 # PHD Capital Rationale Studio
 
 ## Overview
-PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features three primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), and Manual Rationale (manual data entry with autocomplete). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
+PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features four primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), Manual Rationale (manual data entry with autocomplete), and Bulk Rationale (batch processing of text input with translation support). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
 ## User Preferences
 - Keep frontend design unchanged (layout, forms, fields, animations, effects, flow)
@@ -36,6 +36,14 @@ The application maintains a clear separation between a React-based frontend and 
         - **Generate Charts**: Standalone chart generation with Dhan API for candlestick, moving averages, RSI, and volume.
         - **Generate PDF**: Professional PDF generation with premium blue theme, company letterhead, platform branding, charts, rationale sections, and disclaimer. Secure PDF viewing and download with JWT authentication.
         - **Master Data Enrichment**: Server-side enrichment from uploaded master CSV for stock data.
+    - **Bulk Rationale Pipeline**: A 6-step process for batch text processing with translation (Translate → CSV → Map Master → Fetch CMP → Charts → PDF).
+        - **Step 1 (Translate)**: Translates Hindi/regional input text to English using OpenAI GPT-4o.
+        - **Step 2 (Convert to CSV)**: Converts translated text to structured CSV with stock symbols, actions, targets, and rationale using AI.
+        - **Step 3 (Map Master)**: Maps extracted stocks to master data file for ISIN, security IDs, and lot sizes.
+        - **Step 4 (Fetch CMP)**: Fetches current market prices from Dhan API with intelligent market hours handling.
+        - **Step 5 (Generate Charts)**: Generates candlestick charts with technical indicators using Dhan API data.
+        - **Step 6 (Generate PDF)**: Creates professional PDF report with platform branding, charts, and analysis.
+        - **Workflow**: input → processing → pdf-preview → upload-signed → saved
     - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data.
     - **Date Format Normalization**: Handles DD/MM/YYYY and YYYY-MM-DD formats, normalizing to ISO.
 - **System Design Choices**:
