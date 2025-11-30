@@ -43,7 +43,7 @@ ORIGINAL ANALYSIS:
 
 FORMATTING RULES:
 1. Start with "For {stock_name}, ..." 
-2. Include entry point, target prices, and stop-loss levels if mentioned
+2. Include entry point, target prices, and stop-loss levels if mentioned for THIS STOCK
 3. Include holding period recommendation if mentioned
 4. Include risk factors or caveats if mentioned
 5. Use ₹ symbol for all prices (e.g., ₹150, ₹1,250)
@@ -54,10 +54,18 @@ FORMATTING RULES:
 10. NO speaker names in the analysis
 
 CRITICAL RULES:
-- Do NOT change any price values, targets, stop-loss, or numerical data
+- Do NOT change any price values, targets, stop-loss, or numerical data for {stock_name}
 - Do NOT invent new information - only polish what is given
 - Keep all technical levels and recommendations exactly as stated
 - Just restructure and professionalize the language
+- **IMPORTANT**: If the original analysis mentions MULTIPLE stocks, extract ONLY the information relevant to {stock_name}. 
+  - Remove mentions of other stocks and their specific levels
+  - Keep only the targets, stop-loss, and analysis that applies to {stock_name}
+  - If the analysis is shared/generic, adapt it to focus on {stock_name} only
+
+EXAMPLE - If original mentions "HFCL target 84-85, stop loss 67.85" and "Punjab and Sind Bank target 38-40":
+- For HFCL: Only mention HFCL's target (₹84-85) and stop loss (₹67.85)
+- For Punjab and Sind Bank: Only mention its target (₹38-40)
 
 EXAMPLE OUTPUT FORMAT:
 For Jamna Auto, the view remains positive even though the momentum has slowed down compared to earlier moves from the ₹70–80 range. The stock looks stronger when compared to Rico Auto, as it has taken solid support around the ₹100 mark. A strict stop-loss should be maintained at ₹94–95, and as long as the stock sustains above this level, the overall outlook remains intact. The key resistance zone is around ₹110–111, and once this level is crossed, the stock has the potential to move further towards ₹125–130 levels. Holding is advisable with disciplined stop-loss management.

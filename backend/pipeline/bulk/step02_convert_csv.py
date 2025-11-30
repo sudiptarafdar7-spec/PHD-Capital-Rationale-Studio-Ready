@@ -1,28 +1,161 @@
 """
 Bulk Rationale Step 2: Convert to CSV
-Converts bulk-input-english.txt to structured CSV using OpenAI
+Converts bulk-input-english.txt to structured CSV
+- Reads line by line (stock name, then analysis)
+- Splits multi-stock entries into separate rows
+- Validates and fixes stock name spelling against master file
 """
 
 import os
-import json
-import openai
+import re
 import pandas as pd
+import psycopg2
+from rapidfuzz import fuzz, process
 from backend.utils.database import get_db_cursor
+from backend.utils.path_utils import resolve_uploaded_file_path
 
 
-def get_openai_key():
-    """Get OpenAI API key from database"""
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT key_value FROM api_keys WHERE provider = 'openai'")
+def get_master_file_path():
+    """Fetch master file path from database and resolve to current system path"""
+    try:
+        conn = psycopg2.connect(os.environ['DATABASE_URL'])
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT file_path 
+            FROM uploaded_files 
+            WHERE file_type = 'masterFile'
+            ORDER BY uploaded_at DESC
+            LIMIT 1
+        """)
+        
         result = cursor.fetchone()
-        if result and result['key_value']:
-            return result['key_value'].strip()
-    return None
+        cursor.close()
+        conn.close()
+        
+        if result:
+            db_path = result[0]
+            resolved_path = resolve_uploaded_file_path(db_path)
+            return resolved_path
+        else:
+            return None
+    
+    except Exception as e:
+        print(f"⚠️ Could not fetch master file: {str(e)}")
+        return None
+
+
+def load_stock_names_from_master(master_path):
+    """Load all stock names from master file for spelling validation"""
+    if not master_path or not os.path.exists(master_path):
+        return []
+    
+    try:
+        df = pd.read_csv(master_path, low_memory=False)
+        df = df[df["SEM_INSTRUMENT_NAME"].astype(str).str.upper() == "EQUITY"]
+        
+        stock_names = set()
+        for col in ["SEM_CUSTOM_SYMBOL", "SEM_TRADING_SYMBOL", "SM_SYMBOL_NAME"]:
+            if col in df.columns:
+                names = df[col].dropna().astype(str).str.strip().str.upper().tolist()
+                stock_names.update(names)
+        
+        return list(stock_names)
+    except Exception as e:
+        print(f"⚠️ Error loading master file: {str(e)}")
+        return []
+
+
+def normalize_text(s):
+    """Clean text for matching"""
+    if not isinstance(s, str):
+        s = str(s)
+    s = re.sub(r"[^A-Z0-9\s]", "", s.upper())
+    return s.strip()
+
+
+def fix_stock_spelling(stock_name, master_names, threshold=80):
+    """
+    Check and fix stock name spelling against master file
+    Returns the corrected name if a close match is found
+    """
+    if not master_names:
+        return stock_name
+    
+    stock_upper = stock_name.strip().upper()
+    
+    if stock_upper in master_names:
+        return stock_upper
+    
+    stock_norm = normalize_text(stock_upper)
+    
+    result = process.extractOne(
+        stock_norm, 
+        [normalize_text(n) for n in master_names],
+        scorer=fuzz.token_sort_ratio
+    )
+    
+    if result and result[1] >= threshold:
+        matched_norm = result[0]
+        for name in master_names:
+            if normalize_text(name) == matched_norm:
+                return name
+    
+    return stock_upper
+
+
+def parse_bulk_input(input_text):
+    """
+    Parse the bulk input text line by line.
+    Format: Stock name line, then analysis line, then empty line, repeat.
+    
+    Returns list of tuples: [(stock_names_list, analysis_text), ...]
+    """
+    lines = input_text.strip().split('\n')
+    entries = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        
+        if not line:
+            i += 1
+            continue
+        
+        stock_line = line
+        
+        analysis_lines = []
+        i += 1
+        while i < len(lines):
+            next_line = lines[i].strip()
+            
+            if not next_line:
+                i += 1
+                if i < len(lines) and lines[i].strip():
+                    next_peek = lines[i].strip()
+                    if len(next_peek) < 100 and not any(c in next_peek.lower() for c in ['should', 'can', 'will', 'the', 'is', 'are', 'has', 'have', 'target', 'stop', 'hold']):
+                        break
+                break
+            
+            analysis_lines.append(next_line)
+            i += 1
+        
+        analysis_text = ' '.join(analysis_lines)
+        
+        if analysis_text:
+            stock_names = [s.strip() for s in stock_line.split(',')]
+            stock_names = [re.sub(r'\s*\((?:CALL|BUY|SELL|HOLD)\)\s*$', '', s, flags=re.IGNORECASE).strip() for s in stock_names]
+            stock_names = [s for s in stock_names if s]
+            
+            if stock_names:
+                entries.append((stock_names, analysis_text))
+    
+    return entries
 
 
 def run(job_folder, call_date, call_time):
     """
-    Convert translated text to structured CSV using OpenAI
+    Convert translated text to structured CSV
     
     Args:
         job_folder: Path to job directory
@@ -52,126 +185,71 @@ def run(job_folder, call_date, call_time):
                 'error': f'Translated file not found: {input_file}'
             }
         
-        openai_key = get_openai_key()
-        if not openai_key:
-            return {
-                'success': False,
-                'error': 'OpenAI API key not found. Please add it in Settings → API Keys.'
-            }
-        
-        print(f"📖 Reading translated text: {input_file}")
+        print(f"📖 Reading input file: {input_file}")
         with open(input_file, 'r', encoding='utf-8') as f:
             input_text = f.read()
         
         print(f"📝 Text length: {len(input_text)} characters")
         print(f"📅 Call Date: {call_date}, Time: {call_time}")
         
-        print("🔄 Converting to structured CSV using OpenAI...")
+        print("\n🔑 Loading master file for stock name validation...")
+        master_path = get_master_file_path()
+        master_names = []
+        if master_path:
+            master_names = load_stock_names_from_master(master_path)
+            print(f"✅ Loaded {len(master_names)} stock names from master file")
+        else:
+            print("⚠️ Master file not found, skipping spelling validation")
         
-        client = openai.OpenAI(api_key=openai_key)
+        print("\n🔄 Parsing input text line by line...")
+        entries = parse_bulk_input(input_text)
+        print(f"✅ Found {len(entries)} stock entries")
         
-        prompt = f"""You are a SEBI-registered Research Analyst expert. Extract stock calls from this text and convert to structured data.
-
-INPUT TEXT:
-{input_text}
-
-CALL DATE: {call_date}
-CALL TIME: {call_time}
-
-The input text is structured as:
-- Each entry starts with a STOCK NAME line (header) followed by an ANALYSIS paragraph
-- Some headers may contain MULTIPLE STOCKS separated by comma (e.g., "UNION BANK, CANARA BANK")
-
-CRITICAL RULES:
-1. **MULTI-STOCK HEADERS**: If a header contains multiple stocks separated by comma (e.g., "UNION BANK, CANARA BANK"), create SEPARATE entries for EACH stock. Each stock gets its own row with the SAME EXACT analysis text.
-2. **PRESERVE EXACT ANALYSIS**: Copy the analysis paragraph EXACTLY as written - do not modify, summarize, or paraphrase.
-3. **CLEAN STOCK NAMES**: Remove suffixes like "(CALL)", "(BUY)", "(SELL)" from stock names. Keep only the clean stock name.
-   - Example: "MARKSANS PHARMA (CALL)" → "MARKSANS PHARMA"
-   - Example: "UNION BANK, CANARA BANK" → Create 2 separate entries: "UNION BANK" and "CANARA BANK"
-4. Use the provided DATE and TIME for all entries.
-5. Return ONLY a valid JSON array, no other text.
-
-Return ONLY a valid JSON array with this exact structure:
-[
-  {{
-    "DATE": "{call_date}",
-    "TIME": "{call_time}",
-    "STOCK NAME": "clean stock name only",
-    "ANALYSIS": "EXACT analysis text copied verbatim from input"
-  }}
-]
-
-EXAMPLE - For input:
-```
-UNION BANK, CANARA BANK
-We gave a call on Union Bank and Canara Bank. Both are looking good.
-
-VEDANTA
-The trend is positive for Vedanta.
-```
-
-Output should be 3 entries:
-[
-  {{"DATE": "...", "TIME": "...", "STOCK NAME": "UNION BANK", "ANALYSIS": "We gave a call on Union Bank and Canara Bank. Both are looking good."}},
-  {{"DATE": "...", "TIME": "...", "STOCK NAME": "CANARA BANK", "ANALYSIS": "We gave a call on Union Bank and Canara Bank. Both are looking good."}},
-  {{"DATE": "...", "TIME": "...", "STOCK NAME": "VEDANTA", "ANALYSIS": "The trend is positive for Vedanta."}}
-]"""
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a financial data extraction expert. Your task is to parse structured stock call data. CRITICAL: 1) If a header line contains multiple stocks separated by comma, create SEPARATE entries for each stock with the SAME analysis. 2) Preserve analysis text EXACTLY as written - copy verbatim, no modifications. 3) Clean stock names by removing suffixes like (CALL), (BUY), (SELL). Always return valid JSON arrays only."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.0,
-            max_tokens=8192
-        )
+        print("\n📋 Processing stocks and fixing spelling...")
+        print("-" * 60)
         
-        response_text = response.choices[0].message.content.strip()
+        rows = []
+        spelling_fixes = []
         
-        if response_text.startswith("```"):
-            response_text = response_text.split("```")[1]
-            if response_text.startswith("json"):
-                response_text = response_text[4:]
-            response_text = response_text.strip()
+        for stock_names, analysis in entries:
+            for original_name in stock_names:
+                corrected_name = fix_stock_spelling(original_name, master_names)
+                
+                if corrected_name.upper() != original_name.upper():
+                    spelling_fixes.append((original_name, corrected_name))
+                    print(f"  🔧 Spelling fix: {original_name} → {corrected_name}")
+                else:
+                    print(f"  ✅ {corrected_name}")
+                
+                rows.append({
+                    "DATE": call_date,
+                    "TIME": call_time,
+                    "STOCK NAME": corrected_name,
+                    "ANALYSIS": analysis
+                })
         
-        try:
-            stocks_data = json.loads(response_text)
-        except json.JSONDecodeError as e:
-            print(f"⚠️ JSON parse error: {e}")
-            print(f"Response: {response_text[:500]}")
-            return {
-                'success': False,
-                'error': f'Failed to parse OpenAI response as JSON: {str(e)}'
-            }
+        print("-" * 60)
         
-        if not stocks_data:
+        if spelling_fixes:
+            print(f"\n📝 Fixed {len(spelling_fixes)} spelling errors")
+        
+        if not rows:
             return {
                 'success': False,
                 'error': 'No stocks extracted from input text'
             }
         
-        df = pd.DataFrame(stocks_data)
-        
-        required_cols = ['DATE', 'TIME', 'STOCK NAME', 'ANALYSIS']
-        for col in required_cols:
-            if col not in df.columns:
-                df[col] = ''
-        
-        df = df[required_cols]
-        
+        df = pd.DataFrame(rows)
         df.to_csv(output_file, index=False, encoding='utf-8-sig')
         
-        print(f"✅ Extracted {len(df)} stocks")
+        print(f"\n✅ Created {len(df)} stock entries")
         print(f"💾 Saved to: {output_file}")
         
-        print("\n📋 Extracted Stocks:")
+        multi_stock_count = sum(1 for names, _ in entries if len(names) > 1)
+        if multi_stock_count > 0:
+            print(f"📊 Split {multi_stock_count} multi-stock entries into separate rows")
+        
+        print("\n📋 Final Stock List:")
         print("-" * 40)
         for i, row in df.iterrows():
             print(f"  {i+1}. {row['STOCK NAME']}")
@@ -179,11 +257,14 @@ Output should be 3 entries:
         return {
             'success': True,
             'output_file': output_file,
-            'stock_count': len(df)
+            'stock_count': len(df),
+            'spelling_fixes': len(spelling_fixes)
         }
         
     except Exception as e:
         print(f"❌ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {
             'success': False,
             'error': str(e)
