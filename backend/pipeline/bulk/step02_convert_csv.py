@@ -3,113 +3,33 @@ Bulk Rationale Step 2: Convert to CSV
 Converts bulk-input-english.txt to structured CSV
 - Reads line by line (stock name, then analysis)
 - Splits multi-stock entries into separate rows
-- Validates and fixes stock name spelling against master file
+- Uses OpenAI to validate and fix stock name spelling
 """
 
 import os
 import re
+import json
+import openai
 import pandas as pd
-import psycopg2
-from rapidfuzz import fuzz, process
 from backend.utils.database import get_db_cursor
-from backend.utils.path_utils import resolve_uploaded_file_path
 
 
-def get_master_file_path():
-    """Fetch master file path from database and resolve to current system path"""
-    try:
-        conn = psycopg2.connect(os.environ['DATABASE_URL'])
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT file_path 
-            FROM uploaded_files 
-            WHERE file_type = 'masterFile'
-            ORDER BY uploaded_at DESC
-            LIMIT 1
-        """)
-        
+def get_openai_key():
+    """Get OpenAI API key from database"""
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT key_value FROM api_keys WHERE provider = 'openai'")
         result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if result:
-            db_path = result[0]
-            resolved_path = resolve_uploaded_file_path(db_path)
-            return resolved_path
-        else:
-            return None
-    
-    except Exception as e:
-        print(f"⚠️ Could not fetch master file: {str(e)}")
-        return None
-
-
-def load_stock_names_from_master(master_path):
-    """Load all stock names from master file for spelling validation"""
-    if not master_path or not os.path.exists(master_path):
-        return []
-    
-    try:
-        df = pd.read_csv(master_path, low_memory=False)
-        df = df[df["SEM_INSTRUMENT_NAME"].astype(str).str.upper() == "EQUITY"]
-        
-        stock_names = set()
-        for col in ["SEM_CUSTOM_SYMBOL", "SEM_TRADING_SYMBOL", "SM_SYMBOL_NAME"]:
-            if col in df.columns:
-                names = df[col].dropna().astype(str).str.strip().str.upper().tolist()
-                stock_names.update(names)
-        
-        return list(stock_names)
-    except Exception as e:
-        print(f"⚠️ Error loading master file: {str(e)}")
-        return []
-
-
-def normalize_text(s):
-    """Clean text for matching"""
-    if not isinstance(s, str):
-        s = str(s)
-    s = re.sub(r"[^A-Z0-9\s]", "", s.upper())
-    return s.strip()
-
-
-def fix_stock_spelling(stock_name, master_names, threshold=80):
-    """
-    Check and fix stock name spelling against master file
-    Returns the corrected name if a close match is found
-    """
-    if not master_names:
-        return stock_name
-    
-    stock_upper = stock_name.strip().upper()
-    
-    if stock_upper in master_names:
-        return stock_upper
-    
-    stock_norm = normalize_text(stock_upper)
-    
-    result = process.extractOne(
-        stock_norm, 
-        [normalize_text(n) for n in master_names],
-        scorer=fuzz.token_sort_ratio
-    )
-    
-    if result and result[1] >= threshold:
-        matched_norm = result[0]
-        for name in master_names:
-            if normalize_text(name) == matched_norm:
-                return name
-    
-    return stock_upper
+        if result and result['key_value']:
+            return result['key_value'].strip()
+    return None
 
 
 def parse_bulk_input(input_text):
     """
     Parse the bulk input text line by line.
-    Format: Stock name line, then analysis line, then empty line, repeat.
+    Format: Stock name line, then analysis line(s), then empty line, repeat.
     
-    Returns list of tuples: [(stock_names_list, analysis_text), ...]
+    Returns list of tuples: [(stock_names_string, analysis_text), ...]
     """
     lines = input_text.strip().split('\n')
     entries = []
@@ -133,7 +53,7 @@ def parse_bulk_input(input_text):
                 i += 1
                 if i < len(lines) and lines[i].strip():
                     next_peek = lines[i].strip()
-                    if len(next_peek) < 100 and not any(c in next_peek.lower() for c in ['should', 'can', 'will', 'the', 'is', 'are', 'has', 'have', 'target', 'stop', 'hold']):
+                    if len(next_peek) < 100 and not any(c in next_peek.lower() for c in ['should', 'can', 'will', 'the', 'is', 'are', 'has', 'have', 'target', 'stop', 'hold', 'buy', 'sell', 'trading']):
                         break
                 break
             
@@ -143,14 +63,103 @@ def parse_bulk_input(input_text):
         analysis_text = ' '.join(analysis_lines)
         
         if analysis_text:
-            stock_names = [s.strip() for s in stock_line.split(',')]
-            stock_names = [re.sub(r'\s*\((?:CALL|BUY|SELL|HOLD)\)\s*$', '', s, flags=re.IGNORECASE).strip() for s in stock_names]
-            stock_names = [s for s in stock_names if s]
-            
-            if stock_names:
-                entries.append((stock_names, analysis_text))
+            entries.append((stock_line, analysis_text))
     
     return entries
+
+
+def validate_stocks_with_openai(client, entries):
+    """
+    Use OpenAI to validate and fix stock names.
+    Also splits multi-stock entries into separate rows.
+    
+    Args:
+        client: OpenAI client
+        entries: List of (stock_line, analysis) tuples
+        
+    Returns:
+        List of dicts with corrected stock names
+    """
+    entries_for_ai = []
+    for idx, (stock_line, analysis) in enumerate(entries):
+        entries_for_ai.append({
+            "index": idx,
+            "stock_line": stock_line,
+            "analysis_preview": analysis[:200] + "..." if len(analysis) > 200 else analysis
+        })
+    
+    prompt = f"""You are an expert in Indian stock markets (NSE/BSE). 
+Your task is to validate and correct stock names from a list of entries.
+
+INPUT ENTRIES:
+{json.dumps(entries_for_ai, indent=2)}
+
+CRITICAL RULES:
+1. **FIX SPELLING ERRORS**: If a stock name has a spelling error, correct it to the official NSE/BSE name.
+   Examples: "Suzuelon" → "SUZLON", "INFOSIS" → "INFOSYS", "Maruthi" → "MARUTI"
+   
+2. **USE CORRECT FULL NAMES**: 
+   - "UNION BANK" → "UNION BANK OF INDIA" (NOT "CITY UNION BANK" - that's a different bank!)
+   - "CANARA BANK" → "CANARA BANK"
+   - "PNB" → "PUNJAB NATIONAL BANK"
+   - "SBI" → "STATE BANK OF INDIA"
+   - "PUNJAB AND SIND BANK" → "PUNJAB AND SIND BANK"
+   
+3. **SPLIT MULTI-STOCK ENTRIES**: If stock_line contains multiple stocks separated by comma:
+   - "HFCL, PUNJAB AND SIND BANK" → Two separate entries: "HFCL" and "PUNJAB AND SIND BANK"
+   - Each stock should be its own entry with the same index (to map back to same analysis)
+   
+4. **REMOVE SUFFIXES**: Remove (CALL), (BUY), (SELL), (HOLD) from stock names
+   - "MARKSANS PHARMA (CALL)" → "MARKSANS PHARMA"
+
+5. **USE NSE SYMBOLS**: Convert to standard NSE trading symbols where possible
+   - "PUNJAB AND SIND BANK" → "PSB" 
+   - "HFCL" stays "HFCL"
+
+6. **DO NOT INVENT STOCKS**: Only process stocks that are mentioned. Don't add new ones.
+
+7. **DO NOT SKIP STOCKS**: Process ALL entries, don't skip any.
+
+Return a JSON array with corrected entries:
+[
+  {{"index": 0, "stock_name": "CORRECTED_NAME"}},
+  {{"index": 0, "stock_name": "SECOND_STOCK_IF_MULTI"}},
+  {{"index": 1, "stock_name": "CORRECTED_NAME"}}
+]
+
+Return ONLY valid JSON, no other text."""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an Indian stock market expert. Your task is to validate stock names against NSE/BSE listings and fix any spelling errors. CRITICAL: UNION BANK means UNION BANK OF INDIA, NOT City Union Bank. Always return valid JSON arrays only."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.0,
+            max_tokens=4096
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+        
+        if response_text.startswith("```"):
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+            response_text = response_text.strip()
+        
+        corrected_entries = json.loads(response_text)
+        return corrected_entries
+        
+    except Exception as e:
+        print(f"⚠️ OpenAI validation error: {e}")
+        return None
 
 
 def run(job_folder, call_date, call_time):
@@ -185,6 +194,13 @@ def run(job_folder, call_date, call_time):
                 'error': f'Translated file not found: {input_file}'
             }
         
+        openai_key = get_openai_key()
+        if not openai_key:
+            return {
+                'success': False,
+                'error': 'OpenAI API key not found. Please add it in Settings → API Keys.'
+            }
+        
         print(f"📖 Reading input file: {input_file}")
         with open(input_file, 'r', encoding='utf-8') as f:
             input_text = f.read()
@@ -192,46 +208,49 @@ def run(job_folder, call_date, call_time):
         print(f"📝 Text length: {len(input_text)} characters")
         print(f"📅 Call Date: {call_date}, Time: {call_time}")
         
-        print("\n🔑 Loading master file for stock name validation...")
-        master_path = get_master_file_path()
-        master_names = []
-        if master_path:
-            master_names = load_stock_names_from_master(master_path)
-            print(f"✅ Loaded {len(master_names)} stock names from master file")
-        else:
-            print("⚠️ Master file not found, skipping spelling validation")
-        
         print("\n🔄 Parsing input text line by line...")
         entries = parse_bulk_input(input_text)
-        print(f"✅ Found {len(entries)} stock entries")
+        print(f"✅ Found {len(entries)} raw entries")
         
-        print("\n📋 Processing stocks and fixing spelling...")
+        print("\n📋 Raw stock lines found:")
+        print("-" * 60)
+        for idx, (stock_line, _) in enumerate(entries):
+            print(f"  {idx+1}. {stock_line}")
+        print("-" * 60)
+        
+        print("\n🤖 Validating stock names with OpenAI...")
+        client = openai.OpenAI(api_key=openai_key)
+        corrected_entries = validate_stocks_with_openai(client, entries)
+        
+        if not corrected_entries:
+            print("⚠️ OpenAI validation failed, using original names with basic cleanup")
+            corrected_entries = []
+            for idx, (stock_line, _) in enumerate(entries):
+                stock_names = [s.strip() for s in stock_line.split(',')]
+                for name in stock_names:
+                    clean_name = re.sub(r'\s*\((?:CALL|BUY|SELL|HOLD)\)\s*$', '', name, flags=re.IGNORECASE).strip().upper()
+                    if clean_name:
+                        corrected_entries.append({"index": idx, "stock_name": clean_name})
+        
+        print("\n📋 Validated stock names:")
         print("-" * 60)
         
         rows = []
-        spelling_fixes = []
-        
-        for stock_names, analysis in entries:
-            for original_name in stock_names:
-                corrected_name = fix_stock_spelling(original_name, master_names)
-                
-                if corrected_name.upper() != original_name.upper():
-                    spelling_fixes.append((original_name, corrected_name))
-                    print(f"  🔧 Spelling fix: {original_name} → {corrected_name}")
-                else:
-                    print(f"  ✅ {corrected_name}")
-                
-                rows.append({
-                    "DATE": call_date,
-                    "TIME": call_time,
-                    "STOCK NAME": corrected_name,
-                    "ANALYSIS": analysis
-                })
+        for entry in corrected_entries:
+            idx = entry['index']
+            stock_name = entry['stock_name']
+            _, analysis = entries[idx]
+            
+            print(f"  ✅ {stock_name}")
+            
+            rows.append({
+                "DATE": call_date,
+                "TIME": call_time,
+                "STOCK NAME": stock_name,
+                "ANALYSIS": analysis
+            })
         
         print("-" * 60)
-        
-        if spelling_fixes:
-            print(f"\n📝 Fixed {len(spelling_fixes)} spelling errors")
         
         if not rows:
             return {
@@ -245,9 +264,9 @@ def run(job_folder, call_date, call_time):
         print(f"\n✅ Created {len(df)} stock entries")
         print(f"💾 Saved to: {output_file}")
         
-        multi_stock_count = sum(1 for names, _ in entries if len(names) > 1)
-        if multi_stock_count > 0:
-            print(f"📊 Split {multi_stock_count} multi-stock entries into separate rows")
+        multi_stock_entries = len([e for e in entries if ',' in e[0]])
+        if multi_stock_entries > 0:
+            print(f"📊 Split {multi_stock_entries} multi-stock entries into separate rows")
         
         print("\n📋 Final Stock List:")
         print("-" * 40)
@@ -257,8 +276,7 @@ def run(job_folder, call_date, call_time):
         return {
             'success': True,
             'output_file': output_file,
-            'stock_count': len(df),
-            'spelling_fixes': len(spelling_fixes)
+            'stock_count': len(df)
         }
         
     except Exception as e:
