@@ -25,7 +25,7 @@ BULK_STEPS = [
 ]
 
 
-def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
+def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1, stop_after_step=None):
     """Run the bulk rationale pipeline in background
     
     Args:
@@ -34,6 +34,7 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
         call_date: Date of the call
         call_time: Time of the call
         start_step: Step number to start from (default 1)
+        stop_after_step: Step number to stop after (for checkpoints)
     """
     from backend.pipeline.bulk import (
         step01_translate,
@@ -89,6 +90,16 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1):
                             message = %s
                         WHERE job_id = %s AND step_number = %s
                     """, (datetime.now(), output_files, f"Step {step_num} completed", job_id, step_num))
+                
+                if stop_after_step and step_num == stop_after_step:
+                    with get_db_cursor(commit=True) as cursor:
+                        cursor.execute("""
+                            UPDATE jobs 
+                            SET status = 'awaiting_csv_review', progress = %s, updated_at = %s
+                            WHERE id = %s
+                        """, (int(step_num / 7 * 100), datetime.now(), job_id))
+                    print(f"\n⏸️ Pipeline paused after Step {step_num} for CSV review")
+                    return
             else:
                 with get_db_cursor(commit=True) as cursor:
                     cursor.execute("""
@@ -197,7 +208,7 @@ def create_job():
         
         thread = threading.Thread(
             target=run_bulk_pipeline,
-            args=(job_id, job_folder, call_date, call_time)
+            args=(job_id, job_folder, call_date, call_time, 1, 4)
         )
         thread.daemon = True
         thread.start()
@@ -532,9 +543,11 @@ def restart_step(job_id, step_number):
         call_date = str(job['date']) if job['date'] else datetime.now().strftime('%Y-%m-%d')
         call_time = str(job['time']) if job['time'] else '10:00:00'
         
+        stop_after = 4 if step_number <= 4 else None
+        
         thread = threading.Thread(
             target=run_bulk_pipeline,
-            args=(job_id, job['folder_path'], call_date, call_time, step_number)
+            args=(job_id, job['folder_path'], call_date, call_time, step_number, stop_after)
         )
         thread.daemon = True
         thread.start()
@@ -546,4 +559,250 @@ def restart_step(job_id, step_number):
         
     except Exception as e:
         print(f"Error restarting step: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/csv-preview', methods=['GET'])
+@jwt_required()
+def get_csv_preview(job_id):
+    """Get mapped_master_file.csv content as HTML table for preview"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT folder_path FROM jobs 
+                WHERE id = %s AND user_id = %s
+            """, (job_id, current_user_id))
+            
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+        
+        import pandas as pd
+        resolved_folder = resolve_job_folder_path(job['folder_path'])
+        csv_path = os.path.join(resolved_folder, 'analysis', 'mapped_master_file.csv')
+        
+        if not os.path.exists(csv_path):
+            return jsonify({'error': 'CSV file not found'}), 404
+        
+        df = pd.read_csv(csv_path, encoding='utf-8-sig')
+        
+        display_cols = ['STOCK NAME', 'ISIN', 'SEM_SMST_SECURITY_ID', 'EXCHANGE', 'CMP', 'ANALYSIS']
+        available_cols = [col for col in display_cols if col in df.columns]
+        
+        df_display = df[available_cols] if available_cols else df
+        
+        html_table = df_display.to_html(
+            classes='csv-preview-table',
+            index=False,
+            escape=False,
+            border=0
+        )
+        
+        styled_html = f"""
+        <style>
+            .csv-preview-table {{
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+                font-family: system-ui, -apple-system, sans-serif;
+            }}
+            .csv-preview-table th {{
+                background-color: #1a5490;
+                color: white;
+                padding: 10px 8px;
+                text-align: left;
+                font-weight: 600;
+                position: sticky;
+                top: 0;
+            }}
+            .csv-preview-table td {{
+                padding: 8px;
+                border-bottom: 1px solid #e2e8f0;
+                vertical-align: top;
+            }}
+            .csv-preview-table tr:hover {{
+                background-color: #f8fafc;
+            }}
+            .csv-preview-table tr:nth-child(even) {{
+                background-color: #f1f5f9;
+            }}
+        </style>
+        {html_table}
+        """
+        
+        return jsonify({
+            'success': True,
+            'html': styled_html,
+            'rowCount': len(df),
+            'columns': list(df.columns)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting CSV preview: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/download-analysis-csv', methods=['GET'])
+@jwt_required()
+def download_analysis_csv(job_id):
+    """Download bulk-input-analysis.csv"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("""
+                SELECT folder_path FROM jobs 
+                WHERE id = %s AND user_id = %s
+            """, (job_id, current_user_id))
+            
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+        
+        resolved_folder = resolve_job_folder_path(job['folder_path'])
+        csv_path = os.path.join(resolved_folder, 'analysis', 'bulk-input-analysis.csv')
+        
+        if not os.path.exists(csv_path):
+            csv_path = os.path.join(resolved_folder, 'analysis', 'bulk-input.csv')
+        
+        if not os.path.exists(csv_path):
+            return jsonify({'error': 'CSV file not found'}), 404
+        
+        return send_file(
+            csv_path,
+            as_attachment=True,
+            download_name='bulk-input-analysis.csv',
+            mimetype='text/csv'
+        )
+        
+    except Exception as e:
+        print(f"Error downloading CSV: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/upload-analysis-csv', methods=['POST'])
+@jwt_required()
+def upload_analysis_csv(job_id):
+    """Upload edited bulk-input-analysis.csv and re-run Step 4"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not file.filename.lower().endswith('.csv'):
+            return jsonify({'error': 'Only CSV files allowed'}), 400
+        
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute("""
+                SELECT folder_path, date, time FROM jobs 
+                WHERE id = %s AND user_id = %s
+            """, (job_id, current_user_id))
+            
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+        
+        resolved_folder = resolve_job_folder_path(job['folder_path'])
+        csv_path = os.path.join(resolved_folder, 'analysis', 'bulk-input-analysis.csv')
+        
+        file.save(csv_path)
+        
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute("""
+                UPDATE job_steps 
+                SET status = 'pending', message = NULL, started_at = NULL, ended_at = NULL
+                WHERE job_id = %s AND step_number >= 4
+            """, (job_id,))
+            
+            cursor.execute("""
+                UPDATE jobs 
+                SET status = 'processing', current_step = 3, updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), job_id))
+        
+        call_date = str(job['date']) if job['date'] else datetime.now().strftime('%Y-%m-%d')
+        call_time = str(job['time']) if job['time'] else '10:00:00'
+        
+        thread = threading.Thread(
+            target=run_bulk_pipeline,
+            args=(job_id, resolved_folder, call_date, call_time, 4, 4)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'CSV uploaded. Re-running Step 4 (Map Master File)...'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error uploading CSV: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/continue-pipeline', methods=['POST'])
+@jwt_required()
+def continue_pipeline(job_id):
+    """Continue pipeline from Step 5 after CSV review"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute("""
+                SELECT folder_path, date, time, status FROM jobs 
+                WHERE id = %s AND user_id = %s
+            """, (job_id, current_user_id))
+            
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            if job['status'] != 'awaiting_csv_review':
+                return jsonify({'error': 'Job is not awaiting CSV review'}), 400
+            
+            cursor.execute("""
+                UPDATE job_steps 
+                SET status = 'pending', message = NULL, started_at = NULL, ended_at = NULL
+                WHERE job_id = %s AND step_number >= 5
+            """, (job_id,))
+            
+            cursor.execute("""
+                UPDATE jobs 
+                SET status = 'processing', current_step = 4, updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), job_id))
+        
+        call_date = str(job['date']) if job['date'] else datetime.now().strftime('%Y-%m-%d')
+        call_time = str(job['time']) if job['time'] else '10:00:00'
+        
+        resolved_folder = resolve_job_folder_path(job['folder_path'])
+        
+        thread = threading.Thread(
+            target=run_bulk_pipeline,
+            args=(job_id, resolved_folder, call_date, call_time, 5, None)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Continuing pipeline from Step 5...'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error continuing pipeline: {str(e)}")
         return jsonify({'error': str(e)}), 500
