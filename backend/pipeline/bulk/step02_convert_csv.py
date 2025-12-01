@@ -27,8 +27,17 @@ def get_openai_key():
 
 def parse_bulk_input(input_text):
     """
-    Parse the bulk input text line by line.
-    Format: Stock name line, then analysis line(s), then empty line, repeat.
+    Parse the bulk input text with flexible format handling.
+    
+    Supports formats:
+    1. Stock name - (with dash)
+       [empty line]
+       Analysis paragraph
+       [empty line]
+       
+    2. Stock name
+       Analysis paragraph
+       [empty line]
     
     Returns list of tuples: [(stock_names_string, analysis_text), ...]
     """
@@ -43,10 +52,17 @@ def parse_bulk_input(input_text):
             i += 1
             continue
         
-        stock_line = line
+        stock_line = line.rstrip(' -').rstrip('-').strip()
+        
+        if not stock_line:
+            i += 1
+            continue
+        
+        i += 1
+        while i < len(lines) and not lines[i].strip():
+            i += 1
         
         analysis_lines = []
-        i += 1
         while i < len(lines):
             next_line = lines[i].strip()
             
@@ -54,8 +70,16 @@ def parse_bulk_input(input_text):
                 i += 1
                 if i < len(lines) and lines[i].strip():
                     next_peek = lines[i].strip()
-                    if len(next_peek) < 100 and not any(c in next_peek.lower() for c in ['should', 'can', 'will', 'the', 'is', 'are', 'has', 'have', 'target', 'stop', 'hold', 'buy', 'sell', 'trading']):
+                    if next_peek.endswith('-') or next_peek.endswith(' -'):
                         break
+                    if len(next_peek) < 80 and not any(word in next_peek.lower() for word in 
+                        ['should', 'can', 'will', 'the', 'is', 'are', 'has', 'have', 
+                         'target', 'stop', 'hold', 'buy', 'sell', 'trading', 'price',
+                         'support', 'resistance', 'stock', 'market', 'invested']):
+                        break
+                    analysis_lines.append(next_peek)
+                    i += 1
+                    continue
                 break
             
             analysis_lines.append(next_line)
@@ -63,7 +87,7 @@ def parse_bulk_input(input_text):
         
         analysis_text = ' '.join(analysis_lines)
         
-        if analysis_text:
+        if analysis_text and len(analysis_text) > 20:
             entries.append((stock_line, analysis_text))
     
     return entries
