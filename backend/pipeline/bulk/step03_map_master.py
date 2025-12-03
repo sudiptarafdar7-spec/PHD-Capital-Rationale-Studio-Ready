@@ -1,7 +1,7 @@
 """
 Bulk Rationale Step 4: Map Master File
 
-Maps stock names from Step 2/3 CSV to the master reference file to get:
+Maps INPUT STOCK from Step 2/3 CSV to the master reference file to get:
 - Stock Symbol (SEM_TRADING_SYMBOL)
 - Listed Name (SM_SYMBOL_NAME)
 - Short Name (SEM_CUSTOM_SYMBOL)
@@ -9,18 +9,17 @@ Maps stock names from Step 2/3 CSV to the master reference file to get:
 - Exchange (SEM_EXM_EXCH_ID)
 - Instrument (SEM_INSTRUMENT_NAME)
 
-Matching Logic (same as Media Rationale):
-1. Filter master data → only EQUITY rows
-2. Match STOCK NAME sequentially:
-   - Primary: Short name column (SEM_CUSTOM_SYMBOL) exact match
-   - Secondary: Symbol column (SEM_TRADING_SYMBOL) exact match
-   - Tertiary: Name column (SM_SYMBOL_NAME) exact match
-   - Fuzzy on SEM_CUSTOM_SYMBOL (>= 80%)
-   - Fuzzy on SEM_TRADING_SYMBOL (>= 80%)
-   - Fuzzy on SM_SYMBOL_NAME (>= 80%)
-   - Word matching on SEM_TRADING_SYMBOL
-   - Word matching on SM_SYMBOL_NAME
-3. If both NSE and BSE found → Prefer NSE
+Matching Logic (Priority Order):
+1. EXACT match (normalized): INPUT STOCK → SEM_TRADING_SYMBOL
+2. EXACT match (normalized): INPUT STOCK → SEM_CUSTOM_SYMBOL
+3. EXACT match (normalized): INPUT STOCK → SM_SYMBOL_NAME
+4. PREFIX match: INPUT STOCK starts with SEM_TRADING_SYMBOL (or vice versa)
+5. PREFIX match: INPUT STOCK starts with SEM_CUSTOM_SYMBOL (or vice versa)
+
+Normalization: Remove ALL spaces and special characters for comparison
+This handles user mistakes like "TATA MOTORS" vs "TATAMOTORS"
+
+If both NSE and BSE found → Prefer NSE
 
 Input:
   - analysis/bulk-input-analysis.csv (from Step 3) or analysis/bulk-input.csv (from Step 2)
@@ -33,93 +32,62 @@ import os
 import re
 import pandas as pd
 import psycopg2
-from rapidfuzz import fuzz, process
 from backend.utils.path_utils import resolve_uploaded_file_path
 
 
-def normalize_text(s):
-    """Clean text for matching (remove special chars, multiple spaces)."""
-    if not isinstance(s, str):
-        s = str(s)
-    s = re.sub(r"[^A-Z0-9]", "", s.upper())
-    return s.strip()
-
-
-def get_words(s):
-    """Extract meaningful words from stock name for word matching."""
-    if not isinstance(s, str):
-        s = str(s)
-    words = re.sub(r"[^A-Z0-9\s]", "", s.upper()).split()
-    stop_words = {'LTD', 'LIMITED', 'PVT', 'PRIVATE', 'INC', 'CORP', 'CORPORATION', 'AND', 'THE', 'OF', 'INDIA'}
-    return [w for w in words if w and w not in stop_words and len(w) > 1]
-
-
-def word_match_score(search_words, target_words):
+def normalize_for_exact_match(s):
     """
-    Calculate word match score between two word lists.
-    IMPORTANT: First word must match for a valid score.
-    This prevents "SERVOTECH POWER SYSTEMS" matching "SMARTEN POWER SYSTEMS"
-    just because they share "POWER SYSTEMS".
+    Normalize text for EXACT matching.
+    Removes ALL spaces, special characters, keeps only alphanumeric.
+    This handles cases like:
+    - "TATA MOTORS" vs "TATAMOTORS"
+    - "HDFC BANK" vs "HDFCBANK"
+    - "M&M" vs "M AND M"
     """
-    if not search_words or not target_words:
-        return 0
-    
-    # First word (company name) MUST match
-    first_word = search_words[0]
-    first_word_matched = False
-    
-    # Check if first word matches any target word at the beginning
-    # or is a substring of the first target word (for abbreviations)
-    if first_word in target_words:
-        first_word_matched = True
-    elif target_words and (first_word.startswith(target_words[0]) or target_words[0].startswith(first_word)):
-        first_word_matched = True
-    
-    # If first word doesn't match, return 0 (no match)
-    if not first_word_matched:
-        return 0
-    
-    # Count total matched words
-    matched = sum(1 for w in search_words if w in target_words)
-    return matched / max(len(search_words), 1) * 100
+    if not isinstance(s, str):
+        s = str(s) if s is not None else ""
+    s = s.upper().strip()
+    s = re.sub(r'[^A-Z0-9]', '', s)
+    return s
 
 
-def fuzzy_match(value, target_series, threshold=80):
-    """Return best fuzzy match index or None if below threshold."""
-    if not value or not isinstance(value, str):
-        return None
-    value_norm = normalize_text(value)
-    choices = target_series.tolist()
-    result = process.extractOne(value_norm, choices, scorer=fuzz.token_sort_ratio)
-    if result and result[1] >= threshold:
-        matched_value = result[0]
-        idx_list = target_series[target_series == matched_value].index
-        if len(idx_list) > 0:
-            return idx_list[0]
-    return None
+def normalize_for_display(s):
+    """Normalize text for display (uppercase, trimmed)."""
+    if not isinstance(s, str):
+        s = str(s) if s is not None else ""
+    return s.upper().strip()
 
 
-def word_match(search_name, df_master, column, threshold=60):
-    """Find best word-based match in a column."""
-    search_words = get_words(search_name)
-    if not search_words:
-        return None
+def prefix_match_score(input_norm, target_norm):
+    """
+    Calculate prefix match score.
+    Returns score based on how well the strings match from the beginning.
     
-    best_score = 0
-    best_idx = None
+    Rules:
+    - One must start with the other (at least 3 chars overlap)
+    - Score is based on length of overlap
+    - Longer overlap = higher score
     
-    for idx, row in df_master.iterrows():
-        target_value = row.get(column, "")
-        if not target_value:
-            continue
-        target_words = get_words(target_value)
-        score = word_match_score(search_words, target_words)
-        
-        if score > best_score and score >= threshold:
-            best_score = score
-            best_idx = idx
+    Returns: (is_match, overlap_length, score_percentage)
+    """
+    if not input_norm or not target_norm:
+        return False, 0, 0
     
-    return best_idx
+    min_overlap = 3
+    
+    if input_norm.startswith(target_norm):
+        overlap = len(target_norm)
+        if overlap >= min_overlap:
+            score = (overlap / len(input_norm)) * 100
+            return True, overlap, score
+    
+    if target_norm.startswith(input_norm):
+        overlap = len(input_norm)
+        if overlap >= min_overlap:
+            score = (overlap / len(target_norm)) * 100
+            return True, overlap, score
+    
+    return False, 0, 0
 
 
 def get_master_file_path():
@@ -153,6 +121,51 @@ def get_master_file_path():
         raise Exception(f"Failed to fetch master file path: {str(e)}")
 
 
+def find_exact_match(input_norm, df_master, column_norm):
+    """
+    Find exact match in normalized column.
+    Returns DataFrame of matching rows (may have multiple for NSE/BSE).
+    """
+    matches = df_master[df_master[column_norm] == input_norm]
+    return matches
+
+
+def find_prefix_match(input_norm, df_master, column_norm, min_score=70):
+    """
+    Find best prefix match in a column.
+    Returns best matching row or None.
+    
+    Args:
+        input_norm: Normalized input stock name
+        df_master: Master DataFrame
+        column_norm: Normalized column name to search
+        min_score: Minimum score threshold (percentage)
+    
+    Returns:
+        (best_match_row, overlap_length) or (None, 0)
+    """
+    best_match = None
+    best_overlap = 0
+    best_score = 0
+    
+    for idx, row in df_master.iterrows():
+        target_norm = row.get(column_norm, "")
+        if not target_norm:
+            continue
+        
+        is_match, overlap, score = prefix_match_score(input_norm, target_norm)
+        
+        if is_match and overlap > best_overlap and score >= min_score:
+            best_match = row
+            best_overlap = overlap
+            best_score = score
+        elif is_match and overlap == best_overlap and score > best_score:
+            best_match = row
+            best_score = score
+    
+    return best_match, best_overlap
+
+
 def run(job_folder):
     """
     Match stocks to master file and add symbol/exchange data
@@ -165,7 +178,7 @@ def run(job_folder):
     """
     print("\n" + "="*60)
     print("BULK STEP 4: MAP MASTER FILE (SYMBOL MAPPING)")
-    print(f"{'='*60}\n")
+    print("="*60 + "\n")
     
     try:
         analysis_folder = os.path.join(job_folder, 'analysis')
@@ -180,7 +193,9 @@ def run(job_folder):
                 'error': f'Bulk input CSV not found: {input_csv}'
             }
         
-        print("🔑 Retrieving master file path from database...")
+        print(f"📖 Using input file: {os.path.basename(input_csv)}")
+        
+        print("\n🔑 Retrieving master file path from database...")
         master_file_path = get_master_file_path()
         
         if not os.path.exists(master_file_path):
@@ -189,7 +204,7 @@ def run(job_folder):
                 'error': f'Master file not found at: {master_file_path}'
             }
         
-        print(f"✅ Master file found: {master_file_path}\n")
+        print(f"✅ Master file found\n")
         
         print("📖 Loading master file...")
         df_master = pd.read_csv(master_file_path, low_memory=False)
@@ -206,9 +221,9 @@ def run(job_folder):
             else:
                 df_master[col] = ""
         
-        df_master["SEM_CUSTOM_SYMBOL_NORM"] = df_master["SEM_CUSTOM_SYMBOL"].apply(normalize_text)
-        df_master["SEM_TRADING_SYMBOL_NORM"] = df_master["SEM_TRADING_SYMBOL"].apply(normalize_text)
-        df_master["SM_SYMBOL_NAME_NORM"] = df_master["SM_SYMBOL_NAME"].apply(normalize_text)
+        df_master["SEM_TRADING_SYMBOL_NORM"] = df_master["SEM_TRADING_SYMBOL"].apply(normalize_for_exact_match)
+        df_master["SEM_CUSTOM_SYMBOL_NORM"] = df_master["SEM_CUSTOM_SYMBOL"].apply(normalize_for_exact_match)
+        df_master["SM_SYMBOL_NAME_NORM"] = df_master["SM_SYMBOL_NAME"].apply(normalize_for_exact_match)
         
         df_master["exchange_priority"] = df_master["SEM_EXM_EXCH_ID"].apply(
             lambda x: 1 if x == "NSE" else (2 if x == "BSE" else 3)
@@ -219,26 +234,31 @@ def run(job_folder):
         df_input = pd.read_csv(input_csv)
         df_input.columns = df_input.columns.str.strip().str.upper()
         
-        if 'STOCK NAME' not in df_input.columns:
-            return {
-                'success': False,
-                'error': 'STOCK NAME column not found in bulk-input.csv'
-            }
+        if 'INPUT STOCK' not in df_input.columns:
+            if 'STOCK NAME' in df_input.columns:
+                df_input.rename(columns={'STOCK NAME': 'INPUT STOCK'}, inplace=True)
+            else:
+                return {
+                    'success': False,
+                    'error': 'INPUT STOCK column not found in bulk-input.csv'
+                }
         
-        df_input['STOCK NAME'] = df_input['STOCK NAME'].astype(str).str.strip().str.upper()
-        df_input["STOCK_NAME_NORM"] = df_input['STOCK NAME'].apply(normalize_text)
+        df_input['INPUT STOCK'] = df_input['INPUT STOCK'].astype(str).str.strip().str.upper()
+        df_input["INPUT_STOCK_NORM"] = df_input['INPUT STOCK'].apply(normalize_for_exact_match)
         
         print(f"✅ Loaded {len(df_input)} stocks to map\n")
         
         print("🔗 Starting stock matching process...")
-        print("-" * 60)
+        print("-" * 80)
+        print(f"{'INPUT STOCK':<25} {'MATCHED SYMBOL':<18} {'METHOD':<35} {'EXCH':<5}")
+        print("-" * 80)
         
         results = []
         matched_count = 0
         
         for idx, row in df_input.iterrows():
-            stock_name = row['STOCK NAME']
-            stock_name_norm = row['STOCK_NAME_NORM']
+            input_stock = row['INPUT STOCK']
+            input_stock_norm = row['INPUT_STOCK_NORM']
             date = row.get('DATE', '')
             time = row.get('TIME', '')
             analysis = row.get('ANALYSIS', row.get('RATIONALE', ''))
@@ -248,66 +268,32 @@ def run(job_folder):
             match_source = ""
             candidates = pd.DataFrame()
             
-            # 1. Exact match on SEM_CUSTOM_SYMBOL (short name)
-            candidates = df_master[df_master["SEM_CUSTOM_SYMBOL"] == stock_name]
+            candidates = find_exact_match(input_stock_norm, df_master, "SEM_TRADING_SYMBOL_NORM")
             if not candidates.empty:
-                match_source = "SEM_CUSTOM_SYMBOL (exact)"
+                match_source = "SEM_TRADING_SYMBOL (exact)"
             
-            # 2. Exact match on SEM_TRADING_SYMBOL
             if candidates.empty:
-                candidates = df_master[df_master["SEM_TRADING_SYMBOL"] == stock_name]
+                candidates = find_exact_match(input_stock_norm, df_master, "SEM_CUSTOM_SYMBOL_NORM")
                 if not candidates.empty:
-                    match_source = "SEM_TRADING_SYMBOL (exact)"
+                    match_source = "SEM_CUSTOM_SYMBOL (exact)"
             
-            # 3. Exact match on SM_SYMBOL_NAME
             if candidates.empty:
-                candidates = df_master[df_master["SM_SYMBOL_NAME"] == stock_name]
+                candidates = find_exact_match(input_stock_norm, df_master, "SM_SYMBOL_NAME_NORM")
                 if not candidates.empty:
                     match_source = "SM_SYMBOL_NAME (exact)"
             
-            # 4. Fuzzy match on SEM_CUSTOM_SYMBOL
             if candidates.empty:
-                idx_match = fuzzy_match(stock_name, df_master["SEM_CUSTOM_SYMBOL_NORM"], threshold=80)
-                if idx_match is not None:
-                    candidates = df_master.loc[[idx_match]]
-                    match_source = "SEM_CUSTOM_SYMBOL (fuzzy >= 80%)"
+                prefix_match, overlap = find_prefix_match(input_stock_norm, df_master, "SEM_TRADING_SYMBOL_NORM", min_score=70)
+                if prefix_match is not None:
+                    candidates = pd.DataFrame([prefix_match])
+                    match_source = f"SEM_TRADING_SYMBOL (prefix {overlap} chars)"
             
-            # 5. Fuzzy match on SEM_TRADING_SYMBOL
             if candidates.empty:
-                idx_match = fuzzy_match(stock_name, df_master["SEM_TRADING_SYMBOL_NORM"], threshold=80)
-                if idx_match is not None:
-                    candidates = df_master.loc[[idx_match]]
-                    match_source = "SEM_TRADING_SYMBOL (fuzzy >= 80%)"
+                prefix_match, overlap = find_prefix_match(input_stock_norm, df_master, "SEM_CUSTOM_SYMBOL_NORM", min_score=70)
+                if prefix_match is not None:
+                    candidates = pd.DataFrame([prefix_match])
+                    match_source = f"SEM_CUSTOM_SYMBOL (prefix {overlap} chars)"
             
-            # 6. Fuzzy match on SM_SYMBOL_NAME
-            if candidates.empty:
-                idx_match = fuzzy_match(stock_name, df_master["SM_SYMBOL_NAME_NORM"], threshold=80)
-                if idx_match is not None:
-                    candidates = df_master.loc[[idx_match]]
-                    match_source = "SM_SYMBOL_NAME (fuzzy >= 80%)"
-            
-            # 7. Word matching on SEM_TRADING_SYMBOL
-            if candidates.empty:
-                idx_match = word_match(stock_name, df_master, "SEM_TRADING_SYMBOL", threshold=60)
-                if idx_match is not None:
-                    candidates = df_master.loc[[idx_match]]
-                    match_source = "SEM_TRADING_SYMBOL (word match)"
-            
-            # 8. Word matching on SM_SYMBOL_NAME
-            if candidates.empty:
-                idx_match = word_match(stock_name, df_master, "SM_SYMBOL_NAME", threshold=60)
-                if idx_match is not None:
-                    candidates = df_master.loc[[idx_match]]
-                    match_source = "SM_SYMBOL_NAME (word match)"
-            
-            # 9. Normalized exact match fallback
-            if candidates.empty:
-                idx_list = df_master[df_master["SEM_TRADING_SYMBOL_NORM"] == stock_name_norm].index
-                if len(idx_list) > 0:
-                    candidates = df_master.loc[idx_list]
-                    match_source = "SEM_TRADING_SYMBOL (normalized fallback)"
-            
-            # Pick best match (NSE preferred)
             if not candidates.empty:
                 candidates = candidates.sort_values(by="exchange_priority")
                 match = candidates.iloc[0]
@@ -323,7 +309,7 @@ def run(job_folder):
                 results.append({
                     "DATE": date,
                     "TIME": time,
-                    "STOCK NAME": stock_name,
+                    "INPUT STOCK": input_stock,
                     "ANALYSIS": analysis,
                     "CHART TYPE": chart_type,
                     "STOCK SYMBOL": stock_symbol,
@@ -334,13 +320,13 @@ def run(job_folder):
                     "INSTRUMENT": instrument
                 })
                 matched_count += 1
-                print(f"✅ {stock_name:30} → {stock_symbol:15} | {match_source:35} ({exchange})")
+                print(f"✅ {input_stock:<25} {stock_symbol:<18} {match_source:<35} {exchange:<5}")
             else:
-                print(f"❌ {stock_name:30} → No match found")
+                print(f"❌ {input_stock:<25} {'NO MATCH':<18} {'':<35} {'':<5}")
                 results.append({
                     "DATE": date,
                     "TIME": time,
-                    "STOCK NAME": stock_name,
+                    "INPUT STOCK": input_stock,
                     "ANALYSIS": analysis,
                     "CHART TYPE": chart_type,
                     "STOCK SYMBOL": "",
@@ -351,13 +337,19 @@ def run(job_folder):
                     "INSTRUMENT": ""
                 })
         
-        print("-" * 60)
+        print("-" * 80)
         print(f"\n📊 Mapping Summary:")
         print(f"   Total stocks: {len(df_input)}")
         print(f"   Matched: {matched_count}")
-        print(f"   Unmatched: {len(df_input) - matched_count}\n")
+        print(f"   Unmatched: {len(df_input) - matched_count}")
         
-        print(f"💾 Saving mapped data to: {output_csv}")
+        if len(df_input) - matched_count > 0:
+            print("\n⚠️  Unmatched stocks (please check spelling):")
+            for r in results:
+                if not r.get("STOCK SYMBOL"):
+                    print(f"   - {r['INPUT STOCK']}")
+        
+        print(f"\n💾 Saving mapped data to: {output_csv}")
         final_df = pd.DataFrame(results)
         
         os.makedirs(os.path.dirname(output_csv), exist_ok=True)
