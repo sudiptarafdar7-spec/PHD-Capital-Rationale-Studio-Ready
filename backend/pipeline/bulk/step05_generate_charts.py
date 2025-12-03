@@ -415,7 +415,7 @@ def run(job_folder):
         
         for idx, row in df.iterrows():
             try:
-                stock_name = str(row.get('STOCK NAME', f'Row {idx}')).strip()
+                stock_name = str(row.get('INPUT STOCK', row.get('STOCK NAME', f'Row {idx}'))).strip()
                 symbol = str(row.get('STOCK SYMBOL', '')).strip()
                 short_name = str(row.get('SHORT NAME', symbol)).strip()
                 security_id = str(row.get('SECURITY ID', '')).strip()
