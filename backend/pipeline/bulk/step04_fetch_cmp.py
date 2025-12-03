@@ -15,12 +15,24 @@ from backend.utils.database import get_db_cursor
 def normalize_date_format(date_str):
     """
     Normalize date to YYYY-MM-DD format.
-    Handles multiple input formats:
-    - YYYY-MM-DD (already correct)
-    - DD/MM/YYYY
-    - DD-MM-YYYY
-    - MM/DD/YYYY
-    - YYYY/MM/DD
+    Handles ALL possible input formats from Windows/Excel:
+    
+    Standard formats:
+    - YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD
+    - DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
+    - MM/DD/YYYY, MM-DD-YYYY
+    
+    Two-digit year formats:
+    - DD/MM/YY, DD-MM-YY, MM/DD/YY
+    - D/M/YY, M/D/YY (single digit day/month)
+    
+    Month name formats:
+    - 31-Dec-2025, 31 Dec 2025, Dec 31, 2025
+    - 31-Dec-25, 31 Dec 25
+    - December 31, 2025
+    
+    Excel serial numbers:
+    - 45123 (days since 1899-12-30)
     
     Returns date in YYYY-MM-DD format or None if parsing fails.
     """
@@ -29,30 +41,75 @@ def normalize_date_format(date_str):
     
     date_str = str(date_str).strip()
     
-    # Already in YYYY-MM-DD format
+    if not date_str or date_str.lower() in ['nan', 'none', 'nat', '']:
+        return None
+    
     if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
         return date_str
     
-    # Try common date formats
+    try:
+        num_val = float(date_str)
+        if 40000 < num_val < 60000:
+            excel_epoch = datetime(1899, 12, 30)
+            dt = excel_epoch + timedelta(days=int(num_val))
+            return dt.strftime('%Y-%m-%d')
+    except (ValueError, TypeError):
+        pass
+    
     date_formats = [
-        ('%d/%m/%Y', 'DD/MM/YYYY'),
-        ('%d-%m-%Y', 'DD-MM-YYYY'),
-        ('%Y/%m/%d', 'YYYY/MM/DD'),
-        ('%m/%d/%Y', 'MM/DD/YYYY'),
-        ('%d.%m.%Y', 'DD.MM.YYYY'),
+        '%d/%m/%Y',
+        '%d-%m-%Y',
+        '%d.%m.%Y',
+        '%Y/%m/%d',
+        '%Y.%m.%d',
+        '%m/%d/%Y',
+        '%m-%d-%Y',
+        
+        '%d/%m/%y',
+        '%d-%m-%y',
+        '%d.%m.%y',
+        '%m/%d/%y',
+        '%m-%d-%y',
+        '%y/%m/%d',
+        '%y-%m-%d',
+        
+        '%d-%b-%Y',
+        '%d %b %Y',
+        '%d-%b-%y',
+        '%d %b %y',
+        '%b %d, %Y',
+        '%b %d %Y',
+        '%B %d, %Y',
+        '%B %d %Y',
+        '%d %B %Y',
+        '%d-%B-%Y',
+        
+        '%Y-%m-%d %H:%M:%S',
+        '%d/%m/%Y %H:%M:%S',
+        '%m/%d/%Y %H:%M:%S',
+        '%d-%m-%Y %H:%M:%S',
     ]
     
-    for fmt, name in date_formats:
+    for fmt in date_formats:
         try:
             dt = datetime.strptime(date_str, fmt)
+            if dt.year < 100:
+                dt = dt.replace(year=dt.year + 2000)
             return dt.strftime('%Y-%m-%d')
         except ValueError:
             continue
     
-    # Try pandas to_datetime as last resort
     try:
         dt = pd.to_datetime(date_str, dayfirst=True)
-        return dt.strftime('%Y-%m-%d')
+        if not pd.isna(dt):
+            return dt.strftime('%Y-%m-%d')
+    except:
+        pass
+    
+    try:
+        dt = pd.to_datetime(date_str, dayfirst=False)
+        if not pd.isna(dt):
+            return dt.strftime('%Y-%m-%d')
     except:
         pass
     
@@ -61,12 +118,29 @@ def normalize_date_format(date_str):
 
 def normalize_time_format(time_str):
     """
-    Normalize time to HH:MM:SS format.
-    Handles Excel-corrupted formats like:
-    - 21.09.00 → 21:09:00 (Excel converts colons to periods)
-    - 21:09 → 21:09:00
-    - 21.09 → 21:09:00
-    - 9:30:00 AM → 09:30:00
+    Normalize time to HH:MM:SS format (24-hour).
+    Handles ALL possible input formats from Windows/Excel:
+    
+    Standard formats:
+    - HH:MM:SS, H:MM:SS (21:09:00, 9:30:00)
+    - HH:MM, H:MM (21:09, 9:30)
+    
+    Period/dash separators (Excel corruption):
+    - HH.MM.SS, H.MM.SS (21.09.00)
+    - HH-MM-SS, H-MM-SS (21-09-00)
+    - HH.MM, H.MM (21.09)
+    
+    AM/PM formats (with/without space):
+    - 9:30:00 AM, 9:30 AM, 9:30AM, 9.30AM
+    - 9 AM, 9AM (hour only)
+    
+    Numeric formats (no separators):
+    - HHMMSS (093000, 210900)
+    - HHMM (0930, 2109)
+    - HMM (930)
+    
+    Excel fractional time:
+    - 0.3958 (fraction of day = 09:30:00)
     
     Returns time in HH:MM:SS format or default '10:00:00' if parsing fails.
     """
@@ -75,30 +149,93 @@ def normalize_time_format(time_str):
     
     time_str = str(time_str).strip()
     
-    # Already in correct format HH:MM:SS
-    if re.match(r'^\d{1,2}:\d{2}:\d{2}$', time_str):
-        return time_str
+    if not time_str or time_str.lower() in ['nan', 'none', 'nat', '']:
+        return '10:00:00'
     
-    # Excel converts colons to periods: 21.09.00 → 21:09:00
-    if re.match(r'^\d{1,2}\.\d{2}\.\d{2}$', time_str):
-        parts = time_str.split('.')
-        return f"{int(parts[0]):02d}:{parts[1]}:{parts[2]}"
+    try:
+        num_val = float(time_str)
+        if 0 <= num_val < 1:
+            total_seconds = int(num_val * 24 * 60 * 60)
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    except (ValueError, TypeError):
+        pass
     
-    # Handle HH:MM format (no seconds)
-    if re.match(r'^\d{1,2}:\d{2}$', time_str):
-        return f"{time_str}:00"
+    match = re.match(r'^(\d{1,2}):(\d{2}):(\d{2})$', time_str)
+    if match:
+        h, m, s = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if 0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59:
+            return f"{h:02d}:{m:02d}:{s:02d}"
     
-    # Handle HH.MM format (no seconds, with periods)
-    if re.match(r'^\d{1,2}\.\d{2}$', time_str):
-        parts = time_str.split('.')
-        return f"{int(parts[0]):02d}:{parts[1]}:00"
+    match = re.match(r'^(\d{1,2})[.\-](\d{2})[.\-](\d{2})$', time_str)
+    if match:
+        h, m, s = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        if 0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59:
+            return f"{h:02d}:{m:02d}:{s:02d}"
     
-    # Try common time formats with AM/PM
+    match = re.match(r'^(\d{1,2}):(\d{2})$', time_str)
+    if match:
+        h, m = int(match.group(1)), int(match.group(2))
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            return f"{h:02d}:{m:02d}:00"
+    
+    match = re.match(r'^(\d{1,2})[.\-](\d{2})$', time_str)
+    if match:
+        h, m = int(match.group(1)), int(match.group(2))
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            return f"{h:02d}:{m:02d}:00"
+    
+    match = re.match(r'^(\d{1,2})[:.\-]?(\d{2})[:.\-]?(\d{2})?\s*(AM|PM|am|pm|A\.M\.|P\.M\.)$', time_str, re.IGNORECASE)
+    if match:
+        h = int(match.group(1))
+        m = int(match.group(2)) if match.group(2) else 0
+        s = int(match.group(3)) if match.group(3) else 0
+        period = match.group(4).upper().replace('.', '')
+        
+        if period == 'PM' and h != 12:
+            h += 12
+        elif period == 'AM' and h == 12:
+            h = 0
+        
+        if 0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59:
+            return f"{h:02d}:{m:02d}:{s:02d}"
+    
+    match = re.match(r'^(\d{1,2})\s*(AM|PM|am|pm|A\.M\.|P\.M\.)$', time_str, re.IGNORECASE)
+    if match:
+        h = int(match.group(1))
+        period = match.group(2).upper().replace('.', '')
+        
+        if period == 'PM' and h != 12:
+            h += 12
+        elif period == 'AM' and h == 12:
+            h = 0
+        
+        if 0 <= h <= 23:
+            return f"{h:02d}:00:00"
+    
+    if re.match(r'^\d{5,6}$', time_str):
+        time_str = time_str.zfill(6)
+        h, m, s = int(time_str[0:2]), int(time_str[2:4]), int(time_str[4:6])
+        if 0 <= h <= 23 and 0 <= m <= 59 and 0 <= s <= 59:
+            return f"{h:02d}:{m:02d}:{s:02d}"
+    
+    if re.match(r'^\d{3,4}$', time_str):
+        time_str = time_str.zfill(4)
+        h, m = int(time_str[0:2]), int(time_str[2:4])
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            return f"{h:02d}:{m:02d}:00"
+    
     time_formats = [
-        '%I:%M:%S %p',  # 9:30:00 AM
-        '%I:%M %p',      # 9:30 AM
-        '%H:%M:%S',      # 21:09:00
-        '%H:%M',         # 21:09
+        '%I:%M:%S %p',
+        '%I:%M %p',
+        '%I %p',
+        '%I:%M:%S%p',
+        '%I:%M%p',
+        '%I%p',
+        '%H:%M:%S',
+        '%H:%M',
     ]
     
     for fmt in time_formats:
@@ -108,7 +245,6 @@ def normalize_time_format(time_str):
         except ValueError:
             continue
     
-    # Default fallback
     return '10:00:00'
 
 
