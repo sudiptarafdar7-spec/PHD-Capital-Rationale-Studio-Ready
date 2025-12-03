@@ -406,6 +406,10 @@ def run(job_folder):
             # Normalize time format to HH:MM:SS (handles Excel's period format)
             time_str = normalize_time_format(raw_time)
             
+            # Update the dataframe with normalized date and time
+            df.at[i, 'DATE'] = date_str
+            df.at[i, 'TIME'] = time_str
+            
             # Log if date or time was converted
             if raw_date != date_str or raw_time != time_str:
                 print(f"  📅 Normalized: {raw_date} {raw_time} → {date_str} {time_str}")
