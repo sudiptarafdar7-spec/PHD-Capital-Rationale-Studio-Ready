@@ -157,10 +157,10 @@ def run(job_folder):
                 'error': 'ANALYSIS column not found in bulk-input.csv'
             }
         
-        if 'STOCK NAME' not in df.columns:
+        if 'INPUT STOCK' not in df.columns:
             return {
                 'success': False,
-                'error': 'STOCK NAME column not found in bulk-input.csv'
+                'error': 'INPUT STOCK column not found in bulk-input.csv'
             }
         
         client = openai.OpenAI(api_key=openai_key)
@@ -170,7 +170,7 @@ def run(job_folder):
         
         polished_count = 0
         for idx, row in df.iterrows():
-            stock_name = str(row['STOCK NAME']).strip()
+            stock_name = str(row['INPUT STOCK']).strip()
             original_analysis = str(row.get('ANALYSIS', '')).strip()
             
             if not original_analysis or original_analysis.lower() in ['nan', 'none', '']:
