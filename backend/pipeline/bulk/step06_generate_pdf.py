@@ -44,7 +44,7 @@ def fetch_pdf_config(job_id: str):
     
     try:
         cursor.execute("""
-            SELECT c.channel_name, c.channel_logo_path, j.title, j.date
+            SELECT c.channel_name, c.channel_logo_path, j.title, j.date, j.youtube_url
             FROM jobs j
             LEFT JOIN channels c ON j.channel_id = c.id
             WHERE j.id = %s
@@ -53,7 +53,7 @@ def fetch_pdf_config(job_id: str):
         if not job_row:
             raise ValueError(f"Job {job_id} not found")
         
-        channel_name, channel_logo_path_raw, title, input_date = job_row
+        channel_name, channel_logo_path_raw, title, input_date, youtube_url = job_row
         
         channel_logo_path = None
         if channel_logo_path_raw:
@@ -124,6 +124,7 @@ def fetch_pdf_config(job_id: str):
             'channel_logo_path': channel_logo_path,
             'title': title or "Rationale Report",
             'input_date': input_date_str,
+            'youtube_url': youtube_url or "",
             'company_name': company_name,
             'registration_details': registration_details,
             'disclaimer_text': disclaimer_text,
@@ -392,8 +393,20 @@ def run(job_folder, template_config=None):
             c.setFillColor(BLUE)
             c.setFont(BASE_BLD, 9)
             c.drawString(cur_x, baseline_y + 4, config['channel_name'])
-            c.setFont(BASE_REG, 8)
-            c.drawString(cur_x, baseline_y - 7, "Youtube Channel")
+            
+            youtube_url = config.get('youtube_url', '')
+            if youtube_url:
+                c.setFont(BASE_REG, 7)
+                c.setFillColor(colors.HexColor("#666666"))
+                max_url_width = PAGE_W - cur_x - M_R - 10
+                display_url = youtube_url
+                if c.stringWidth(display_url, BASE_REG, 7) > max_url_width:
+                    display_url = display_url[:60] + "..."
+                c.drawString(cur_x, baseline_y - 7, display_url)
+            else:
+                c.setFont(BASE_REG, 8)
+                c.setFillColor(BLUE)
+                c.drawString(cur_x, baseline_y - 7, "Youtube Channel")
         
         def on_first_page(c: pdfcanvas.Canvas, d: SimpleDocTemplate):
             draw_letterhead(c)
@@ -458,7 +471,7 @@ def run(job_folder, template_config=None):
             story.append(positional_date_header(date_val))
             story.append(Spacer(1, 10))
             
-            listed = str(row.get("LISTED NAME", row.get("STOCK NAME", "")) or "").strip()
+            listed = str(row.get("LISTED NAME", row.get("INPUT STOCK", row.get("STOCK NAME", ""))) or "").strip()
             symbol = str(row.get("STOCK SYMBOL", "") or "").strip()
             title_line = f"{listed} ({symbol})" if symbol else listed
             story.append(Paragraph(title_line, subheading_style))
