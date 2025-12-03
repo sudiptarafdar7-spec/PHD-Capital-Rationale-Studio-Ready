@@ -245,7 +245,7 @@ def run(job_folder):
         failed_count = 0
         
         for i, row in df.iterrows():
-            stock_name = row.get('STOCK NAME', f'Row {i}')
+            stock_name = row.get('INPUT STOCK', row.get('STOCK NAME', f'Row {i}'))
             security_id = str(row.get('SECURITY ID', '')).strip()
             
             if '.' in security_id:
