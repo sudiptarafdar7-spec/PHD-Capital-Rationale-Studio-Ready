@@ -15,6 +15,9 @@ Matching Logic (Priority Order):
 3. EXACT match (normalized): INPUT STOCK → SM_SYMBOL_NAME
 4. PREFIX match: INPUT STOCK starts with SEM_TRADING_SYMBOL (or vice versa)
 5. PREFIX match: INPUT STOCK starts with SEM_CUSTOM_SYMBOL (or vice versa)
+6. WORD FUZZY match: Split INPUT STOCK into words, match word prefixes to symbol
+   - Example: "DEEPK FERTILIZER" → "DEEPAKFERT"
+   - "DEEPK" matches start of "DEEPAK", "FERT" from "FERTILIZER" matches in symbol
 
 Normalization: Remove ALL spaces and special characters for comparison
 This handles user mistakes like "TATA MOTORS" vs "TATAMOTORS"
@@ -88,6 +91,109 @@ def prefix_match_score(input_norm, target_norm):
             return True, overlap, score
     
     return False, 0, 0
+
+
+def word_fuzzy_match_score(input_stock_raw, target_symbol_norm, min_chars=3):
+    """
+    Word-based fuzzy matching for cases like:
+    - "DEEPK FERTILIZER" → "DEEPAKFERT" 
+    - "TATA POWER" → "TATAPOWER"
+    
+    Logic:
+    1. Split input into words: ["DEEPK", "FERTILIZER"]
+    2. For each word, check if it (or truncated version) matches part of target
+    3. "DEEPK" matches start of "DEEPAK..." 
+    4. "FERTILIZER" → "FERT" matches in "...FERT"
+    
+    Returns: (is_match, match_score, matched_words_count)
+    """
+    if not input_stock_raw or not target_symbol_norm:
+        return False, 0, 0
+    
+    words = re.split(r'[\s\-_&]+', input_stock_raw.upper().strip())
+    words = [w.strip() for w in words if w.strip() and len(w.strip()) >= min_chars]
+    
+    if not words:
+        return False, 0, 0
+    
+    matched_words = 0
+    total_matched_chars = 0
+    
+    for word in words:
+        word_matched = False
+        
+        if word in target_symbol_norm:
+            word_matched = True
+            total_matched_chars += len(word)
+        else:
+            for prefix_len in range(min(len(word), 6), min_chars - 1, -1):
+                prefix = word[:prefix_len]
+                if prefix in target_symbol_norm:
+                    word_matched = True
+                    total_matched_chars += prefix_len
+                    break
+        
+        if not word_matched:
+            for prefix_len in range(min(len(word), 6), min_chars - 1, -1):
+                prefix = word[:prefix_len]
+                if target_symbol_norm.startswith(prefix):
+                    word_matched = True
+                    total_matched_chars += prefix_len
+                    break
+        
+        if word_matched:
+            matched_words += 1
+    
+    if matched_words == 0:
+        return False, 0, 0
+    
+    match_ratio = matched_words / len(words)
+    char_coverage = total_matched_chars / len(target_symbol_norm) if target_symbol_norm else 0
+    
+    if match_ratio >= 0.5 and char_coverage >= 0.4:
+        score = (match_ratio * 50) + (char_coverage * 50)
+        return True, score, matched_words
+    
+    return False, 0, 0
+
+
+def find_word_fuzzy_match(input_stock_raw, input_stock_norm, df_master, min_score=50):
+    """
+    Find best word-based fuzzy match when exact/prefix matching fails.
+    
+    Examples this handles:
+    - "DEEPK FERTILIZER" → "DEEPAKFERT"
+    - "BHARTI AIR" → "BHARTIARTL"
+    
+    Args:
+        input_stock_raw: Original input stock name (with spaces)
+        input_stock_norm: Normalized input (no spaces)
+        df_master: Master DataFrame
+        min_score: Minimum score threshold
+    
+    Returns:
+        (best_match_row, score, matched_words) or (None, 0, 0)
+    """
+    best_match = None
+    best_score = 0
+    best_matched_words = 0
+    
+    for idx, row in df_master.iterrows():
+        for col_norm in ["SEM_TRADING_SYMBOL_NORM", "SEM_CUSTOM_SYMBOL_NORM"]:
+            target_norm = row.get(col_norm, "")
+            if not target_norm or len(target_norm) < 4:
+                continue
+            
+            is_match, score, matched_words = word_fuzzy_match_score(
+                input_stock_raw, target_norm, min_chars=3
+            )
+            
+            if is_match and score > best_score and score >= min_score:
+                best_match = row
+                best_score = score
+                best_matched_words = matched_words
+    
+    return best_match, best_score, best_matched_words
 
 
 def get_master_file_path():
@@ -293,6 +399,14 @@ def run(job_folder):
                 if prefix_match is not None:
                     candidates = pd.DataFrame([prefix_match])
                     match_source = f"SEM_CUSTOM_SYMBOL (prefix {overlap} chars)"
+            
+            if candidates.empty:
+                fuzzy_match, score, matched_words = find_word_fuzzy_match(
+                    input_stock, input_stock_norm, df_master, min_score=50
+                )
+                if fuzzy_match is not None:
+                    candidates = pd.DataFrame([fuzzy_match])
+                    match_source = f"WORD FUZZY (score:{score:.0f}, words:{matched_words})"
             
             if not candidates.empty:
                 candidates = candidates.sort_values(by="exchange_priority")
