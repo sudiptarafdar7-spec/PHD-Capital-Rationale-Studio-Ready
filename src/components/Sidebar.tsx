@@ -57,7 +57,7 @@ export default function Sidebar({ isOpen, onClose, currentPage, onNavigate, isCo
         { id: 'media-rationale', label: 'Media Rationale', icon: <Video className="w-5 h-5" /> },
         { id: 'premium-rationale', label: 'Premium Rationale', icon: <FileSpreadsheet className="w-5 h-5" /> },
         { id: 'manual-rationale', label: 'Manual Rationale', icon: <PenTool className="w-5 h-5" /> },
-        { id: 'bulk-rationale', label: 'Bulk Rationale', icon: <Layers className="w-5 h-5" /> },
+        { id: 'bulk-rationale', label: 'Bulk Rationale', icon: <Layers className="w-5 h-5" />, badge: 'LIVE' },
         { id: 'generate-chart', label: 'Generate Chart', icon: <BarChart3 className="w-5 h-5" /> },
         { id: 'youtube-caption', label: 'Youtube Caption', icon: <Captions className="w-5 h-5" /> },
       ],
