@@ -368,8 +368,6 @@ def run(job_folder, template_config=None):
             c.setFillColor(colors.black)
             c.drawCentredString(PAGE_W/2.0, 16, f"Page {c.getPageNumber()}")
             
-            total_w = PAGE_W - M_L - M_R
-            col_w = total_w / 2.0
             left_x = M_L
             baseline_y = 30
             
@@ -393,20 +391,19 @@ def run(job_folder, template_config=None):
             c.setFillColor(BLUE)
             c.setFont(BASE_BLD, 9)
             c.drawString(cur_x, baseline_y + 4, config['channel_name'])
+            c.setFont(BASE_REG, 8)
+            c.drawString(cur_x, baseline_y - 7, "Youtube Channel")
             
             youtube_url = config.get('youtube_url', '')
             if youtube_url:
                 c.setFont(BASE_REG, 7)
                 c.setFillColor(colors.HexColor("#666666"))
-                max_url_width = PAGE_W - cur_x - M_R - 10
+                max_url_width = 200
                 display_url = youtube_url
                 if c.stringWidth(display_url, BASE_REG, 7) > max_url_width:
-                    display_url = display_url[:60] + "..."
-                c.drawString(cur_x, baseline_y - 7, display_url)
-            else:
-                c.setFont(BASE_REG, 8)
-                c.setFillColor(BLUE)
-                c.drawString(cur_x, baseline_y - 7, "Youtube Channel")
+                    display_url = display_url[:50] + "..."
+                url_width = c.stringWidth(display_url, BASE_REG, 7)
+                c.drawString(PAGE_W - M_R - url_width, baseline_y, display_url)
         
         def on_first_page(c: pdfcanvas.Canvas, d: SimpleDocTemplate):
             draw_letterhead(c)
