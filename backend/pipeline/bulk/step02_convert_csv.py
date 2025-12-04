@@ -18,6 +18,7 @@ def clean_stock_symbol(raw_symbol):
     Clean a stock symbol by removing special characters and suffixes.
     
     Removes:
+    - Content inside brackets: "HUL (Hindustan Unilever)" -> "HUL"
     - (CALL), (BUY), (SELL), (HOLD), (ADD), (FRESH), (EXIT) etc.
     - Trailing dashes and colons
     - Extra whitespace
@@ -34,12 +35,9 @@ def clean_stock_symbol(raw_symbol):
     
     symbol = raw_symbol.strip()
     
-    symbol = re.sub(
-        r'\s*\((?:CALL|BUY|SELL|HOLD|ADD|FRESH|EXIT|NEW|OLD|LONG|SHORT|ENTRY|TARGET|SL|STOPLOSS)\)\s*',
-        '', 
-        symbol, 
-        flags=re.IGNORECASE
-    )
+    symbol = re.sub(r'\s*\([^)]*\)\s*', ' ', symbol)
+    
+    symbol = re.sub(r'\s*\[[^\]]*\]\s*', ' ', symbol)
     
     symbol = re.sub(r'[\-–—:]+\s*$', '', symbol)
     symbol = re.sub(r'^[\-–—:]+\s*', '', symbol)
