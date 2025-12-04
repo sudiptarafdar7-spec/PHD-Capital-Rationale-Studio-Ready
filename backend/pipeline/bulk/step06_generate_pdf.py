@@ -44,7 +44,7 @@ def fetch_pdf_config(job_id: str):
     
     try:
         cursor.execute("""
-            SELECT c.channel_name, c.channel_logo_path, j.title, j.date, j.youtube_url
+            SELECT c.channel_name, c.channel_logo_path, j.title, j.date, j.youtube_url, c.platform
             FROM jobs j
             LEFT JOIN channels c ON j.channel_id = c.id
             WHERE j.id = %s
@@ -53,7 +53,7 @@ def fetch_pdf_config(job_id: str):
         if not job_row:
             raise ValueError(f"Job {job_id} not found")
         
-        channel_name, channel_logo_path_raw, title, input_date, youtube_url = job_row
+        channel_name, channel_logo_path_raw, title, input_date, youtube_url, platform = job_row
         
         channel_logo_path = None
         if channel_logo_path_raw:
@@ -125,6 +125,7 @@ def fetch_pdf_config(job_id: str):
             'title': title or "Rationale Report",
             'input_date': input_date_str,
             'youtube_url': youtube_url or "",
+            'platform': platform or "Youtube",
             'company_name': company_name,
             'registration_details': registration_details,
             'disclaimer_text': disclaimer_text,
@@ -368,45 +369,45 @@ def run(job_folder, template_config=None):
             c.setFillColor(colors.black)
             c.drawCentredString(PAGE_W/2.0, 16, f"Page {c.getPageNumber()}")
             
-            total_w = PAGE_W - M_L - M_R
-            col_w = total_w / 2.0
             left_x = M_L
-            baseline_y = 30
+            baseline_y = 34
             
-            logo_sz = 18
+            logo_sz = 24
             cur_x = left_x
             if ROUND_LOGO and os.path.exists(ROUND_LOGO):
                 try:
-                    c.drawImage(ROUND_LOGO, cur_x, baseline_y - logo_sz/2, logo_sz, logo_sz,
+                    c.drawImage(ROUND_LOGO, cur_x, baseline_y - logo_sz/2 - 2, logo_sz, logo_sz,
                                preserveAspectRatio=True, mask='auto')
-                    cur_x += logo_sz + 6
+                    cur_x += logo_sz + 8
                 except Exception as e:
                     print(f"⚠️ Could not draw logo in footer: {e}")
                     c.setStrokeColor(BLUE)
                     c.circle(cur_x + logo_sz/2, baseline_y, logo_sz/2, stroke=1, fill=0)
-                    cur_x += logo_sz + 6
+                    cur_x += logo_sz + 8
             else:
                 c.setStrokeColor(BLUE)
                 c.circle(cur_x + logo_sz/2, baseline_y, logo_sz/2, stroke=1, fill=0)
-                cur_x += logo_sz + 6
+                cur_x += logo_sz + 8
             
             c.setFillColor(BLUE)
             c.setFont(BASE_BLD, 9)
-            c.drawString(cur_x, baseline_y + 4, config['channel_name'])
+            c.drawString(cur_x, baseline_y + 5, config['channel_name'])
+            
+            platform = config.get('platform', 'Youtube')
+            c.setFont(BASE_REG, 8)
+            c.setFillColor(colors.HexColor("#666666"))
+            c.drawString(cur_x, baseline_y - 7, platform)
             
             youtube_url = config.get('youtube_url', '')
             if youtube_url:
                 c.setFont(BASE_REG, 7)
-                c.setFillColor(colors.HexColor("#666666"))
-                max_url_width = PAGE_W - cur_x - M_R - 10
+                c.setFillColor(colors.HexColor("#444444"))
+                max_url_width = PAGE_W - M_L - M_R - 150
                 display_url = youtube_url
                 if c.stringWidth(display_url, BASE_REG, 7) > max_url_width:
-                    display_url = display_url[:60] + "..."
-                c.drawString(cur_x, baseline_y - 7, display_url)
-            else:
-                c.setFont(BASE_REG, 8)
-                c.setFillColor(BLUE)
-                c.drawString(cur_x, baseline_y - 7, "Youtube Channel")
+                    display_url = display_url[:55] + "..."
+                url_width = c.stringWidth(display_url, BASE_REG, 7)
+                c.drawString(PAGE_W - M_R - url_width, baseline_y - 1, display_url)
         
         def on_first_page(c: pdfcanvas.Canvas, d: SimpleDocTemplate):
             draw_letterhead(c)
