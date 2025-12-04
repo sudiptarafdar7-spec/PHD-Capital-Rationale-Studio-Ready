@@ -23,7 +23,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from PIL import Image as PILImage, ImageDraw
 from datetime import datetime
 import psycopg2
-from backend.utils.reportlab_html import extract_html_content
+from backend.utils.reportlab_html import extract_html_content, create_html_flowables
 
 
 def get_db_connection():
@@ -517,16 +517,32 @@ def run(job_folder, template_config=None):
             print("📋 Adding Disclaimer section...")
             story.append(heading("Disclaimer"))
             story.append(Spacer(1, 10))
-            disclaimer_content = extract_html_content(config['disclaimer_text'])
-            story.append(Paragraph(disclaimer_content, indented_body))
+            
+            list_style = PS("list_style", fontSize=10.8, leading=15.6, spaceAfter=4,
+                           alignment=TA_LEFT, leftIndent=25, bulletIndent=15)
+            disclaimer_flowables = create_html_flowables(
+                config['disclaimer_text'], 
+                indented_body,
+                list_style=list_style
+            )
+            for flowable in disclaimer_flowables:
+                story.append(flowable)
             story.append(Spacer(1, 35))
         
         if config.get('disclosure_text'):
             print("📋 Adding Disclosure section...")
             story.append(heading("Disclosure"))
             story.append(Spacer(1, 10))
-            disclosure_content = extract_html_content(config['disclosure_text'])
-            story.append(Paragraph(disclosure_content, indented_body))
+            
+            list_style = PS("list_style2", fontSize=10.8, leading=15.6, spaceAfter=4,
+                           alignment=TA_LEFT, leftIndent=25, bulletIndent=15)
+            disclosure_flowables = create_html_flowables(
+                config['disclosure_text'], 
+                indented_body,
+                list_style=list_style
+            )
+            for flowable in disclosure_flowables:
+                story.append(flowable)
             story.append(Spacer(1, 35))
         
         contact_card_heading = PS("contact_card_heading", fontSize=10, leading=13, 
