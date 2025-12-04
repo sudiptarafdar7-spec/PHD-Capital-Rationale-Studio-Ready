@@ -99,11 +99,14 @@ def word_fuzzy_match_score(input_stock_raw, target_symbol_norm, min_chars=3):
     - "DEEPK FERTILIZER" → "DEEPAKFERT" 
     - "TATA POWER" → "TATAPOWER"
     
+    CRITICAL RULE: First word MUST match the BEGINNING of target symbol!
+    - "HUL" must NOT match "MEHUL" (HUL doesn't start MEHUL)
+    - "DEEPK" CAN match "DEEPAKFERT" (DEEP starts DEEPAKFERT)
+    
     Logic:
     1. Split input into words: ["DEEPK", "FERTILIZER"]
-    2. For each word, check if it (or truncated version) matches part of target
-    3. "DEEPK" matches start of "DEEPAK..." 
-    4. "FERTILIZER" → "FERT" matches in "...FERT"
+    2. FIRST word prefix MUST start the target symbol
+    3. Subsequent words can be found within remaining part
     
     Returns: (is_match, match_score, matched_words_count)
     """
@@ -116,30 +119,36 @@ def word_fuzzy_match_score(input_stock_raw, target_symbol_norm, min_chars=3):
     if not words:
         return False, 0, 0
     
-    matched_words = 0
-    total_matched_chars = 0
+    first_word = words[0]
+    first_word_matched = False
+    first_match_len = 0
     
-    for word in words:
+    for prefix_len in range(len(first_word), min_chars - 1, -1):
+        prefix = first_word[:prefix_len]
+        if target_symbol_norm.startswith(prefix):
+            first_word_matched = True
+            first_match_len = prefix_len
+            break
+    
+    if not first_word_matched:
+        return False, 0, 0
+    
+    matched_words = 1
+    total_matched_chars = first_match_len
+    
+    remaining_target = target_symbol_norm[first_match_len:]
+    
+    for word in words[1:]:
         word_matched = False
         
-        if word in target_symbol_norm:
-            word_matched = True
-            total_matched_chars += len(word)
-        else:
-            for prefix_len in range(min(len(word), 6), min_chars - 1, -1):
-                prefix = word[:prefix_len]
-                if prefix in target_symbol_norm:
-                    word_matched = True
-                    total_matched_chars += prefix_len
-                    break
-        
-        if not word_matched:
-            for prefix_len in range(min(len(word), 6), min_chars - 1, -1):
-                prefix = word[:prefix_len]
-                if target_symbol_norm.startswith(prefix):
-                    word_matched = True
-                    total_matched_chars += prefix_len
-                    break
+        for prefix_len in range(min(len(word), 6), min_chars - 1, -1):
+            prefix = word[:prefix_len]
+            if prefix in remaining_target:
+                word_matched = True
+                total_matched_chars += prefix_len
+                pos = remaining_target.find(prefix)
+                remaining_target = remaining_target[pos + prefix_len:]
+                break
         
         if word_matched:
             matched_words += 1
