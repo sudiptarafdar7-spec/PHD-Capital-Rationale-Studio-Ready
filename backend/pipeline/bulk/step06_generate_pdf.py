@@ -61,6 +61,8 @@ def fetch_pdf_config(job_id: str):
                 channel_logo_path = channel_logo_path_raw
             else:
                 possible_paths = [
+                    f"/home/runner/workspace/backend/channel_logos/{channel_logo_path_raw}",
+                    f"backend/channel_logos/{channel_logo_path_raw}",
                     f"/home/runner/workspace/backend/uploaded_files/{channel_logo_path_raw}",
                     f"backend/uploaded_files/{channel_logo_path_raw}",
                     channel_logo_path_raw
