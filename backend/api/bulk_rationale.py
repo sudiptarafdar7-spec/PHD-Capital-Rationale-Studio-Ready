@@ -54,7 +54,7 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1, en
         (3, "Polish Analysis", step02b_polish_analysis.run, [job_folder]),
         (4, "Map Master File", step03_map_master.run, [job_folder]),
         (5, "Fetch CMP", step04_fetch_cmp.run, [job_folder]),
-        (6, "Generate Charts", step05_generate_charts.run, [job_folder]),
+        (6, "Generate Charts", step05_generate_charts.run, [job_folder, call_date, call_time]),
         (7, "Generate PDF", step06_generate_pdf.run, [job_folder]),
     ]
     
@@ -108,6 +108,28 @@ def run_bulk_pipeline(job_id, job_folder, call_date, call_time, start_step=1, en
                         """, (datetime.now(), job_id))
                     print(f"Job {job_id}: Paused after Step 4 for mapped master file CSV review")
                     return
+                
+                # After Step 6 (Generate Charts), check for failed charts
+                if step_num == 6:
+                    failed_charts = result.get('failed_charts', [])
+                    if failed_charts:
+                        import json
+                        with get_db_cursor(commit=True) as cursor:
+                            cursor.execute("""
+                                UPDATE jobs 
+                                SET status = 'awaiting_chart_upload', progress = 85, updated_at = %s
+                                WHERE id = %s
+                            """, (datetime.now(), job_id))
+                            
+                            # Store failed charts info in job_steps message
+                            cursor.execute("""
+                                UPDATE job_steps 
+                                SET message = %s
+                                WHERE job_id = %s AND step_number = %s
+                            """, (json.dumps({'failed_charts': failed_charts, 'success_count': result.get('success_count', 0)}), job_id, step_num))
+                        
+                        print(f"Job {job_id}: Paused after Step 6 - {len(failed_charts)} chart(s) need manual upload")
+                        return
             else:
                 with get_db_cursor(commit=True) as cursor:
                     cursor.execute("""
@@ -759,4 +781,294 @@ def step4_continue_pipeline(job_id):
         
     except Exception as e:
         print(f"Error continuing pipeline from Step 4: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/failed-charts', methods=['GET'])
+@jwt_required()
+def get_failed_charts(job_id):
+    """Get list of failed charts for a job"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT status, folder_path FROM jobs WHERE id = %s", (job_id,))
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            cursor.execute("""
+                SELECT message FROM job_steps 
+                WHERE job_id = %s AND step_number = 6
+            """, (job_id,))
+            step = cursor.fetchone()
+        
+        failed_charts = []
+        success_count = 0
+        
+        if step and step['message']:
+            try:
+                import json
+                data = json.loads(step['message'])
+                failed_charts = data.get('failed_charts', [])
+                success_count = data.get('success_count', 0)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        
+        job_folder = resolve_job_folder_path(job['folder_path'])
+        failed_charts_file = os.path.join(job_folder, 'analysis', 'failed_charts.json')
+        
+        if not failed_charts and os.path.exists(failed_charts_file):
+            try:
+                import json
+                with open(failed_charts_file, 'r', encoding='utf-8') as f:
+                    failed_charts = json.load(f)
+            except Exception:
+                pass
+        
+        return jsonify({
+            'success': True,
+            'failed_charts': failed_charts,
+            'success_count': success_count,
+            'status': job['status']
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting failed charts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/upload-chart/<int:stock_index>', methods=['POST'])
+@jwt_required()
+def upload_chart(job_id, stock_index):
+    """Upload a chart for a specific failed stock"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        if 'chart' not in request.files:
+            return jsonify({'error': 'No chart file provided'}), 400
+        
+        chart_file = request.files['chart']
+        if chart_file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        allowed_extensions = {'png', 'jpg', 'jpeg'}
+        ext = chart_file.filename.rsplit('.', 1)[-1].lower() if '.' in chart_file.filename else ''
+        if ext not in allowed_extensions:
+            return jsonify({'error': 'Only PNG/JPG files are allowed'}), 400
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT folder_path FROM jobs WHERE id = %s", (job_id,))
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+        
+        job_folder = resolve_job_folder_path(job['folder_path'])
+        charts_folder = os.path.join(job_folder, 'charts')
+        analysis_folder = os.path.join(job_folder, 'analysis')
+        stocks_file = os.path.join(analysis_folder, 'stocks_with_charts.csv')
+        
+        if not os.path.exists(stocks_file):
+            return jsonify({'error': 'Stocks CSV file not found'}), 404
+        
+        df = pd.read_csv(stocks_file)
+        
+        if stock_index < 0 or stock_index >= len(df):
+            return jsonify({'error': 'Invalid stock index'}), 400
+        
+        stock_name = str(df.iloc[stock_index].get('INPUT STOCK', f'stock_{stock_index}')).strip()
+        symbol = str(df.iloc[stock_index].get('STOCK SYMBOL', '')).strip()
+        
+        safe_name = ''.join(c if c.isalnum() else '_' for c in (symbol or stock_name))
+        filename = f"manual_{safe_name}_{stock_index}.{ext}"
+        save_path = os.path.join(charts_folder, filename)
+        
+        chart_file.save(save_path)
+        
+        relative_path = f"charts/{filename}"
+        df.at[stock_index, 'CHART PATH'] = relative_path
+        df.to_csv(stocks_file, index=False, encoding='utf-8-sig')
+        
+        failed_charts_file = os.path.join(analysis_folder, 'failed_charts.json')
+        if os.path.exists(failed_charts_file):
+            try:
+                import json
+                with open(failed_charts_file, 'r', encoding='utf-8') as f:
+                    failed_list = json.load(f)
+                
+                failed_list = [fc for fc in failed_list if fc.get('index') != stock_index]
+                
+                with open(failed_charts_file, 'w', encoding='utf-8') as f:
+                    json.dump(failed_list, f, indent=2)
+                
+                with get_db_cursor(commit=True) as cursor:
+                    cursor.execute("""
+                        SELECT message FROM job_steps 
+                        WHERE job_id = %s AND step_number = 6
+                    """, (job_id,))
+                    step = cursor.fetchone()
+                    
+                    if step and step['message']:
+                        try:
+                            data = json.loads(step['message'])
+                            data['failed_charts'] = failed_list
+                            cursor.execute("""
+                                UPDATE job_steps 
+                                SET message = %s
+                                WHERE job_id = %s AND step_number = 6
+                            """, (json.dumps(data), job_id))
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    
+            except Exception as e:
+                print(f"Error updating failed charts list: {e}")
+        
+        print(f"✅ Chart uploaded for stock {stock_name} (index {stock_index}): {filename}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Chart uploaded successfully for {stock_name}',
+            'chart_path': relative_path
+        }), 200
+        
+    except Exception as e:
+        print(f"Error uploading chart: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/step6-continue-pipeline', methods=['POST'])
+@jwt_required()
+def step6_continue_pipeline(job_id):
+    """Continue pipeline execution from Step 7 (PDF) after chart uploads"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT id, status, folder_path, date, time FROM jobs WHERE id = %s", (job_id,))
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            if job['status'] != 'awaiting_chart_upload':
+                return jsonify({'error': 'Job is not in awaiting_chart_upload status'}), 400
+        
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute("""
+                UPDATE jobs 
+                SET status = 'processing', current_step = 7, updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), job_id))
+        
+        call_date = str(job['date']) if job['date'] else datetime.now().strftime('%Y-%m-%d')
+        call_time = str(job['time']) if job['time'] else '10:00:00'
+        
+        def run_pdf_step():
+            try:
+                run_bulk_pipeline(
+                    job_id, 
+                    resolve_job_folder_path(job['folder_path']), 
+                    call_date, 
+                    call_time, 
+                    start_step=7
+                )
+            except Exception as e:
+                print(f"Error running PDF step for job {job_id}: {str(e)}")
+                with get_db_cursor(commit=True) as cursor:
+                    cursor.execute("""
+                        UPDATE jobs 
+                        SET status = 'failed', updated_at = %s
+                        WHERE id = %s
+                    """, (datetime.now(), job_id))
+        
+        thread = threading.Thread(target=run_pdf_step)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Generating PDF report...'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error continuing to PDF generation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@bulk_rationale_bp.route('/jobs/<job_id>/skip-failed-charts', methods=['POST'])
+@jwt_required()
+def skip_failed_charts(job_id):
+    """Skip failed charts and continue to PDF generation without them"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT id, status, folder_path, date, time FROM jobs WHERE id = %s", (job_id,))
+            job = cursor.fetchone()
+            
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            if job['status'] != 'awaiting_chart_upload':
+                return jsonify({'error': 'Job is not in awaiting_chart_upload status'}), 400
+        
+        with get_db_cursor(commit=True) as cursor:
+            cursor.execute("""
+                UPDATE jobs 
+                SET status = 'processing', current_step = 7, updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), job_id))
+        
+        call_date = str(job['date']) if job['date'] else datetime.now().strftime('%Y-%m-%d')
+        call_time = str(job['time']) if job['time'] else '10:00:00'
+        
+        def run_pdf_step():
+            try:
+                run_bulk_pipeline(
+                    job_id, 
+                    resolve_job_folder_path(job['folder_path']), 
+                    call_date, 
+                    call_time, 
+                    start_step=7
+                )
+            except Exception as e:
+                print(f"Error running PDF step for job {job_id}: {str(e)}")
+                with get_db_cursor(commit=True) as cursor:
+                    cursor.execute("""
+                        UPDATE jobs 
+                        SET status = 'failed', updated_at = %s
+                        WHERE id = %s
+                    """, (datetime.now(), job_id))
+        
+        thread = threading.Thread(target=run_pdf_step)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Skipping failed charts and generating PDF...'
+        }), 200
+        
+    except Exception as e:
+        print(f"Error skipping failed charts: {str(e)}")
         return jsonify({'error': str(e)}), 500

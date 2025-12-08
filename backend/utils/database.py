@@ -148,7 +148,7 @@ def init_database():
                 duration VARCHAR(20),
                 user_id VARCHAR(50) REFERENCES users(id),
                 tool_used VARCHAR(50) NOT NULL,
-                status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'awaiting_step4_review', 'pdf_ready', 'completed', 'failed', 'signed')),
+                status VARCHAR(30) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'awaiting_step4_review', 'awaiting_chart_upload', 'pdf_ready', 'completed', 'failed', 'signed')),
                 progress INTEGER DEFAULT 0,
                 current_step INTEGER DEFAULT 0,
                 folder_path TEXT,
@@ -166,6 +166,24 @@ def init_database():
                     WHERE table_name = 'jobs' AND column_name = 'payload'
                 ) THEN
                     ALTER TABLE jobs ADD COLUMN payload JSONB;
+                END IF;
+            END $$;
+        """)
+        
+        # Update status constraint to include 'awaiting_chart_upload'
+        cursor.execute("""
+            DO $$
+            BEGIN
+                -- Drop old constraint if it exists and doesn't include awaiting_chart_upload
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint 
+                    WHERE conname = 'jobs_status_check' 
+                    AND contype = 'c'
+                    AND NOT pg_get_constraintdef(oid) LIKE '%awaiting_chart_upload%'
+                ) THEN
+                    ALTER TABLE jobs DROP CONSTRAINT jobs_status_check;
+                    ALTER TABLE jobs ADD CONSTRAINT jobs_status_check 
+                        CHECK (status IN ('pending', 'processing', 'awaiting_step8_review', 'awaiting_csv_review', 'awaiting_step4_review', 'awaiting_chart_upload', 'pdf_ready', 'completed', 'failed', 'signed'));
                 END IF;
             END $$;
         """)

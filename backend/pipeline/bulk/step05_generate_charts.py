@@ -5,6 +5,7 @@ Generates premium stock charts using Dhan API (same design as Premium Rationale)
 
 import os
 import time
+import json
 import requests
 import pandas as pd
 import numpy as np
@@ -79,7 +80,7 @@ def parse_time(s: str):
             return dt.hour, dt.minute, getattr(dt, "second", 0)
         except ValueError:
             continue
-    return 15, 30, 0  # Default to market close if parsing fails
+    return 15, 30, 0
 
 
 def _post(path: str, payload: dict, headers: dict, max_retries: int = 4) -> dict:
@@ -351,17 +352,20 @@ def make_premium_chart(df: pd.DataFrame, meta: dict, save_path: str,
     plt.close(fig)
 
 
-def run(job_folder):
+def run(job_folder, call_date=None, call_time=None):
     """
     Generate premium charts for all stocks (same design as Premium Rationale)
     
     Args:
         job_folder: Path to job directory
+        call_date: Date from jobs table (YYYY-MM-DD format) - used for all stocks
+        call_time: Time from jobs table (HH:MM:SS format) - used for all stocks
         
     Returns:
         dict: {
             'success': bool,
             'output_file': str,
+            'failed_charts': list,  # List of stocks that failed chart generation
             'error': str or None
         }
     """
@@ -374,6 +378,7 @@ def run(job_folder):
         charts_folder = os.path.join(job_folder, 'charts')
         input_file = os.path.join(analysis_folder, 'stocks_with_cmp.csv')
         output_file = os.path.join(analysis_folder, 'stocks_with_charts.csv')
+        failed_charts_file = os.path.join(analysis_folder, 'failed_charts.json')
         
         os.makedirs(charts_folder, exist_ok=True)
         
@@ -398,6 +403,11 @@ def run(job_folder):
         
         print(f"🔑 Dhan API key found")
         
+        if call_date:
+            print(f"📅 Using job date: {call_date}")
+        if call_time:
+            print(f"⏰ Using job time: {call_time}")
+        
         print(f"📖 Loading stocks: {input_file}")
         df = pd.read_csv(input_file)
         print(f"✅ Loaded {len(df)} stocks")
@@ -412,6 +422,7 @@ def run(job_folder):
         
         success_count = 0
         failed_count = 0
+        failed_charts = []
         
         for idx, row in df.iterrows():
             try:
@@ -425,6 +436,14 @@ def run(job_folder):
                 
                 if not security_id or security_id == '' or security_id == 'nan':
                     print(f"  ⚠️ [{idx+1}/{len(df)}] {stock_name:25} | Skipping - No SECURITY ID")
+                    failed_charts.append({
+                        'index': idx,
+                        'stock_name': stock_name,
+                        'symbol': symbol,
+                        'short_name': short_name,
+                        'security_id': '',
+                        'error': 'No SECURITY ID found in master data'
+                    })
                     failed_count += 1
                     continue
                 
@@ -432,8 +451,15 @@ def run(job_folder):
                 exchange_segment = f"{exchange}_EQ" if exchange in ["NSE", "BSE"] else "NSE_EQ"
                 chart_type = str(row.get('CHART TYPE', 'Daily')).strip() or 'Daily'
                 
-                date_str = str(row.get('DATE', '')).strip()
-                time_str = str(row.get('TIME', '15:30:00')).strip()
+                if call_date:
+                    date_str = str(call_date).strip()
+                else:
+                    date_str = str(row.get('DATE', '')).strip()
+                
+                if call_time:
+                    time_str = str(call_time).strip()
+                else:
+                    time_str = str(row.get('TIME', '15:30:00')).strip()
                 
                 cmp = row.get('CMP', None)
                 if pd.isna(cmp):
@@ -521,11 +547,25 @@ def run(job_folder):
                 time.sleep(1.5)
                 
             except Exception as e:
-                print(f"      ❌ Error: {str(e)}")
+                error_msg = str(e)
+                print(f"      ❌ Error: {error_msg}")
                 df.at[idx, 'CHART PATH'] = ''
+                failed_charts.append({
+                    'index': idx,
+                    'stock_name': stock_name,
+                    'symbol': symbol,
+                    'short_name': short_name,
+                    'security_id': security_id,
+                    'error': error_msg
+                })
                 failed_count += 1
         
         df.to_csv(output_file, index=False, encoding='utf-8-sig')
+        
+        if failed_charts:
+            with open(failed_charts_file, 'w', encoding='utf-8') as f:
+                json.dump(failed_charts, f, indent=2)
+            print(f"\n📋 Failed charts info saved to: {failed_charts_file}")
         
         print(f"\n📊 Chart Generation Results:")
         print(f"   ✓ Success: {success_count}")
@@ -536,7 +576,8 @@ def run(job_folder):
             'success': True,
             'output_file': output_file,
             'success_count': success_count,
-            'failed_count': failed_count
+            'failed_count': failed_count,
+            'failed_charts': failed_charts
         }
         
     except Exception as e:

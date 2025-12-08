@@ -40,7 +40,17 @@ interface JobStep {
   ended_at?: string;
 }
 
-type WorkflowStage = 'input' | 'processing' | 'step4-review' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
+type WorkflowStage = 'input' | 'processing' | 'step4-review' | 'step6-chart-upload' | 'pdf-preview' | 'saved' | 'upload-signed' | 'completed';
+
+interface FailedChart {
+  index: number;
+  stock_name: string;
+  symbol: string;
+  short_name: string;
+  security_id: string;
+  error: string;
+  uploaded?: boolean;
+}
 type SaveType = 'save' | 'save-and-sign' | null;
 
 interface BulkRationalePageProps {
@@ -95,6 +105,12 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
   const [isUploadingStep4Csv, setIsUploadingStep4Csv] = useState(false);
   const step4CsvFileInputRef = useRef<HTMLInputElement>(null);
   const workflowStageRef = useRef<WorkflowStage>('input');
+  
+  // Step 6 Failed Charts state
+  const [failedCharts, setFailedCharts] = useState<FailedChart[]>([]);
+  const [successChartCount, setSuccessChartCount] = useState(0);
+  const [uploadingChartIndex, setUploadingChartIndex] = useState<number | null>(null);
+  const chartFileInputRefs = useRef<{[key: number]: HTMLInputElement | null}>({});
 
   useEffect(() => {
     loadChannels();
@@ -167,6 +183,10 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
           setWorkflowStage('step4-review');
           workflowStageRef.current = 'step4-review';
           fetchStep4CsvData(jobId);
+        } else if (data.status === 'awaiting_chart_upload') {
+          setWorkflowStage('step6-chart-upload');
+          workflowStageRef.current = 'step6-chart-upload';
+          fetchFailedCharts(jobId);
         } else if (data.status === 'failed') {
           setWorkflowStage('processing');
         } else if (data.status === 'pdf_ready' && data.pdfPath) {
@@ -276,6 +296,24 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
               playCompletionBell();
               toast.success('Step 4 Complete - Review Mapped Master File', {
                 description: 'Review the stock symbol mapping before continuing',
+              });
+            }
+          } else if (data.status === 'awaiting_chart_upload') {
+            const currentWorkflowStage = workflowStageRef.current;
+            if (currentWorkflowStage !== 'step6-chart-upload') {
+              if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+              }
+              setWorkflowStage('step6-chart-upload');
+              workflowStageRef.current = 'step6-chart-upload';
+              
+              fetchFailedCharts(jobId).catch((error) => {
+                console.error('Failed to fetch failed charts:', error);
+              });
+              
+              playCompletionBell();
+              toast.warning('Some charts could not be generated', {
+                description: 'Please upload missing charts manually or skip to continue',
               });
             }
           } else if (data.status === 'pdf_ready' && data.pdfPath) {
@@ -556,6 +594,112 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     }
   };
 
+  // Step 6 Failed Charts functions
+  const fetchFailedCharts = async (jobId: string) => {
+    try {
+      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${jobId}/failed-charts`, {
+        headers: getAuthHeaders(token),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setFailedCharts(data.failed_charts || []);
+        setSuccessChartCount(data.success_count || 0);
+      }
+    } catch (error) {
+      toast.error('Failed to load failed charts data');
+      console.error('Failed charts fetch error:', error);
+    }
+  };
+
+  const handleUploadChart = async (stockIndex: number, file: File) => {
+    if (!currentJobId) return;
+    
+    setUploadingChartIndex(stockIndex);
+    const formData = new FormData();
+    formData.append('chart', file);
+    
+    try {
+      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${currentJobId}/upload-chart/${stockIndex}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        toast.success(data.message || 'Chart uploaded successfully');
+        setFailedCharts(prev => prev.map(fc => 
+          fc.index === stockIndex ? { ...fc, uploaded: true } : fc
+        ));
+      } else {
+        toast.error(data.error || 'Failed to upload chart');
+      }
+    } catch (error) {
+      toast.error('Upload failed');
+      console.error('Chart upload error:', error);
+    } finally {
+      setUploadingChartIndex(null);
+    }
+  };
+
+  const handleChartFileChange = (stockIndex: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleUploadChart(stockIndex, file);
+    }
+  };
+
+  const handleStep6ContinuePipeline = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${currentJobId}/step6-continue-pipeline`, {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        toast.success('Generating PDF report...');
+        setWorkflowStage('processing');
+        workflowStageRef.current = 'processing';
+        startPolling(currentJobId);
+      } else {
+        toast.error(data.error || 'Failed to continue pipeline');
+      }
+    } catch (error) {
+      toast.error('Failed to continue pipeline');
+      console.error('Continue pipeline error:', error);
+    }
+  };
+
+  const handleSkipFailedCharts = async () => {
+    if (!currentJobId) return;
+    
+    try {
+      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${currentJobId}/skip-failed-charts`, {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        toast.info('Skipping failed charts and generating PDF...');
+        setWorkflowStage('processing');
+        workflowStageRef.current = 'processing';
+        startPolling(currentJobId);
+      } else {
+        toast.error(data.error || 'Failed to skip charts');
+      }
+    } catch (error) {
+      toast.error('Failed to skip charts');
+      console.error('Skip charts error:', error);
+    }
+  };
+
   const handleReset = () => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
@@ -574,6 +718,8 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     setYoutubeUrl('');
     setStep4CsvData([]);
     setStep4CsvColumns([]);
+    setFailedCharts([]);
+    setSuccessChartCount(0);
     lastNotifiedPdfPathRef.current = null;
   };
 
@@ -713,6 +859,123 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
               <p className="text-slate-600">Loading mapped master file data...</p>
             </div>
           )}
+        </div>
+      );
+    }
+
+    // Step 6 Chart Upload Stage
+    if (workflowStage === 'step6-chart-upload') {
+      const pendingUploads = failedCharts.filter(fc => !fc.uploaded);
+      const uploadedCount = failedCharts.filter(fc => fc.uploaded).length;
+      
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-orange-600 flex items-center gap-2">
+              <XCircle className="h-5 w-5" />
+              Step 6 - Some Charts Need Manual Upload
+            </h3>
+          </div>
+          
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <p className="text-orange-800 text-sm">
+              <strong>{successChartCount}</strong> charts generated successfully. 
+              <strong className="text-red-600 ml-1">{failedCharts.length}</strong> chart(s) could not be generated automatically.
+              {uploadedCount > 0 && (
+                <span className="text-green-600 ml-1">
+                  ({uploadedCount} uploaded)
+                </span>
+              )}
+            </p>
+            <p className="text-orange-700 text-sm mt-2">
+              You can upload replacement charts for the failed stocks below, or skip them to continue without these charts.
+            </p>
+          </div>
+
+          {/* Failed Charts List */}
+          <div className="space-y-3">
+            {failedCharts.map((chart) => (
+              <div 
+                key={chart.index}
+                className={`border rounded-lg p-4 ${
+                  chart.uploaded 
+                    ? 'border-green-300 bg-green-50' 
+                    : 'border-slate-200 bg-white'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-800">
+                        {chart.stock_name}
+                      </span>
+                      {chart.symbol && (
+                        <span className="text-sm text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                          {chart.symbol}
+                        </span>
+                      )}
+                      {chart.uploaded && (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      )}
+                    </div>
+                    <p className="text-xs text-red-500 mt-1">{chart.error}</p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {chart.uploaded ? (
+                      <span className="text-sm text-green-600 font-medium">Uploaded</span>
+                    ) : (
+                      <>
+                        <input
+                          ref={(el) => { chartFileInputRefs.current[chart.index] = el; }}
+                          type="file"
+                          accept=".png,.jpg,.jpeg"
+                          onChange={(e) => handleChartFileChange(chart.index, e)}
+                          style={{ display: 'none' }}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => chartFileInputRefs.current[chart.index]?.click()}
+                          disabled={uploadingChartIndex === chart.index}
+                          className="bg-purple-600 hover:bg-purple-700 text-white"
+                        >
+                          {uploadingChartIndex === chart.index ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-1" />
+                              Upload Chart
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-4 border-t border-slate-200">
+            <Button
+              onClick={handleSkipFailedCharts}
+              variant="outline"
+              className="border-slate-300 text-slate-600 hover:bg-slate-50"
+            >
+              Skip & Continue Without Charts
+            </Button>
+            <Button
+              onClick={handleStep6ContinuePipeline}
+              className="bg-green-600 hover:bg-green-700 text-white ml-auto"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Generate PDF Report
+            </Button>
+          </div>
         </div>
       );
     }
