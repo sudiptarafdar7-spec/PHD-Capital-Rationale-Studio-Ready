@@ -586,7 +586,7 @@ def run(job_folder, template_config=None):
             "Principal Officer Details",
             "Pritam Sardar",
             "pritam@phdcapital.in",
-            "+91 8371 887 303"
+            "+91 3216 297 101"
         )
         grievance_card = make_contact_card(
             "Grievance Officer Details",
