@@ -1,7 +1,7 @@
 # PHD Capital Rationale Studio
 
 ## Overview
-PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features four primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), Manual Rationale (manual data entry with autocomplete), and Bulk Rationale (batch processing of text input with translation support). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
+PHD Capital Rationale Studio is a full-stack web application designed to automate the generation of professional financial rationale reports. It features five primary tools: Media Rationale (YouTube video analysis), Premium Rationale (AI-powered text analysis), Manual Rationale (manual data entry with autocomplete), Bulk Rationale (batch processing of text input with translation support), and Transcript Rationale (transcript text processing with advanced stock detection and analysis). The application aims to enhance efficiency in financial reporting by converting multimedia content and structured data into actionable financial insights.
 
 ## User Preferences
 - Keep frontend design unchanged (layout, forms, fields, animations, effects, flow)
@@ -43,7 +43,17 @@ The application maintains a clear separation between a React-based frontend and 
         - **Step 4 (Fetch CMP)**: Fetches current market prices from Dhan API with intelligent market hours handling.
         - **Step 5 (Generate Charts)**: Generates candlestick charts with technical indicators using Dhan API data.
         - **Step 6 (Generate PDF)**: Creates professional PDF report with platform branding, charts, and analysis.
-        - **Workflow**: input → processing → pdf-preview → upload-signed → saved
+        - **Workflow**: input → processing → step4-review → pdf-preview → upload-signed → saved
+    - **Transcript Rationale Pipeline**: An 8-step process for transcript text with advanced stock detection (Translate → Detect Stocks → Web Search Symbols → Map Master → Extract Analysis → Fetch CMP → Charts → PDF).
+        - **Step 1 (Translate)**: Translates Hindi/regional transcript text to English using OpenAI GPT-4o.
+        - **Step 2 (Detect Stocks)**: Detects stock mentions from transcript text.
+        - **Step 3 (Web Search Symbols)**: Uses web search to find accurate NSE symbols for detected stocks.
+        - **Step 4 (Map Master)**: Maps extracted stocks to master data file for ISIN, security IDs, and lot sizes.
+        - **Step 5 (Extract Analysis)**: Extracts detailed analysis and chart type for each stock, pauses for CSV review (awaiting_step5_review).
+        - **Step 6 (Fetch CMP)**: Fetches current market prices from Dhan API with intelligent market hours handling.
+        - **Step 7 (Generate Charts)**: Generates candlestick charts with technical indicators, handles failed chart uploads (awaiting_chart_upload).
+        - **Step 8 (Generate PDF)**: Creates professional PDF report with platform branding, charts, and analysis.
+        - **Workflow**: input → processing → step5-review → step7-chart-upload → pdf-preview → upload-signed → saved
     - **Stock Autocomplete**: Intelligent stock symbol autocomplete using master CSV data.
     - **Date Format Normalization**: Handles DD/MM/YYYY and YYYY-MM-DD formats, normalizing to ISO.
 - **System Design Choices**:
