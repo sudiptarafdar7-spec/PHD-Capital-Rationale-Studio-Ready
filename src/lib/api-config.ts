@@ -90,6 +90,7 @@ export const API_ENDPOINTS = {
     downloadPdf: (jobId: string) => `${API_BASE_URL}/api/v1/manual-v2/jobs/${jobId}/download`,
   },
   bulkRationale: {
+    base: `${API_BASE_URL}/api/v1/bulk-rationale`,
     createJob: `${API_BASE_URL}/api/v1/bulk-rationale/create-job`,
     getJob: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}`,
     deleteJob: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}`,
@@ -101,6 +102,10 @@ export const API_ENDPOINTS = {
     step4DownloadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-download-csv`,
     step4UploadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-upload-csv`,
     step4ContinuePipeline: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-continue-pipeline`,
+    failedCharts: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/failed-charts`,
+    uploadChart: (jobId: string, stockIndex: number) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/upload-chart/${stockIndex}`,
+    step6ContinuePipeline: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step6-continue-pipeline`,
+    skipFailedCharts: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/skip-failed-charts`,
   },
   savedRationale: {
     getAll: `${API_BASE_URL}/api/v1/saved-rationale`,

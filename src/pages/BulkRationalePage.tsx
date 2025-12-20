@@ -597,7 +597,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
   // Step 6 Failed Charts functions
   const fetchFailedCharts = async (jobId: string) => {
     try {
-      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${jobId}/failed-charts`, {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.failedCharts(jobId), {
         headers: getAuthHeaders(token),
       });
       const data = await response.json();
@@ -619,7 +619,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     formData.append('chart', file);
     
     try {
-      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${currentJobId}/upload-chart/${stockIndex}`, {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.uploadChart(currentJobId, stockIndex), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
@@ -654,7 +654,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     if (!currentJobId) return;
     
     try {
-      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${currentJobId}/step6-continue-pipeline`, {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.step6ContinuePipeline(currentJobId), {
         method: 'POST',
         headers: getAuthHeaders(token),
       });
@@ -679,7 +679,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
     if (!currentJobId) return;
     
     try {
-      const response = await fetch(`${API_ENDPOINTS.bulkRationale.base}/jobs/${currentJobId}/skip-failed-charts`, {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.skipFailedCharts(currentJobId), {
         method: 'POST',
         headers: getAuthHeaders(token),
       });
