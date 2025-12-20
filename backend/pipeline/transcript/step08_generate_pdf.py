@@ -625,20 +625,6 @@ def run(job_folder, job_id=None):
         
         print(f"✅ PDF generated successfully: {output_pdf}")
         
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                UPDATE jobs 
-                SET pdf_path = %s, updated_at = %s
-                WHERE id = %s
-            """, (output_pdf, datetime.now(), job_id))
-            conn.commit()
-            print(f"✅ Updated job {job_id} with PDF path")
-        finally:
-            cursor.close()
-            conn.close()
-        
         return {
             'success': True,
             'output_file': output_pdf,
