@@ -243,6 +243,8 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
       onNavigate('manual-rationale', jobId);
     } else if (normalizedTool === 'bulk_rationale' || jobId.startsWith('bulk-')) {
       onNavigate('bulk-rationale', jobId);
+    } else if (normalizedTool === 'transcript_rationale' || jobId.startsWith('transcript-')) {
+      onNavigate('transcript-rationale', jobId);
     } else {
       // Default to media-rationale
       onNavigate('media-rationale', jobId);
