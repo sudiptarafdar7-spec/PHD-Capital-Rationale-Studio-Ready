@@ -654,6 +654,8 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
         }
         
         toast.success('CSV changes saved');
+        setHasStep4Edits(false);
+        setIsEditingStep4Csv(false);
       } catch (error) {
         toast.error('Failed to save changes');
         console.error('Save edits error:', error);
