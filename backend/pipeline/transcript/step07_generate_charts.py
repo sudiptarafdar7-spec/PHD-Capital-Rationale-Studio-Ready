@@ -25,6 +25,17 @@ MARKET_OPEN_TIME = (9, 15)
 MARKET_CLOSE_TIME = (15, 30)
 
 
+def sanitize_value(value, default=''):
+    """Convert NaN/None/nan values to empty string for JSON serialization"""
+    if value is None:
+        return default
+    if isinstance(value, float) and (pd.isna(value) or np.isnan(value)):
+        return default
+    if pd.isna(value):
+        return default
+    return str(value) if value else default
+
+
 def get_dhan_api_key():
     """Get Dhan API key from database"""
     with get_db_cursor() as cursor:
@@ -308,10 +319,10 @@ def run(job_folder, call_date=None, call_time=None):
                 print(f"    No security ID, skipping...")
                 chart_paths.append('')
                 failed_charts.append({
-                    'index': idx,
-                    'stock_name': row.get('INPUT STOCK', stock_symbol),
-                    'symbol': stock_symbol,
-                    'short_name': row.get('SHORT NAME', ''),
+                    'index': int(idx),
+                    'stock_name': sanitize_value(row.get('INPUT STOCK', stock_symbol)),
+                    'symbol': sanitize_value(stock_symbol),
+                    'short_name': sanitize_value(row.get('SHORT NAME', '')),
                     'security_id': '',
                     'error': 'No security ID'
                 })
@@ -348,11 +359,11 @@ def run(job_folder, call_date=None, call_time=None):
                 else:
                     chart_paths.append('')
                     failed_charts.append({
-                        'index': idx,
-                        'stock_name': row.get('INPUT STOCK', stock_symbol),
-                        'symbol': stock_symbol,
-                        'short_name': row.get('SHORT NAME', ''),
-                        'security_id': str(security_id),
+                        'index': int(idx),
+                        'stock_name': sanitize_value(row.get('INPUT STOCK', stock_symbol)),
+                        'symbol': sanitize_value(stock_symbol),
+                        'short_name': sanitize_value(row.get('SHORT NAME', '')),
+                        'security_id': sanitize_value(security_id),
                         'error': 'Chart rendering failed'
                     })
                     
@@ -360,11 +371,11 @@ def run(job_folder, call_date=None, call_time=None):
                 print(f"    Error: {str(e)}")
                 chart_paths.append('')
                 failed_charts.append({
-                    'index': idx,
-                    'stock_name': row.get('INPUT STOCK', stock_symbol),
-                    'symbol': stock_symbol,
-                    'short_name': row.get('SHORT NAME', ''),
-                    'security_id': str(security_id) if security_id else '',
+                    'index': int(idx),
+                    'stock_name': sanitize_value(row.get('INPUT STOCK', stock_symbol)),
+                    'symbol': sanitize_value(stock_symbol),
+                    'short_name': sanitize_value(row.get('SHORT NAME', '')),
+                    'security_id': sanitize_value(security_id),
                     'error': str(e)
                 })
             

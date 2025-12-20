@@ -863,13 +863,33 @@ def get_failed_charts(job_id):
         failed_charts = []
         success_count = 0
         
+        def sanitize_chart_data(chart):
+            """Sanitize NaN values in chart data for JSON serialization"""
+            import math
+            sanitized = {}
+            for key, value in chart.items():
+                if value is None:
+                    sanitized[key] = ''
+                elif isinstance(value, float) and (math.isnan(value) if not math.isinf(value) else False):
+                    sanitized[key] = ''
+                elif str(value) == 'nan' or str(value) == 'NaN':
+                    sanitized[key] = ''
+                else:
+                    sanitized[key] = value
+            return sanitized
+        
         if step and step['message']:
             try:
                 import json
-                data = json.loads(step['message'])
-                failed_charts = data.get('failed_charts', [])
+                import re
+                message_str = step['message']
+                message_str = re.sub(r'\bNaN\b', '""', message_str)
+                data = json.loads(message_str)
+                raw_failed_charts = data.get('failed_charts', [])
+                failed_charts = [sanitize_chart_data(fc) for fc in raw_failed_charts]
                 success_count = data.get('success_count', 0)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, ValueError) as e:
+                print(f"Error parsing step message: {e}")
                 pass
         
         job_folder = resolve_job_folder_path(job['folder_path'])
