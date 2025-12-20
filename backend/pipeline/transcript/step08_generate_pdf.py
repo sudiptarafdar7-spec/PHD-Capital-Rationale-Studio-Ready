@@ -190,7 +190,9 @@ def run(job_folder, job_id=None):
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         channel_name_safe = sanitize_filename(config.get('channel_name', 'report'))
         pdf_filename = f"transcript_rationale_{channel_name_safe}_{timestamp}.pdf"
-        pdf_path = os.path.join(job_folder, pdf_filename)
+        pdf_folder = os.path.join(job_folder, 'pdf')
+        os.makedirs(pdf_folder, exist_ok=True)
+        pdf_path = os.path.join(pdf_folder, pdf_filename)
         
         print(f"Generating PDF: {pdf_filename}")
         print(f"Stocks count: {len(df)}")
