@@ -13,8 +13,9 @@ saved_rationale_bp = Blueprint('saved_rationale', __name__, url_prefix='/api/v1/
 activity_logs_bp = Blueprint('activity_logs', __name__, url_prefix='/api/v1/activity-logs')
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/v1/dashboard')
 
-from backend.api import auth, users, api_keys, pdf_template, uploaded_files, channels, media_rationale, premium_rationale, bulk_rationale, saved_rationale, activity_logs, dashboard, manual_v2, generate_chart, youtube_caption
+from backend.api import auth, users, api_keys, pdf_template, uploaded_files, channels, media_rationale, premium_rationale, bulk_rationale, saved_rationale, activity_logs, dashboard, manual_v2, generate_chart, youtube_caption, transcript_rationale
 
 manual_v2_bp = manual_v2.manual_v2_bp
 generate_chart_bp = generate_chart.generate_chart_bp
 youtube_caption_bp = youtube_caption.youtube_caption_bp
+transcript_rationale_bp = transcript_rationale.transcript_rationale_bp

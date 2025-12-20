@@ -7,6 +7,7 @@ import MediaRationalePage from './pages/MediaRationalePage';
 import PremiumRationalePage from './pages/PremiumRationalePage';
 import ManualRationalePage from './pages/ManualRationalePage';
 import BulkRationalePage from './pages/BulkRationalePage';
+import TranscriptRationalePage from './pages/TranscriptRationalePage';
 import GenerateChartPage from './pages/GenerateChartPage';
 import GenerateYoutubeCaptionPage from './pages/GenerateYoutubeCaptionPage';
 import ActivityLogPage from './pages/ActivityLogPage';
@@ -26,6 +27,7 @@ type PageType =
   | 'premium-rationale'
   | 'manual-rationale'
   | 'bulk-rationale'
+  | 'transcript-rationale'
   | 'generate-chart'
   | 'youtube-caption'
   | 'activity-log'
@@ -69,6 +71,8 @@ function AppContent() {
         return <ManualRationalePage key={selectedJobId} selectedJobId={selectedJobId} onNavigate={handleNavigate} />;
       case 'bulk-rationale':
         return <BulkRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
+      case 'transcript-rationale':
+        return <TranscriptRationalePage onNavigate={handleNavigate} selectedJobId={selectedJobId} />;
       case 'generate-chart':
         return <GenerateChartPage onNavigate={handleNavigate} />;
       case 'youtube-caption':
