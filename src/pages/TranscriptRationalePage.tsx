@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { 
   FileText, Play, Download, Save, FileSignature, Trash2, 
   ArrowLeft, Upload, CheckCircle2, XCircle, Loader2, Clock,
-  RefreshCw, RotateCcw, FileEdit
+  RefreshCw, RotateCcw, FileEdit, ExternalLink
 } from 'lucide-react';
 import SignedFileUpload from '@/components/SignedFileUpload';
 
@@ -1302,7 +1302,18 @@ export default function TranscriptRationalePage({ onNavigate, selectedJobId }: T
               </div>
 
               <div className="space-y-2">
-                <Label>Transcript Text *</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Transcript Text *</Label>
+                  <a 
+                    href="https://notegpt.io/youtube-transcript-generator" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-teal-600 hover:text-teal-700 hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Online Transcript Generator
+                  </a>
+                </div>
                 <Textarea
                   placeholder="Paste your transcript text here... (can be in Hindi or English)"
                   value={inputText}
