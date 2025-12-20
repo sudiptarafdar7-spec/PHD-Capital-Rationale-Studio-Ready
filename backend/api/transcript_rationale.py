@@ -488,7 +488,9 @@ def download_pdf(job_id):
         if os.path.exists(pdf_folder):
             pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith('.pdf') and not f.startswith('transcript_rationale_signed')]
             if pdf_files:
-                pdf_path = os.path.join(pdf_folder, pdf_files[0])
+                pdf_files_with_mtime = [(f, os.path.getmtime(os.path.join(pdf_folder, f))) for f in pdf_files]
+                pdf_files_with_mtime.sort(key=lambda x: x[1], reverse=True)
+                pdf_path = os.path.join(pdf_folder, pdf_files_with_mtime[0][0])
         
         if not pdf_path or not os.path.exists(pdf_path):
             return jsonify({'error': 'PDF not found'}), 404

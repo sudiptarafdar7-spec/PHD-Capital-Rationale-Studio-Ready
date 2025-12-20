@@ -484,7 +484,9 @@ def run(job_folder, job_id=None):
             
             chart_path = str(row.get("CHART PATH", "") or "").strip()
             if chart_path:
-                if not os.path.isabs(chart_path):
+                if os.path.exists(chart_path):
+                    pass
+                elif not os.path.isabs(chart_path):
                     chart_path = os.path.join(job_folder, chart_path)
                 
                 if os.path.exists(chart_path):
