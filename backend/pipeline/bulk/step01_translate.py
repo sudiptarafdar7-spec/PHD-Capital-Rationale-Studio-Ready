@@ -77,10 +77,12 @@ def run(job_folder):
                     "content": """You are a professional translator specializing in financial content. 
 Translate the following text to English while:
 1. Preserving all stock names, symbols, numbers, and financial terms accurately
-2. Maintaining the original structure and formatting
+2. Maintaining the original structure and formatting (preserve all sections and stock entries)
 3. Keeping any dates, times, and price targets exactly as they appear
 4. If the text is already in English, return it as-is with minor cleanup
-5. Do not add any explanations or commentary - just translate."""
+5. Do not add any explanations or commentary - just translate
+6. IMPORTANT: Translate ALL content completely - do not skip or truncate any sections
+7. If a stock name appears to be gibberish or random characters, keep it as-is"""
                 },
                 {
                     "role": "user",
@@ -88,7 +90,7 @@ Translate the following text to English while:
                 }
             ],
             temperature=0.1,
-            max_tokens=4096
+            max_tokens=16384
         )
         
         translated_text = response.choices[0].message.content.strip()
