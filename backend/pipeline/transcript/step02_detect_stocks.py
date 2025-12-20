@@ -1,14 +1,149 @@
 """
 Transcript Rationale Step 2: Detect Stocks
-Detects all stock names discussed by Mr. Pradip ONLY (ignores other speakers)
-Splits transcript into 3 parts for accurate detection
+Detects stocks discussed ONLY by Mr. Pradip (ignores other speakers)
+
+Logic:
+1. First analyze transcript to identify all speakers
+2. If only Pradip OR Pradip+Anchor: include ALL stocks discussed
+3. If Pradip+Anchor+Other speakers: line-by-line extraction of Pradip's stocks only
+4. Validate all stocks against NSE/BSE
+5. Fix transcription spelling errors
+
 Output: detected_stocks.csv with INPUT STOCK column
 """
 
 import os
 import openai
 import pandas as pd
+import re
 from backend.utils.database import get_db_cursor
+
+
+COMMON_TRANSCRIPTION_ERRORS = {
+    "SUZUELON": "SUZLON",
+    "SUJALAN": "SUZLON",
+    "SUZALON": "SUZLON",
+    "SUZLON ENERGY": "SUZLON",
+    "ADANI POWER": "ADANIPOWER",
+    "ADANI GREEN": "ADANIGREEN",
+    "ADANI ENTERPRISE": "ADANIENT",
+    "ADANI ENTERPRISES": "ADANIENT",
+    "TATA MOTOR": "TATAMOTORS",
+    "TATA MOTORS": "TATAMOTORS",
+    "TATA STEEL": "TATASTEEL",
+    "TATA POWER": "TATAPOWER",
+    "HDFC BANK": "HDFCBANK",
+    "ICICI BANK": "ICICIBANK",
+    "AXIS BANK": "AXISBANK",
+    "KOTAK BANK": "KOTAKBANK",
+    "KOTAK MAHINDRA": "KOTAKBANK",
+    "SBI BANK": "SBIN",
+    "STATE BANK": "SBIN",
+    "STATE BANK OF INDIA": "SBIN",
+    "RELIANCE INDUSTRIES": "RELIANCE",
+    "RELIANCE IND": "RELIANCE",
+    "RIL": "RELIANCE",
+    "INFOSYS LTD": "INFY",
+    "INFOSYS TECHNOLOGIES": "INFY",
+    "TCS": "TCS",
+    "WIPRO LTD": "WIPRO",
+    "HCL TECH": "HCLTECH",
+    "TECH MAHINDRA": "TECHM",
+    "L&T": "LT",
+    "LARSEN": "LT",
+    "LARSEN AND TOUBRO": "LT",
+    "LARSEN & TOUBRO": "LT",
+    "BHEL": "BHEL",
+    "NTPC LTD": "NTPC",
+    "POWER GRID": "POWERGRID",
+    "COAL INDIA": "COALINDIA",
+    "ONGC": "ONGC",
+    "IOC": "IOC",
+    "BPCL": "BPCL",
+    "HPCL": "HPCL",
+    "GAIL": "GAIL",
+    "ITC LTD": "ITC",
+    "HINDUSTAN UNILEVER": "HINDUNILVR",
+    "HUL": "HINDUNILVR",
+    "BAJAJ FINANCE": "BAJFINANCE",
+    "BAJAJ FINSERV": "BAJAJFINSV",
+    "MARUTI SUZUKI": "MARUTI",
+    "MARUTI": "MARUTI",
+    "M&M": "M&M",
+    "MAHINDRA": "M&M",
+    "HERO MOTOCORP": "HEROMOTOCO",
+    "HERO MOTOR": "HEROMOTOCO",
+    "BAJAJ AUTO": "BAJAJ-AUTO",
+    "EICHER MOTORS": "EICHERMOT",
+    "EICHER": "EICHERMOT",
+    "BHARTI AIRTEL": "BHARTIARTL",
+    "AIRTEL": "BHARTIARTL",
+    "VODAFONE IDEA": "IDEA",
+    "VODAFONE": "IDEA",
+    "PUNJAB NATIONAL": "PNB",
+    "PUNJAB NATIONAL BANK": "PNB",
+    "CANARA BANK": "CANBK",
+    "BANK OF BARODA": "BANKBARODA",
+    "INDIAN BANK": "INDIANB",
+    "INDIAN OVERSEAS": "IOB",
+    "UCO BANK": "UCOBANK",
+    "CENTRAL BANK": "CENTRALBK",
+    "UNION BANK": "UNIONBANK",
+    "ZOMATO": "ZOMATO",
+    "PAYTM": "PAYTM",
+    "NYKAA": "NYKAA",
+    "FSN E-COMMERCE": "NYKAA",
+    "POLYCAB": "POLYCAB",
+    "POLYCAB INDIA": "POLYCAB",
+    "DIXON": "DIXON",
+    "DIXON TECHNOLOGIES": "DIXON",
+    "HAL": "HAL",
+    "HINDUSTAN AERONAUTICS": "HAL",
+    "BEL": "BEL",
+    "BHARAT ELECTRONICS": "BEL",
+    "MAZAGON DOCK": "MAZDOCK",
+    "COCHIN SHIPYARD": "COCHINSHIP",
+    "GARDEN REACH": "GRSE",
+    "RAILWAYS": "IRFC",
+    "IRFC": "IRFC",
+    "RVNL": "RVNL",
+    "RAIL VIKAS": "RVNL",
+    "IRCTC": "IRCTC",
+    "CERA BANK": "CERA",
+    "CERA SANITARYWARE": "CERA",
+    "JSW STEEL": "JSWSTEEL",
+    "JSW ENERGY": "JSWENERGY",
+    "SAIL": "SAIL",
+    "STEEL AUTHORITY": "SAIL",
+    "HINDALCO": "HINDALCO",
+    "VEDANTA": "VEDL",
+    "VEDANTA LTD": "VEDL",
+    "TATA ELXSI": "TATAELXSI",
+    "PERSISTENT": "PERSISTENT",
+    "PERSISTENT SYSTEMS": "PERSISTENT",
+    "HAPPIEST MINDS": "HAPPSTMNDS",
+    "MPHASIS": "MPHASIS",
+    "COFORGE": "COFORGE",
+    "LTIM": "LTIM",
+    "LTI MINDTREE": "LTIM",
+    "CYIENT": "CYIENT",
+    "ZENSAR": "ZENSARTECH",
+    "BIRLASOFT": "BSOFT",
+    "SONATA SOFTWARE": "SONATSOFTW",
+    "INTELLECT DESIGN": "INTELLECT",
+    "HFCL": "HFCL",
+    "PUNJAB AND SIND": "PSB",
+    "PUNJAB SIND BANK": "PSB",
+    "PUNJAB SIND": "PSB",
+    "OLECTRA": "OLECTRA",
+    "OLECTRA GREENTECH": "OLECTRA",
+    "JBM AUTO": "JBMA",
+    "TATA COMMUNICATIONS": "TATACOMM",
+    "TATA COMM": "TATACOMM",
+    "VODAFONE": "IDEA",
+    "JIOFINANCIAL": "JIOFIN",
+    "JIO FINANCIAL": "JIOFIN",
+}
 
 
 def get_openai_key():
@@ -21,81 +156,37 @@ def get_openai_key():
     return None
 
 
-def split_transcript(text, num_parts=3, overlap_lines=10):
-    """
-    Split transcript into multiple parts with overlap for context
-    
-    Args:
-        text: Full transcript text
-        num_parts: Number of parts to split into
-        overlap_lines: Number of lines to overlap between parts
-        
-    Returns:
-        List of text chunks
-    """
-    lines = text.split('\n')
-    total_lines = len(lines)
-    
-    if total_lines < 30:
-        return [text]
-    
-    base_chunk_size = total_lines // num_parts
-    chunks = []
-    
-    for i in range(num_parts):
-        start_idx = max(0, i * base_chunk_size - overlap_lines)
-        
-        if i == num_parts - 1:
-            end_idx = total_lines
-        else:
-            end_idx = (i + 1) * base_chunk_size + overlap_lines
-        
-        chunk_lines = lines[start_idx:end_idx]
-        chunks.append('\n'.join(chunk_lines))
-    
-    return chunks
+def fix_transcription_error(stock_name):
+    """Fix common transcription errors in stock names"""
+    stock_upper = stock_name.upper().strip()
+    if stock_upper in COMMON_TRANSCRIPTION_ERRORS:
+        return COMMON_TRANSCRIPTION_ERRORS[stock_upper]
+    return stock_upper
 
 
-def detect_pradip_stocks(client, transcript_chunk, chunk_num, total_chunks):
+def analyze_speakers(client, transcript_text):
     """
-    Use OpenAI to detect stocks discussed by Mr. Pradip in a transcript chunk
-    
-    Args:
-        client: OpenAI client
-        transcript_chunk: Text chunk to analyze
-        chunk_num: Current chunk number
-        total_chunks: Total number of chunks
-        
-    Returns:
-        List of stock names
+    Analyze transcript to identify all speakers
+    Returns: dict with speaker_count, has_other_speakers, speaker_list
     """
-    prompt = f"""You are analyzing Part {chunk_num} of {total_chunks} of a YouTube video transcript.
-This transcript is from a financial show where an anchor interviews stock analysts.
-We are ONLY interested in stocks discussed/analyzed by MR. PRADIP (Pradip Hotchandani or simply "Pradip").
+    prompt = f"""Analyze this financial transcript to identify ALL speakers.
 
-CRITICAL RULES:
-1. ONLY extract stock names that MR. PRADIP discusses or gives his analysis on
-2. COMPLETELY IGNORE stocks mentioned by the anchor or other analysts
-3. When the anchor asks "What do you think about [STOCK]?" to Pradip - that stock counts
-4. Go line by line, word by word to detect accurately
-5. Include Indian stocks, indices, and financial instruments Pradip discusses
+TASK: List all the speakers/participants in this transcript.
 
-The anchor typically asks Pradip about specific stocks, and Pradip gives his views.
-Pattern to look for:
-- Anchor: "What about [STOCK]?" → Pradip responds → Include this stock
-- Pradip: "I like [STOCK]..." → Include this stock
-- Pradip: "[STOCK] looks good..." → Include this stock
+Common patterns:
+- "ANCHOR" or "HOST" - the interviewer
+- "PRADIP" or "MR. PRADIP" or "PRADIP HOTCHANDANI" - the main analyst
+- "CALLER" - phone callers asking questions
+- Other analyst names
 
 OUTPUT FORMAT:
-Return ONLY a comma-separated list of stock names.
-Example: RELIANCE, TATA MOTORS, HDFC BANK, INFOSYS
+SPEAKERS: [comma-separated list of speaker names/roles]
+HAS_OTHER_SPEAKERS: [YES if there are speakers other than Pradip and Anchor, NO otherwise]
 
-If no stocks are discussed by Pradip in this chunk, return: NONE
+TRANSCRIPT (first 5000 chars):
+{transcript_text[:5000]}
 
-TRANSCRIPT CHUNK:
-{transcript_chunk}
-
-STOCKS DISCUSSED BY PRADIP:"""
+ANALYZE SPEAKERS:"""
 
     try:
         response = client.chat.completions.create(
@@ -103,7 +194,7 @@ STOCKS DISCUSSED BY PRADIP:"""
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an expert at analyzing financial video transcripts and identifying which stocks are discussed by specific speakers. Be thorough and accurate."
+                    "content": "You analyze transcripts to identify speakers. Be accurate in identifying all participants."
                 },
                 {
                     "role": "user",
@@ -111,7 +202,93 @@ STOCKS DISCUSSED BY PRADIP:"""
                 }
             ],
             temperature=0.1,
-            max_tokens=2000
+            max_tokens=500
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        speakers = []
+        has_other_speakers = False
+        
+        for line in result.split('\n'):
+            line = line.strip()
+            if line.upper().startswith('SPEAKERS:'):
+                speakers_str = line[9:].strip()
+                speakers = [s.strip() for s in speakers_str.split(',')]
+            elif line.upper().startswith('HAS_OTHER_SPEAKERS:'):
+                has_other = line[19:].strip().upper()
+                has_other_speakers = 'YES' in has_other
+        
+        return {
+            'speakers': speakers,
+            'has_other_speakers': has_other_speakers,
+            'speaker_count': len(speakers)
+        }
+        
+    except Exception as e:
+        print(f"Error analyzing speakers: {str(e)}")
+        return {
+            'speakers': ['PRADIP', 'ANCHOR'],
+            'has_other_speakers': False,
+            'speaker_count': 2
+        }
+
+
+def detect_stocks_simple_mode(client, transcript_text):
+    """
+    Simple mode: Only Pradip or Pradip+Anchor
+    Include ALL stocks discussed in the transcript
+    """
+    prompt = f"""You are analyzing a financial transcript where the ONLY participants are:
+- An Anchor/Host who asks questions
+- Mr. Pradip (Pradip Hotchandani) who provides stock analysis
+
+Since there are NO other speakers, ALL stocks discussed in this transcript are relevant.
+
+TASK: Extract ALL stock names mentioned in this transcript.
+
+CRITICAL RULES:
+1. Extract every single stock/company name mentioned
+2. Include stocks the anchor asks about AND stocks Pradip discusses
+3. Only include REAL NSE/BSE listed Indian stocks
+4. DO NOT include fake/invalid/made-up stock names
+5. Fix any obvious transcription spelling errors (e.g., "Suzuelon" → "Suzlon")
+6. Include indices like NIFTY, BANK NIFTY if discussed
+
+VALIDATION:
+- Each stock must be a real company listed on NSE or BSE
+- Common stocks: RELIANCE, TATA MOTORS, HDFC BANK, INFOSYS, TCS, ICICI BANK, etc.
+- If unsure about a stock name, DO NOT include it
+
+OUTPUT FORMAT:
+Return ONLY a comma-separated list of valid stock names.
+Example: RELIANCE, TATAMOTORS, HDFCBANK, SUZLON, POLYCAB
+
+If no valid stocks found, return: NONE
+
+FULL TRANSCRIPT:
+{transcript_text}
+
+VALID STOCKS MENTIONED:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are an expert at identifying Indian stock names from transcripts.
+You ONLY return REAL NSE/BSE listed stocks.
+You NEVER return fake, invalid, or made-up stock names.
+You fix common transcription spelling errors (Suzuelon→Suzlon, etc.)."""
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=3000
         )
         
         result = response.choices[0].message.content.strip()
@@ -125,24 +302,175 @@ STOCKS DISCUSSED BY PRADIP:"""
         return stocks
         
     except Exception as e:
-        print(f"Error detecting stocks in chunk {chunk_num}: {str(e)}")
+        print(f"Error detecting stocks (simple mode): {str(e)}")
         return []
+
+
+def detect_stocks_strict_mode(client, transcript_text):
+    """
+    Strict mode: Pradip + Anchor + Other speakers
+    Go line by line, only include stocks Pradip discusses
+    Understand anchor questions directed at Pradip and include those stocks
+    """
+    prompt = f"""You are analyzing a financial transcript with MULTIPLE speakers including:
+- An Anchor/Host who asks questions
+- Mr. Pradip (Pradip Hotchandani) who is the main analyst
+- OTHER speakers (callers, other analysts, etc.)
+
+CRITICAL: We ONLY want stocks that MR. PRADIP discussed or analyzed.
+
+EXTRACTION LOGIC:
+1. Go through the transcript LINE BY LINE
+2. Identify who is speaking in each segment
+3. When the Anchor asks Pradip about a stock → Include that stock
+4. When Pradip gives his view/analysis on a stock → Include that stock
+5. IGNORE stocks mentioned by other analysts, callers, or speakers
+6. IGNORE stocks discussed by speakers other than Pradip
+
+VALIDATION RULES:
+1. Only include REAL NSE/BSE listed Indian stocks
+2. DO NOT include fake/invalid/made-up stock names
+3. Fix transcription spelling errors (e.g., "Suzuelon" → "Suzlon")
+4. If unsure if a name is a valid stock, DO NOT include it
+
+EXAMPLES OF WHAT TO INCLUDE:
+- Anchor: "Pradip, what about Reliance?" → Pradip responds → INCLUDE RELIANCE
+- Pradip: "I like Tata Motors here..." → INCLUDE TATAMOTORS
+- Pradip: "Suzlon looks good for..." → INCLUDE SUZLON
+
+EXAMPLES OF WHAT TO EXCLUDE:
+- Other Analyst: "I think HDFC is good" → EXCLUDE (not Pradip)
+- Caller: "What about Infosys?" → Pradip says "Not my area" → EXCLUDE
+- Random mention by caller with no Pradip analysis → EXCLUDE
+
+OUTPUT FORMAT:
+Return ONLY a comma-separated list of valid stock names that PRADIP discussed.
+Example: RELIANCE, TATAMOTORS, SUZLON, POLYCAB
+
+If no stocks discussed by Pradip, return: NONE
+
+FULL TRANSCRIPT:
+{transcript_text}
+
+STOCKS DISCUSSED BY PRADIP ONLY:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You are an expert at analyzing financial transcripts with multiple speakers.
+Your job is to extract ONLY stocks discussed by MR. PRADIP, ignoring other speakers.
+You ONLY return REAL NSE/BSE listed stocks.
+You fix transcription spelling errors.
+You NEVER include stocks from other analysts or callers."""
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=3000
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        if result.upper() == 'NONE' or not result:
+            return []
+        
+        stocks = [s.strip().upper() for s in result.split(',')]
+        stocks = [s for s in stocks if s and s != 'NONE' and len(s) > 1]
+        
+        return stocks
+        
+    except Exception as e:
+        print(f"Error detecting stocks (strict mode): {str(e)}")
+        return []
+
+
+def validate_and_fix_stocks(client, stocks_list):
+    """
+    Validate stocks against NSE/BSE and fix any remaining errors
+    """
+    if not stocks_list:
+        return []
+    
+    fixed_stocks = []
+    for stock in stocks_list:
+        fixed = fix_transcription_error(stock)
+        fixed_stocks.append(fixed)
+    
+    stocks_str = ', '.join(fixed_stocks)
+    
+    prompt = f"""You are a stock market expert. Validate these stock names and fix any errors.
+
+STOCKS TO VALIDATE:
+{stocks_str}
+
+TASK:
+1. Check each stock name - is it a REAL NSE/BSE listed company?
+2. Fix any spelling errors or transcription mistakes
+3. Convert to proper NSE trading symbol format
+4. REMOVE any fake/invalid/non-existent stocks
+5. REMOVE indices like NIFTY, BANK NIFTY, SENSEX (we only want stocks)
+
+COMMON FIXES:
+- TATA MOTORS → TATAMOTORS
+- HDFC BANK → HDFCBANK
+- RELIANCE INDUSTRIES → RELIANCE
+- STATE BANK → SBIN
+- L&T → LT
+- Suzuelon/Sujalan → SUZLON
+
+OUTPUT FORMAT:
+Return ONLY valid NSE trading symbols, comma-separated.
+Example: RELIANCE, TATAMOTORS, HDFCBANK, SUZLON
+
+VALIDATED STOCKS:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an NSE/BSE stock market expert. You validate and fix stock symbols. You ONLY return real, valid trading symbols."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=2000
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        if not result or result.upper() == 'NONE':
+            return fixed_stocks
+        
+        validated = [s.strip().upper() for s in result.split(',')]
+        validated = [s for s in validated if s and s != 'NONE' and len(s) > 1]
+        
+        return validated if validated else fixed_stocks
+        
+    except Exception as e:
+        print(f"Error validating stocks: {str(e)}")
+        return fixed_stocks
 
 
 def run(job_folder):
     """
     Detect all stocks discussed by Mr. Pradip in the transcript
     
-    Args:
-        job_folder: Path to job directory
-        
-    Returns:
-        dict: {
-            'success': bool,
-            'output_file': str,
-            'stock_count': int,
-            'error': str or None
-        }
+    Logic:
+    1. Analyze speakers in transcript
+    2. If only Pradip/Anchor: include all stocks (simple mode)
+    3. If other speakers present: extract only Pradip's stocks (strict mode)
+    4. Validate and fix all stock names
     """
     print("\n" + "=" * 60)
     print("TRANSCRIPT STEP 2: DETECT PRADIP'S STOCKS")
@@ -167,49 +495,62 @@ def run(job_folder):
                 'error': 'OpenAI API key not found. Please add it in Settings → API Keys.'
             }
         
-        print(f"Reading translated transcript: {input_file}")
+        print(f"📄 Reading transcript: {input_file}")
         with open(input_file, 'r', encoding='utf-8') as f:
             transcript_text = f.read()
         
-        print(f"Transcript length: {len(transcript_text)} characters")
-        
-        print("Splitting transcript into 3 parts for accurate detection...")
-        chunks = split_transcript(transcript_text, num_parts=3)
-        print(f"Created {len(chunks)} chunks")
+        print(f"   Transcript length: {len(transcript_text)} characters\n")
         
         client = openai.OpenAI(api_key=openai_key)
         
-        all_stocks = []
-        for i, chunk in enumerate(chunks, 1):
-            print(f"\nProcessing chunk {i}/{len(chunks)}...")
-            stocks = detect_pradip_stocks(client, chunk, i, len(chunks))
-            print(f"  Found {len(stocks)} stocks: {stocks[:5]}{'...' if len(stocks) > 5 else ''}")
-            all_stocks.extend(stocks)
+        print("🔍 Step 1: Analyzing speakers in transcript...")
+        speaker_info = analyze_speakers(client, transcript_text)
+        print(f"   Speakers found: {speaker_info['speakers']}")
+        print(f"   Has other speakers (besides Pradip/Anchor): {speaker_info['has_other_speakers']}\n")
+        
+        if speaker_info['has_other_speakers']:
+            print("📋 Step 2: Using STRICT MODE (multiple speakers detected)")
+            print("   Only extracting stocks discussed by Mr. Pradip...\n")
+            raw_stocks = detect_stocks_strict_mode(client, transcript_text)
+        else:
+            print("📋 Step 2: Using SIMPLE MODE (only Pradip/Anchor)")
+            print("   Extracting all stocks from transcript...\n")
+            raw_stocks = detect_stocks_simple_mode(client, transcript_text)
+        
+        print(f"   Raw stocks detected: {len(raw_stocks)}")
+        if raw_stocks:
+            print(f"   {raw_stocks[:10]}{'...' if len(raw_stocks) > 10 else ''}\n")
+        
+        print("✅ Step 3: Validating and fixing stock names...")
+        validated_stocks = validate_and_fix_stocks(client, raw_stocks)
         
         unique_stocks = []
         seen = set()
-        for stock in all_stocks:
-            stock_normalized = stock.upper().strip()
-            if stock_normalized and stock_normalized not in seen:
-                seen.add(stock_normalized)
-                unique_stocks.append(stock_normalized)
+        for stock in validated_stocks:
+            stock_clean = stock.upper().strip()
+            stock_clean = re.sub(r'[^A-Z0-9&-]', '', stock_clean)
+            if stock_clean and stock_clean not in seen and len(stock_clean) > 1:
+                seen.add(stock_clean)
+                unique_stocks.append(stock_clean)
         
-        print(f"\nTotal unique stocks found: {len(unique_stocks)}")
-        print(f"Stocks: {unique_stocks}")
+        print(f"   Validated stocks: {len(unique_stocks)}")
+        print(f"   Final list: {unique_stocks}\n")
         
         df = pd.DataFrame({'INPUT STOCK': unique_stocks})
         df.to_csv(output_file, index=False, encoding='utf-8-sig')
         
-        print(f"Saved detected stocks to: {output_file}")
+        print(f"💾 Saved to: {output_file}")
         
         return {
             'success': True,
             'output_file': output_file,
-            'stock_count': len(unique_stocks)
+            'stock_count': len(unique_stocks),
+            'mode': 'strict' if speaker_info['has_other_speakers'] else 'simple',
+            'speakers': speaker_info['speakers']
         }
         
     except Exception as e:
-        print(f"Error in Step 2: {str(e)}")
+        print(f"❌ Error in Step 2: {str(e)}")
         import traceback
         traceback.print_exc()
         return {
