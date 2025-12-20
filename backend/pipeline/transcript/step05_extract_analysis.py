@@ -1,8 +1,8 @@
 """
 Transcript Rationale Step 5: Extract Analysis
-For each stock, search the entire transcript for the INPUT STOCK,
-extract ONLY Pradip's analysis (not other speakers), polish it,
-and detect chart type (daily/weekly/monthly)
+For each stock, extract analysis based on speaker detection:
+- If only Pradip/Anchor: directly take analysis from transcript
+- If other speakers present: line-by-line, only Pradip's analysis
 Output: stocks_with_analysis.csv
 """
 
@@ -24,63 +24,29 @@ def get_openai_key():
     return None
 
 
-def search_stock_in_transcript(transcript_text, stock_name, stock_symbol):
+def analyze_speakers(client, transcript_text):
     """
-    Search for stock mentions in the entire transcript.
-    Returns True if found, along with relevant context.
+    Analyze transcript to identify all speakers
+    Returns: dict with has_other_speakers flag
     """
-    transcript_upper = transcript_text.upper()
-    stock_name_upper = stock_name.upper().strip()
-    stock_symbol_upper = stock_symbol.upper().strip()
-    
-    found = False
-    
-    if stock_name_upper and stock_name_upper in transcript_upper:
-        found = True
-    if stock_symbol_upper and stock_symbol_upper in transcript_upper:
-        found = True
-    
-    name_parts = stock_name_upper.split()
-    for part in name_parts:
-        if len(part) >= 4 and part in transcript_upper:
-            found = True
-            break
-    
-    return found
+    prompt = f"""Analyze this financial transcript to identify ALL speakers.
 
+TASK: List all the speakers/participants in this transcript.
 
-def extract_pradip_analysis(client, transcript_text, stock_name, stock_symbol):
-    """
-    Extract STRICTLY Pradip's analysis for a specific stock.
-    Searches the ENTIRE transcript and only extracts what Pradip said.
-    """
-    prompt = f"""You are analyzing a financial transcript to extract stock analysis.
-
-STOCK TO FIND: {stock_name} (Symbol: {stock_symbol})
-
-CRITICAL RULES:
-1. Search the ENTIRE transcript for mentions of "{stock_name}" or "{stock_symbol}"
-2. Extract ONLY what MR. PRADIP said about this stock
-3. DO NOT include analysis from anchors, hosts, or other speakers
-4. DO NOT include what callers or other analysts said
-5. If Pradip did not speak about this stock, return "NOT FOUND"
-
-EXTRACTION REQUIREMENTS:
-- Entry price/levels if Pradip mentioned
-- Target prices if Pradip mentioned  
-- Stop loss levels if Pradip mentioned
-- Holding period if Pradip mentioned
-- His view/recommendation if Pradip mentioned
-- Chart timeframe (daily/weekly/monthly) if Pradip mentioned
+Common patterns:
+- "ANCHOR" or "HOST" - the interviewer
+- "PRADIP" or "MR. PRADIP" or "PRADIP HOTCHANDANI" - the main analyst
+- "CALLER" - phone callers asking questions
+- Other analyst names
 
 OUTPUT FORMAT:
-PRADIP_ANALYSIS: [Extract exactly what Pradip said about this stock, or "NOT FOUND" if he didn't mention it]
-CHART_TYPE: [DAILY/WEEKLY/MONTHLY - based on what Pradip mentioned, default DAILY if not specified]
+SPEAKERS: [comma-separated list of speaker names/roles]
+HAS_OTHER_SPEAKERS: [YES if there are speakers other than Pradip and Anchor, NO otherwise]
 
-FULL TRANSCRIPT:
-{transcript_text}
+TRANSCRIPT (first 5000 chars):
+{transcript_text[:5000]}
 
-NOW EXTRACT PRADIP'S ANALYSIS FOR {stock_name}:"""
+ANALYZE SPEAKERS:"""
 
     try:
         response = client.chat.completions.create(
@@ -88,10 +54,86 @@ NOW EXTRACT PRADIP'S ANALYSIS FOR {stock_name}:"""
             messages=[
                 {
                     "role": "system",
-                    "content": """You are analyzing financial transcripts. Your ONLY job is to find and extract what MR. PRADIP specifically said about a given stock.
-NEVER include analysis from other speakers like anchors, callers, or other analysts.
-If Pradip did not mention the stock, clearly state "NOT FOUND".
-Be accurate and preserve all price targets, stop losses, and recommendations exactly as Pradip stated them."""
+                    "content": "You analyze transcripts to identify speakers. Be accurate in identifying all participants."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=500
+        )
+        
+        result = response.choices[0].message.content.strip()
+        
+        speakers = []
+        has_other_speakers = False
+        
+        for line in result.split('\n'):
+            line = line.strip()
+            if line.upper().startswith('SPEAKERS:'):
+                speakers_str = line[9:].strip()
+                speakers = [s.strip() for s in speakers_str.split(',')]
+            elif line.upper().startswith('HAS_OTHER_SPEAKERS:'):
+                has_other = line[19:].strip().upper()
+                has_other_speakers = 'YES' in has_other
+        
+        return {
+            'speakers': speakers,
+            'has_other_speakers': has_other_speakers
+        }
+        
+    except Exception as e:
+        print(f"Error analyzing speakers: {str(e)}")
+        return {
+            'speakers': ['PRADIP', 'ANCHOR'],
+            'has_other_speakers': False
+        }
+
+
+def extract_analysis_simple_mode(client, transcript_text, stock_name, stock_symbol):
+    """
+    Simple mode: Only Pradip or Pradip+Anchor
+    Directly extract analysis for the stock from the entire transcript
+    """
+    prompt = f"""You are analyzing a financial transcript where the ONLY participants are an Anchor and Mr. Pradip.
+Since there are NO other speakers, all analysis in the transcript is from Pradip.
+
+STOCK TO FIND: {stock_name} (Symbol: {stock_symbol})
+
+TASK: Extract the complete analysis for this stock from the transcript.
+
+EXTRACTION REQUIREMENTS:
+- Entry price/levels mentioned
+- Target prices mentioned
+- Stop loss levels mentioned
+- Holding period if mentioned
+- Views and recommendations
+- Chart timeframe (daily/weekly/monthly) if mentioned
+
+OUTPUT FORMAT:
+ANALYSIS: [Complete analysis for this stock]
+CHART_TYPE: [DAILY/WEEKLY/MONTHLY - default DAILY if not specified]
+
+If the stock is not discussed in the transcript, return:
+ANALYSIS: NOT FOUND
+CHART_TYPE: DAILY
+
+FULL TRANSCRIPT:
+{transcript_text}
+
+EXTRACT ANALYSIS FOR {stock_name}:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You extract stock analysis from financial transcripts.
+Be accurate and preserve all price targets, stop losses, and recommendations exactly as stated.
+If the stock is not discussed, clearly state "NOT FOUND"."""
                 },
                 {
                     "role": "user",
@@ -103,37 +145,112 @@ Be accurate and preserve all price targets, stop losses, and recommendations exa
         )
         
         result = response.choices[0].message.content.strip()
-        
-        pradip_analysis = ""
-        chart_type = "DAILY"
-        
-        lines = result.split('\n')
-        for line in lines:
-            line_stripped = line.strip()
-            if line_stripped.upper().startswith('PRADIP_ANALYSIS:'):
-                pradip_analysis = line_stripped[16:].strip()
-            elif line_stripped.upper().startswith('CHART_TYPE:'):
-                chart_type_raw = line_stripped[11:].strip().upper()
-                if chart_type_raw in ['DAILY', 'WEEKLY', 'MONTHLY']:
-                    chart_type = chart_type_raw
-        
-        if not pradip_analysis:
-            for line in lines:
-                if 'NOT FOUND' in line.upper():
-                    return "NOT FOUND", "DAILY"
-            pradip_analysis = result
-        
-        return pradip_analysis, chart_type
+        return parse_analysis_response(result)
         
     except Exception as e:
-        print(f"    Error extracting Pradip's analysis: {str(e)}")
+        print(f"    Error extracting analysis (simple): {str(e)}")
         return "ERROR", "DAILY"
+
+
+def extract_analysis_strict_mode(client, transcript_text, stock_name, stock_symbol):
+    """
+    Strict mode: Pradip + Anchor + Other speakers
+    Go line by line, understand questions, extract ONLY Pradip's analysis
+    """
+    prompt = f"""You are analyzing a financial transcript with MULTIPLE speakers including:
+- An Anchor/Host who asks questions
+- Mr. Pradip (Pradip Hotchandani) who is the main analyst
+- OTHER speakers (callers, other analysts, etc.)
+
+STOCK TO FIND: {stock_name} (Symbol: {stock_symbol})
+
+CRITICAL: We ONLY want analysis from MR. PRADIP for this stock.
+
+EXTRACTION LOGIC:
+1. Go through the transcript LINE BY LINE
+2. Identify who is speaking in each segment
+3. Find where the Anchor asks about this stock
+4. Extract ONLY what Pradip says in response
+5. IGNORE analysis from other analysts, callers, or speakers
+
+WHAT TO INCLUDE:
+- Pradip's entry levels for this stock
+- Pradip's target prices for this stock
+- Pradip's stop loss levels for this stock
+- Pradip's holding period recommendation
+- Pradip's views and analysis
+- Chart timeframe Pradip mentions
+
+WHAT TO EXCLUDE:
+- Any analysis from other analysts
+- Caller's opinions
+- Anchor's personal views
+- Generic market commentary not about this stock
+
+OUTPUT FORMAT:
+ANALYSIS: [Pradip's complete analysis for this stock, or "NOT FOUND" if he didn't discuss it]
+CHART_TYPE: [DAILY/WEEKLY/MONTHLY - based on what Pradip mentioned, default DAILY]
+
+FULL TRANSCRIPT:
+{transcript_text}
+
+EXTRACT PRADIP'S ANALYSIS FOR {stock_name}:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """You analyze financial transcripts with multiple speakers.
+Your job is to extract ONLY what MR. PRADIP said about a specific stock.
+NEVER include analysis from other speakers.
+Be accurate and preserve all price targets and recommendations."""
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.1,
+            max_tokens=2000
+        )
+        
+        result = response.choices[0].message.content.strip()
+        return parse_analysis_response(result)
+        
+    except Exception as e:
+        print(f"    Error extracting analysis (strict): {str(e)}")
+        return "ERROR", "DAILY"
+
+
+def parse_analysis_response(result):
+    """Parse the GPT response to extract analysis and chart type"""
+    analysis = ""
+    chart_type = "DAILY"
+    
+    lines = result.split('\n')
+    for line in lines:
+        line_stripped = line.strip()
+        if line_stripped.upper().startswith('ANALYSIS:'):
+            analysis = line_stripped[9:].strip()
+        elif line_stripped.upper().startswith('CHART_TYPE:'):
+            chart_type_raw = line_stripped[11:].strip().upper()
+            if chart_type_raw in ['DAILY', 'WEEKLY', 'MONTHLY']:
+                chart_type = chart_type_raw
+    
+    if not analysis:
+        for line in lines:
+            if 'NOT FOUND' in line.upper():
+                return "NOT FOUND", "DAILY"
+        analysis = result
+    
+    return analysis, chart_type
 
 
 def polish_analysis(client, stock_name, original_analysis):
     """
-    Polish Pradip's extracted analysis into professional format.
-    Uses the user-specified formatting rules.
+    Polish extracted analysis into professional format.
     """
     if not original_analysis or original_analysis in ["NOT FOUND", "ERROR", ""]:
         return original_analysis
@@ -195,10 +312,32 @@ Return ONLY the polished analysis text, nothing else."""
         return original_analysis
 
 
+def search_stock_in_transcript(transcript_text, stock_name, stock_symbol):
+    """Search for stock mentions in the transcript"""
+    transcript_upper = transcript_text.upper()
+    stock_name_upper = stock_name.upper().strip()
+    stock_symbol_upper = stock_symbol.upper().strip()
+    
+    found = False
+    
+    if stock_name_upper and stock_name_upper in transcript_upper:
+        found = True
+    if stock_symbol_upper and stock_symbol_upper in transcript_upper:
+        found = True
+    
+    name_parts = stock_name_upper.split()
+    for part in name_parts:
+        if len(part) >= 4 and part in transcript_upper:
+            found = True
+            break
+    
+    return found
+
+
 def run(job_folder):
-    """Extract and polish Pradip's analysis for each stock"""
+    """Extract and polish analysis for each stock based on speaker detection"""
     print("\n" + "=" * 60)
-    print("TRANSCRIPT STEP 5: EXTRACT PRADIP'S ANALYSIS")
+    print("TRANSCRIPT STEP 5: EXTRACT ANALYSIS")
     print(f"{'='*60}\n")
     
     try:
@@ -234,17 +373,30 @@ def run(job_folder):
         print(f"📋 Reading mapped stocks: {input_csv}")
         df_input = pd.read_csv(input_csv)
         df_input.columns = df_input.columns.str.strip().str.upper()
-        
         print(f"   Found {len(df_input)} stocks to process\n")
         
         client = openai.OpenAI(api_key=openai_key)
+        
+        print("🔍 Step 1: Analyzing speakers in transcript...")
+        speaker_info = analyze_speakers(client, transcript_text)
+        print(f"   Speakers found: {speaker_info['speakers']}")
+        print(f"   Has other speakers: {speaker_info['has_other_speakers']}\n")
+        
+        if speaker_info['has_other_speakers']:
+            print("📋 Using STRICT MODE: Multiple speakers detected")
+            print("   Will extract ONLY Pradip's analysis for each stock\n")
+            extraction_mode = "strict"
+        else:
+            print("📋 Using SIMPLE MODE: Only Pradip/Anchor")
+            print("   Will directly extract analysis from transcript\n")
+            extraction_mode = "simple"
         
         analyses = []
         chart_types = []
         found_in_transcript = []
         
         print("=" * 100)
-        print(f"{'#':<4} {'INPUT STOCK':<30} {'FOUND':<8} {'PRADIP ANALYSIS':<55}")
+        print(f"{'#':<4} {'INPUT STOCK':<30} {'FOUND':<8} {'STATUS':<55}")
         print("=" * 100)
         
         for idx, row in df_input.iterrows():
@@ -255,19 +407,24 @@ def run(job_folder):
             found_in_transcript.append("YES" if is_found else "NO")
             
             if is_found:
-                pradip_analysis, chart_type = extract_pradip_analysis(
-                    client, transcript_text, stock_name, stock_symbol
-                )
+                if extraction_mode == "simple":
+                    raw_analysis, chart_type = extract_analysis_simple_mode(
+                        client, transcript_text, stock_name, stock_symbol
+                    )
+                else:
+                    raw_analysis, chart_type = extract_analysis_strict_mode(
+                        client, transcript_text, stock_name, stock_symbol
+                    )
                 
-                if pradip_analysis and pradip_analysis not in ["NOT FOUND", "ERROR"]:
-                    polished_analysis = polish_analysis(client, stock_name, pradip_analysis)
+                if raw_analysis and raw_analysis not in ["NOT FOUND", "ERROR"]:
+                    polished_analysis = polish_analysis(client, stock_name, raw_analysis)
                     analyses.append(polished_analysis)
                     chart_types.append(chart_type)
                     status = polished_analysis[:50] + "..." if len(polished_analysis) > 50 else polished_analysis
                 else:
                     analyses.append(f"Analysis pending for {stock_name}")
                     chart_types.append("DAILY")
-                    status = "Pradip did not discuss"
+                    status = "No specific analysis found"
             else:
                 analyses.append(f"Stock not found in transcript: {stock_name}")
                 chart_types.append("DAILY")
@@ -290,9 +447,10 @@ def run(job_folder):
         with_analysis = sum(1 for a in analyses if not a.startswith("Stock not found") and not a.startswith("Analysis pending"))
         
         print(f"\n📊 Summary:")
+        print(f"   Mode used: {extraction_mode.upper()}")
         print(f"   Total stocks: {len(df_input)}")
         print(f"   Found in transcript: {found_count}")
-        print(f"   With Pradip's analysis: {with_analysis}")
+        print(f"   With analysis: {with_analysis}")
         print(f"\n💾 Saved to: {output_csv}")
         
         return {
@@ -300,7 +458,8 @@ def run(job_folder):
             'output_file': output_csv,
             'stock_count': len(df_input),
             'found_count': found_count,
-            'analysis_count': with_analysis
+            'analysis_count': with_analysis,
+            'mode': extraction_mode
         }
         
     except Exception as e:
