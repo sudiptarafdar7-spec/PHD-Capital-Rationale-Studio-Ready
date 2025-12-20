@@ -784,6 +784,53 @@ def step4_continue_pipeline(job_id):
         return jsonify({'error': str(e)}), 500
 
 
+@bulk_rationale_bp.route('/jobs/<job_id>/step4-save-edits', methods=['POST'])
+@jwt_required()
+def save_step4_edits(job_id):
+    """Save inline edits to the Step 4 CSV file"""
+    try:
+        current_user_id = get_jwt_identity()
+        
+        has_access, error_msg = check_job_access(job_id, current_user_id)
+        if not has_access:
+            return jsonify({'error': error_msg}), 403
+        
+        data = request.get_json()
+        if not data or 'data' not in data or 'columns' not in data:
+            return jsonify({'error': 'Missing data or columns'}), 400
+        
+        csv_data = data['data']
+        columns = data['columns']
+        
+        if not csv_data or not columns:
+            return jsonify({'error': 'Empty data or columns'}), 400
+        
+        csv_path = _job_path(job_id, 'analysis', 'mapped_master_file.csv')
+        
+        if not csv_path:
+            return jsonify({'error': 'Job folder not found'}), 404
+        
+        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+        
+        df = pd.DataFrame(csv_data)
+        df = df[columns]
+        df.to_csv(csv_path, index=False, encoding='utf-8-sig')
+        
+        print(f"✅ Step 4 CSV saved with {len(csv_data)} rows for job {job_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'CSV saved successfully',
+            'rows': len(csv_data)
+        }), 200
+        
+    except Exception as e:
+        print(f"Error saving Step 4 edits: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to save: {str(e)}'}), 500
+
+
 @bulk_rationale_bp.route('/jobs/<job_id>/failed-charts', methods=['GET'])
 @jwt_required()
 def get_failed_charts(job_id):

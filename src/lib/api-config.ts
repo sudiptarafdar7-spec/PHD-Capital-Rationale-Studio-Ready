@@ -102,6 +102,7 @@ export const API_ENDPOINTS = {
     step4DownloadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-download-csv`,
     step4UploadCsv: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-upload-csv`,
     step4ContinuePipeline: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-continue-pipeline`,
+    step4SaveEdits: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step4-save-edits`,
     failedCharts: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/failed-charts`,
     uploadChart: (jobId: string, stockIndex: number) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/upload-chart/${stockIndex}`,
     step6ContinuePipeline: (jobId: string) => `${API_BASE_URL}/api/v1/bulk-rationale/jobs/${jobId}/step6-continue-pipeline`,

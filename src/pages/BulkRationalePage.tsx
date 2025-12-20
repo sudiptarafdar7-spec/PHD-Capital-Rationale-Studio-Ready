@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import { 
   Layers, Play, Download, Save, FileSignature, Trash2, 
   ArrowLeft, Upload, CheckCircle2, XCircle, Loader2, Clock,
-  RefreshCw, RotateCcw
+  RefreshCw, RotateCcw, FileEdit
 } from 'lucide-react';
 import SignedFileUpload from '@/components/SignedFileUpload';
 
@@ -103,6 +103,9 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
   const [step4CsvData, setStep4CsvData] = useState<any[]>([]);
   const [step4CsvColumns, setStep4CsvColumns] = useState<string[]>([]);
   const [isUploadingStep4Csv, setIsUploadingStep4Csv] = useState(false);
+  const [isEditingStep4Csv, setIsEditingStep4Csv] = useState(false);
+  const [isSavingStep4Edits, setIsSavingStep4Edits] = useState(false);
+  const [hasStep4Edits, setHasStep4Edits] = useState(false);
   const step4CsvFileInputRef = useRef<HTMLInputElement>(null);
   const workflowStageRef = useRef<WorkflowStage>('input');
   
@@ -584,6 +587,8 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
         toast.success('Continuing pipeline from Step 5');
         setWorkflowStage('processing');
         workflowStageRef.current = 'processing';
+        setIsEditingStep4Csv(false);
+        setHasStep4Edits(false);
         startPolling(currentJobId);
       } else {
         toast.error(data.error || 'Failed to continue pipeline');
@@ -592,6 +597,74 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
       toast.error('Failed to continue pipeline');
       console.error('Continue pipeline error:', error);
     }
+  };
+
+  const handleStep4CellEdit = (rowIndex: number, column: string, value: string) => {
+    const updatedData = [...step4CsvData];
+    updatedData[rowIndex] = { ...updatedData[rowIndex], [column]: value };
+    setStep4CsvData(updatedData);
+    setHasStep4Edits(true);
+  };
+
+  const handleSaveStep4Edits = async () => {
+    if (!currentJobId || step4CsvData.length === 0) return;
+    
+    setIsSavingStep4Edits(true);
+    try {
+      const response = await fetch(API_ENDPOINTS.bulkRationale.step4SaveEdits(currentJobId), {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({ data: step4CsvData, columns: step4CsvColumns }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        toast.success('CSV changes saved successfully');
+        setHasStep4Edits(false);
+      } else {
+        toast.error(data.error || 'Failed to save changes');
+      }
+    } catch (error) {
+      toast.error('Failed to save changes');
+      console.error('Save edits error:', error);
+    } finally {
+      setIsSavingStep4Edits(false);
+    }
+  };
+
+  const handleSaveAndContinueStep4 = async () => {
+    if (!currentJobId) return;
+    
+    if (hasStep4Edits) {
+      setIsSavingStep4Edits(true);
+      try {
+        const response = await fetch(API_ENDPOINTS.bulkRationale.step4SaveEdits(currentJobId), {
+          method: 'POST',
+          headers: getAuthHeaders(token),
+          body: JSON.stringify({ data: step4CsvData, columns: step4CsvColumns }),
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || !data.success) {
+          toast.error(data.error || 'Failed to save changes');
+          setIsSavingStep4Edits(false);
+          return;
+        }
+        
+        toast.success('CSV changes saved');
+      } catch (error) {
+        toast.error('Failed to save changes');
+        console.error('Save edits error:', error);
+        setIsSavingStep4Edits(false);
+        return;
+      } finally {
+        setIsSavingStep4Edits(false);
+      }
+    }
+    
+    await handleStep4ContinuePipeline();
   };
 
   // Step 6 Failed Charts functions
@@ -765,11 +838,30 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
           </div>
           
           <p className="text-slate-600">
-            Review the stock symbol mapping below. You can download the CSV, make corrections, and upload the edited file before continuing.
+            Review the stock symbol mapping below. You can edit cells directly in the table, or download/upload the CSV file.
           </p>
 
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-3">
+            <Button 
+              onClick={() => setIsEditingStep4Csv(!isEditingStep4Csv)} 
+              variant="outline" 
+              className={isEditingStep4Csv ? "border-orange-500 text-orange-600 bg-orange-50" : "border-slate-300 text-slate-600 hover:bg-slate-50"}
+            >
+              <FileEdit className="w-4 h-4 mr-2" />
+              {isEditingStep4Csv ? 'Exit Edit Mode' : 'Edit Table'}
+            </Button>
+            {hasStep4Edits && (
+              <Button 
+                onClick={handleSaveStep4Edits} 
+                variant="outline"
+                disabled={isSavingStep4Edits}
+                className="border-green-500 text-green-600 hover:bg-green-50"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {isSavingStep4Edits ? 'Saving...' : 'Save Changes'}
+              </Button>
+            )}
             <Button 
               onClick={handleDownloadStep4Csv} 
               variant="outline" 
@@ -785,7 +877,7 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
               className="border-purple-500/50 text-purple-500 hover:bg-purple-500/10"
             >
               <Upload className="w-4 h-4 mr-2" />
-              {isUploadingStep4Csv ? 'Uploading...' : 'Upload Edited CSV'}
+              {isUploadingStep4Csv ? 'Uploading...' : 'Upload CSV'}
             </Button>
             <input
               ref={step4CsvFileInputRef}
@@ -795,13 +887,20 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
               style={{ display: 'none' }}
             />
             <Button 
-              onClick={handleStep4ContinuePipeline} 
+              onClick={hasStep4Edits ? handleSaveAndContinueStep4 : handleStep4ContinuePipeline}
+              disabled={isSavingStep4Edits}
               className="bg-green-600 hover:bg-green-700 text-white ml-auto"
             >
               <Play className="w-4 h-4 mr-2" />
-              Continue to Step 5
+              {hasStep4Edits ? 'Save & Continue' : 'Continue to Step 5'}
             </Button>
           </div>
+          
+          {isEditingStep4Csv && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-sm text-orange-700">
+              Click on any cell to edit. Changes are highlighted. Click "Save Changes" or "Save & Continue" when done.
+            </div>
+          )}
           
           {/* Table Section */}
           {step4CsvData.length > 0 ? (
@@ -834,16 +933,37 @@ export default function BulkRationalePage({ onNavigate, selectedJobId }: BulkRat
                         {step4CsvColumns.map(col => (
                           <td 
                             key={col} 
-                            className="px-4 py-3 text-slate-700 align-top"
+                            className={`px-4 py-3 text-slate-700 align-top ${isEditingStep4Csv ? 'p-1' : ''}`}
                           >
-                            {col === 'ANALYSIS' ? (
-                              <div className="max-w-xs truncate" title={row[col] || ''}>
-                                {row[col] || '-'}
-                              </div>
+                            {isEditingStep4Csv ? (
+                              col === 'ANALYSIS' ? (
+                                <textarea
+                                  value={row[col] || ''}
+                                  onChange={(e) => handleStep4CellEdit(idx, col, e.target.value)}
+                                  className="w-full min-h-[60px] px-2 py-1 text-sm border border-slate-300 rounded focus:border-purple-500 focus:ring-1 focus:ring-purple-500 resize-y"
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={row[col] || ''}
+                                  onChange={(e) => handleStep4CellEdit(idx, col, e.target.value)}
+                                  className={`w-full px-2 py-1 text-sm border rounded focus:border-purple-500 focus:ring-1 focus:ring-purple-500 ${
+                                    !row[col] && col === 'STOCK SYMBOL' 
+                                      ? 'border-red-300 bg-red-50' 
+                                      : 'border-slate-300'
+                                  }`}
+                                />
+                              )
                             ) : (
-                              <span className={!row[col] && col === 'STOCK SYMBOL' ? 'text-red-500 font-medium' : ''}>
-                                {row[col] || (col === 'STOCK SYMBOL' ? 'NO MATCH' : '-')}
-                              </span>
+                              col === 'ANALYSIS' ? (
+                                <div className="max-w-xs truncate" title={row[col] || ''}>
+                                  {row[col] || '-'}
+                                </div>
+                              ) : (
+                                <span className={!row[col] && col === 'STOCK SYMBOL' ? 'text-red-500 font-medium' : ''}>
+                                  {row[col] || (col === 'STOCK SYMBOL' ? 'NO MATCH' : '-')}
+                                </span>
+                              )
                             )}
                           </td>
                         ))}
