@@ -110,9 +110,9 @@ def init_database():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS channels (
                 id SERIAL PRIMARY KEY,
-                channel_name VARCHAR(255) NOT NULL,
+                channel_name VARCHAR(255),
                 channel_logo_path TEXT,
-                channel_url TEXT NOT NULL,
+                channel_url TEXT,
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );

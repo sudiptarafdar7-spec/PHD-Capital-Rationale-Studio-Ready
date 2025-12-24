@@ -104,11 +104,6 @@ export default function ChannelLogosPage() {
   };
 
   const handleAddChannel = async () => {
-    if (!channelName.trim()) {
-      toast.error('Please enter a channel name/username');
-      return;
-    }
-
     try {
       setIsAddDialogLoading(true);
 
@@ -169,11 +164,6 @@ export default function ChannelLogosPage() {
 
   const handleUpdateChannel = async () => {
     if (!editingChannel) return;
-
-    if (!channelName.trim()) {
-      toast.error('Please enter a channel name/username');
-      return;
-    }
 
     try {
       setIsEditDialogLoading(true);

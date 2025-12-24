@@ -76,9 +76,6 @@ def create_channel():
         channel_name = request.form.get('channelName', '').strip()
         channel_url = request.form.get('channelUrl', '').strip()
         
-        if not channel_name:
-            return jsonify({'error': 'Channel name/username is required'}), 400
-        
         logo_filename = None
         
         if 'logo' in request.files:
@@ -129,9 +126,6 @@ def update_channel(channel_id):
         platform = request.form.get('platform', 'youtube').strip().lower()
         channel_name = request.form.get('channelName', '').strip()
         channel_url = request.form.get('channelUrl', '').strip()
-        
-        if not channel_name:
-            return jsonify({'error': 'Channel name/username is required'}), 400
         
         with get_db_cursor(commit=True) as cursor:
             cursor.execute("SELECT channel_logo_path FROM channels WHERE id = %s", (channel_id,))
