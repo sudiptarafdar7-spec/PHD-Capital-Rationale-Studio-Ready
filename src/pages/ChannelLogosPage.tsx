@@ -326,7 +326,7 @@ export default function ChannelLogosPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="add-channel-name" className="text-foreground">
-                  Channel Name/Username *
+                  Channel Name/Username
                 </Label>
                 <Input
                   id="add-channel-name"
@@ -545,7 +545,7 @@ export default function ChannelLogosPage() {
 
             <div className="space-y-2">
               <Label htmlFor="edit-channel-name" className="text-foreground">
-                Channel Name/Username *
+                Channel Name/Username
               </Label>
               <Input
                 id="edit-channel-name"
